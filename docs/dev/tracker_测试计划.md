@@ -4,18 +4,6 @@
 
 ---
 
-## 测试执行记录
-
-### v0.3.2 测试执行 (2026-02-05)
-
-| 测试类型 | 结果 | 执行人 | 备注 |
-|----------|------|--------|------|
-| API 测试 | ✅ 17/17 PASS | 小栗子 | - |
-| Playwright 冒烟测试 | ⚠️ 5/6 PASS (1 超时) | 小栗子 | F001 刷新超时 |
-| 测试报告 | 📄 TRACKER_TEST_REPORT_v0.3.2_20260205_0736.md | - | 已生成 |
-
-### v0.3.1 测试执行 (历史记录)
-
 ## 1. 测试策略
 
 ### 1.1 目录结构
@@ -109,17 +97,17 @@ python3 scripts/data_manager.py clean
 
 ### 1.6 测试范围
 
-| 版本 | 测试类型 | 覆盖范围 | 通过标准 | 数据目录 | 测试数据安全 |
-|------|----------|----------|----------|----------|--------------|
-| **dev** | 单元测试 | 全部 API 接口 | 100% 通过 | test_data | ✅ 不接触 user_data |
-| **dev** | 集成测试 | 项目 + CP + TC 关联 | 100% 通过 | test_data | ✅ 不接触 user_data |
-| **dev** | UI 自动化 | Playwright 冒烟测试 (6 个核心功能) | 90% 通过 | test_data | ✅ 不接触 user_data |
-| **dev** | BugLog 回归测试 | 11 个测试用例 | 90% 通过 | test_data | ✅ 不接触 user_data |
-| **stable** | 冒烟测试 | 核心 API | 100% 通过 | user_data | ✅ 只读验证 |
-| **stable** | playwright_firefox.js | P001-P014 基础功能验证 | 100% 通过 | user_data | ✅ 只读验证 |
-| **共同** | 版本迁移 | v0.2 → v0.3 数据迁移 | 数据完整 | - | - |
-| **共同** | 发布测试 | 发布脚本执行 | 流程正常 | - | - |
-| **共同** | 手动测试 | 前端交互、界面显示 | 用户验收 | - | - |
+| 版本 | 测试类型 | 覆盖范围 | 通过标准 | 数据目录 |
+|------|----------|----------|----------|----------|
+| **dev** | 单元测试 | 全部 API 接口 | 100% 通过 | test_data |
+| **dev** | 集成测试 | 项目 + CP + TC 关联 | 100% 通过 | test_data |
+| **dev** | UI 自动化 | Playwright 冒烟测试 (6 个核心功能) | 90% 通过 | test_data |
+| **dev** | BugLog 回归测试 | 11 个测试用例 | 90% 通过 | test_data |
+| **stable** | 冒烟测试 | 核心 API | 100% 通过 | user_data |
+| **stable** | playwright_firefox.js | P001-P014 基础功能验证 | 100% 通过 | user_data |
+| **共同** | 版本迁移 | v0.2 → v0.3 数据迁移 | 数据完整 | - |
+| **共同** | 发布测试 | 发布脚本执行 | 流程正常 | - |
+| **共同** | 手动测试 | 前端交互、界面显示 | 用户验收 | - |
 
 **注意：** stable 的冒烟测试代码**只执行只读操作**（获取列表、读取详情），不创建或删除任何数据，确保不误修改用户项目。
 
@@ -156,13 +144,13 @@ python3 scripts/data_manager.py clean
 
 ### 2.2 目录结构测试用例
 
-| ID | 测试项 | 测试步骤 | 预期结果 | 状态 |
-|----|--------|----------|----------|------|
-| T001 | 发布目录符号链接 | `ls -la /release/tracker/current/data` | 指向 /projects/management/tracker/shared/data/user_data | ✅ |
-| T002 | dev/data 符号链接 | `ls -la dev/data` | 指向 ../shared/data/test_data | ✅ |
-| T003 | shared/data 目录结构 | 检查目录 | user_data/ 和 test_data/ 分离 | ✅ |
-| T004 | dev/ 启动 | `cd dev && python3 server_test.py` | 访问 http://localhost:8081 | ✅ |
-| T005 | stable/ 启动 | `/release/tracker/current/server.py` | 访问 http://localhost:8080 | ✅ |
+| ID | 测试项 | 测试步骤 | 预期结果 |
+|----|--------|----------|----------|
+| T001 | 发布目录符号链接 | `ls -la /release/tracker/current/data` | 指向 /projects/management/tracker/shared/data/user_data |
+| T002 | dev/data 符号链接 | `ls -la dev/data` | 指向 ../shared/data/test_data |
+| T003 | shared/data 目录结构 | 检查目录 | user_data/ 和 test_data/ 分离 |
+| T004 | dev/ 启动 | `cd dev && python3 server_test.py` | 访问 http://localhost:8081 |
+| T005 | stable/ 启动 | `/release/tracker/current/server.py` | 访问 http://localhost:8080 |
 
 ### 2.3 数据隔离测试
 
@@ -270,24 +258,22 @@ EOF
 
 ### 3.1 基础 API 测试
 
-> **测试日期**: 2026-02-03 | **测试人**: 小栗子
-
-| ID | 用例描述 | 测试步骤 | 预期结果 | 实际结果 | 状态 |
-|----|----------|----------|----------|----------|------|
-| A001 | 获取版本信息 | GET /api/version | 返回版本信息 | ✅ |
-| A002 | 创建项目 | POST /api/projects | 项目创建成功 | ✅ |
-| A003 | 创建重复项目 | POST 相同名称 | 返回错误 | ✅ |
-| A004 | 获取项目列表 | GET /api/projects | 返回所有项目 | ✅ |
-| A005 | 创建 Cover Point | POST /api/cp | CP 创建成功 | ✅ |
-| A006 | 获取 CP 列表 | GET /api/cp | 返回 CP 列表 | ✅ |
-| A007 | 更新 Cover Point | PUT /api/cp/{id} | CP 更新成功 | ✅ |
-| A008 | 删除 Cover Point | DELETE /api/cp/{id} | CP 删除成功 | ✅ |
-| A009 | 创建 Test Case | POST /api/tc | TC 创建成功，状态为 OPEN | ✅ |
-| A010 | 更新 TC 状态 | POST /api/tc/{id}/status | 状态切换 | ✅ |
-| A011 | TC 状态过滤 | GET /api/tc?status=PASS | 返回 PASS 状态 TC | ✅ |
-| A012 | TC 排序 | GET /api/tc?sort_by=testbench | 按 TestBench 排序 | ✅ |
-| A013 | 项目备份 | POST /api/projects/{id}/archive | 生成备份文件 | ✅ |
-| A014 | 获取统计 | GET /api/stats | 返回统计数据 | ✅ |
+| ID | 用例描述 | 测试步骤 | 预期结果 |
+|----|----------|----------|----------|
+| A001 | 获取版本信息 | GET /api/version | 返回版本信息 |
+| A002 | 创建项目 | POST /api/projects | 项目创建成功 |
+| A003 | 创建重复项目 | POST 相同名称 | 返回错误 |
+| A004 | 获取项目列表 | GET /api/projects | 返回所有项目 |
+| A005 | 创建 Cover Point | POST /api/cp | CP 创建成功 |
+| A006 | 获取 CP 列表 | GET /api/cp | 返回 CP 列表 |
+| A007 | 更新 Cover Point | PUT /api/cp/{id} | CP 更新成功 |
+| A008 | 删除 Cover Point | DELETE /api/cp/{id} | CP 删除成功 |
+| A009 | 创建 Test Case | POST /api/tc | TC 创建成功，状态为 OPEN |
+| A010 | 更新 TC 状态 | POST /api/tc/{id}/status | 状态切换 |
+| A011 | TC 状态过滤 | GET /api/tc?status=PASS | 返回 PASS 状态 TC |
+| A012 | TC 排序 | GET /api/tc?sort_by=testbench | 按 TestBench 排序 |
+| A013 | 项目备份 | POST /api/projects/{id}/archive | 生成备份文件 |
+| A014 | 获取统计 | GET /api/stats | 返回统计数据 |
 
 ### 3.2 独立数据库测试
 
@@ -448,14 +434,14 @@ node tests/playwright_firefox.js
 
 **BugLog 覆盖:**
 
-| Bug ID | 描述 | 严重性 | 测试用例 | 状态 |
-|--------|------|--------|----------|------|
-| BUG-008 | EX5 项目 TC 数据无法加载 | 高 | '切换项目后 Test Cases 应该正常显示' | ✅ |
-| BUG-009 | TC 状态无法更新 | 高 | '状态选择后应该更新为新状态' | ✅ |
-| BUG-010 | 删除功能失效 | 高 | '删除 CP 后列表应更新', '删除 TC 后列表应更新' | ✅ |
-| FEAT-001 | CP 覆盖率计算 | 新功能 | 'CP 列表应显示覆盖率', '覆盖率颜色正确显示' | ✅ |
-| BUG-002 | 项目切换数据不刷新 | 低 | '项目切换后数据刷新' | ✅ |
-| BUG-007 | 刷新后项目选择重置 | 低 | '页面刷新后项目选择保持' | ✅ |
+| Bug ID | 描述 | 严重性 | 测试用例 |
+|--------|------|--------|----------|
+| BUG-008 | EX5 项目 TC 数据无法加载 | 高 | '切换项目后 Test Cases 应该正常显示' |
+| BUG-009 | TC 状态无法更新 | 高 | '状态选择后应该更新为新状态' |
+| BUG-010 | 删除功能失效 | 高 | '删除 CP 后列表应更新', '删除 TC 后列表应更新' |
+| FEAT-001 | CP 覆盖率计算 | 新功能 | 'CP 列表应显示覆盖率', '覆盖率颜色正确显示' |
+| BUG-002 | 项目切换数据不刷新 | 低 | '项目切换后数据刷新' |
+| BUG-007 | 刷新后项目选择重置 | 低 | '页面刷新后项目选择保持' |
 
 **运行命令:**
 
@@ -645,40 +631,66 @@ playwright screenshot --diff
 
 ---
 
-## 8. 代码覆盖率分析
+## 8. 测试报告规范
 
-### 8.1 覆盖率概览
+### 8.1 报告文件命名规则
 
-| 测试类型 | 已覆盖 | 总数 | 覆盖率 |
-|----------|--------|------|--------|
-| **API 端点测试** | **17** | **18** | **94%** ✅ |
-| **Python 单元测试** | **17** | **17** | **100%** ✅ |
-| UI 功能测试 | 13 | 15 | 87% |
-| **综合覆盖率** | - | - | **80%** |
+```
+TRACKER_TEST_REPORT_{版本号}_{YYYYMMDD}_{HHMM}.md
+```
 
-### 8.2 API 端点覆盖详情
+**示例：**
+```
+TRACKER_TEST_REPORT_v0.3.1_20260204_2250.md
+```
 
-**已覆盖 (17/18):**
+### 8.2 报告内容要求
 
-| 方法 | 路径 | 测试文件 |
+每份测试报告必须包含以下章节：
+
+| 章节 | 必需 | 说明 |
+|------|------|------|
+| 测试摘要 | ✅ | 通过/失败/超时统计 |
+| API 测试结果 | ✅ | 详细测试用例列表 |
+| 冒烟测试结果 | ✅ | 核心功能验证 |
+| UI 测试结果 | ✅ | 界面功能测试 |
+| Bug 修复验证 | ✅ | 对应 Bug 状态 |
+| 测试环境 | ✅ | 版本、环境信息 |
+| 结论 | ✅ | 是否可发布建议 |
+
+### 8.3 结果判断标准
+
+#### 测试结果状态定义
+
+| 状态 | 定义 | 判定依据 |
 |------|------|----------|
-| GET | `/api/version` | test_api.py ✅ |
-| GET | `/api/projects` | test_api.py ✅ |
-| POST | `/api/projects` | test_api.py ✅ |
-| POST | `/api/projects` (重复) | test_api.py ✅ |
-| GET | `/api/projects/archive/list` | test_api.py ✅ |
-| GET | `/api/cp` | test_api.py ✅ |
-| POST | `/api/cp` | test_api.py ✅ |
-| PUT | `/api/cp/{id}` | test_api.py ✅ |
-| DELETE | `/api/cp/{id}` | test_api.py ✅ |
-| GET | `/api/tc` | test_api.py ✅ |
-| POST | `/api/tc` | test_api.py ✅ |
-| PUT | `/api/tc/{id}` | test_api.py ✅ |
-| DELETE | `/api/tc/{id}` | test_api.py ✅ |
-| POST | `/api/tc/{id}/status` | test_api.py ✅ |
-| GET | `/api/tc?status=` | test_api.py ✅ |
-| GET | `/api/tc?sort_by=` | test_api.py ✅ |
-| GET | `/api/stats` | test_api.py ✅ |
+| ✅ 通过 (PASS) | 测试执行成功，达到预期结果 | 断言全部通过 |
+| ❌ 失败 (FAIL) | 测试执行未达到预期结果 | 断言失败或异常 |
+| ⏱️ 超时 (TIMEOUT) | 测试执行超出预设时间 | 执行时间超过 timeout 设置 |
+| ⏭️ 跳过 (SKIP) | 测试未执行 | 依赖条件不满足 |
+| ❌ 错误 (ERROR) | 测试执行出错 | 未捕获的异常 |
+
+#### 结果优先级
+
+1. **超时视为失败**：超时的测试用例在报告中计入失败统计
+2. **失败必须标注**：每个失败用例需标注具体原因
+3. **耗时记录**：记录执行耗时，便于性能分析
+
+### 8.4 报告模板
+
+**模板文件:** `docs/dev/TEMPLATE_TEST_REPORT.md`
+
+---
+
+## 9. 规格书关键功能点测试
+| GET | `/api/tc` | test_api.py |
+| POST | `/api/tc` | test_api.py |
+| PUT | `/api/tc/{id}` | test_api.py |
+| DELETE | `/api/tc/{id}` | test_api.py |
+| POST | `/api/tc/{id}/status` | test_api.py |
+| GET | `/api/tc?status=` | test_api.py |
+| GET | `/api/tc?sort_by=` | test_api.py |
+| GET | `/api/stats` | test_api.py |
 
 **未覆盖 (1/18):**
 
@@ -686,61 +698,26 @@ playwright screenshot --diff
 |------|------|--------|
 | POST | `/api/projects/{id}/archive` | P2 |
 
-### 8.3 覆盖率测试结果
+### 8.3 测试用例模板
 
-```
-Name                Stmts   Miss  Cover   Missing
--------------------------------------------------
-app/__init__.py        26      3    88%   41-43
-app/api.py            382     98    74%   27-29, 116, 148-150, ...
-tests/__init__.py       0      0   100%
-tests/test_api.py      99      1    99%   285
--------------------------------------------------
-TOTAL                 507    102    80%
-```
+**API 测试模板:**
 
-### 8.4 新增测试用例
+| 方法 | 路径 | 测试文件 |
+|------|------|----------|
+| GET/POST/PUT/DELETE | /api/* | test_api.py |
 
-**测试文件:** `stable/tests/test_api.py`
+**Playwright 测试模板:** `tests/tracker.spec.ts`
 
-```bash
-# 运行测试
-cd stable
-PYTHONPATH=. coverage run -m pytest tests/test_api.py -v
-coverage report -m
-```
+### 8.4 覆盖率目标
 
-**测试类:**
-
-| 类名 | 测试方法数 | 说明 |
-|------|----------|------|
-| TestVersionAPI | 1 | 版本 API 测试 |
-| TestProjectsAPI | 4 | 项目管理 API 测试 |
-| TestCoverPointsAPI | 4 | Cover Points API 测试 |
-| TestTestCasesAPI | 7 | Test Cases API 测试 |
-| TestStatsAPI | 1 | 统计 API 测试 |
-| **总计** | **17** | **100%** ✅ |
+| 目标 | 目标值 |
+|------|--------|
+| API 端点覆盖率 | 100% |
+| Python 单元测试 | 70% |
+| UI 功能测试 | 100% |
+| 综合覆盖率 | 70% |
 
 ### 8.5 运行覆盖率测试
-
-```bash
-# 1. 运行测试并收集覆盖率
-cd stable
-PYTHONPATH=. coverage run -m pytest tests/test_api.py -v
-
-# 2. 生成覆盖率报告
-coverage report -m
-
-# 3. 生成 HTML 报告
-coverage html
-# 查看: open htmlcov/index.html
-```
-
-### 8.6 覆盖率目标
-
-| 目标 | dev 当前 | stable 当前 | 目标值 | 状态 |
-|------|----------|-------------|--------|------|
-| API 端点覆盖率 (dev) | 100% | - | 100% | ✅ 已达成 |
 | Python 单元测试 (dev) | 100% | 100% | 70% | ✅ 已达成 |
 | Playwright 冒烟测试 (dev) | 83% | - | 90% | P1 |
 | **playwright_firefox.js (stable)** | - | **14/14** | **14/14** | ✅ 已达成 |
@@ -809,53 +786,35 @@ npx playwright test tests/tracker.spec.ts --project=firefox --reporter=html
 open playwright-report/index.html
 ```
 
-### 8.8 新增测试用例
+### 8.8 测试用例模板
 
 **dev 版本 - 完整测试:**
-| 类名 | 测试方法数 | 说明 |
+| 测试类 | 测试方法数 | 说明 |
 |------|----------|------|
 | TestVersionAPI | 1 | 版本 API 测试 |
 | TestProjectsAPI | 4 | 项目管理 API 测试 |
 | TestCoverPointsAPI | 4 | Cover Points API 测试 |
 | TestTestCasesAPI | 7 | Test Cases API 测试 |
 | TestStatsAPI | 1 | 统计 API 测试 |
-| **总计** | **17** | **100%** ✅ |
+| **总计** | **17** | - |
 
 **stable 版本 - 冒烟测试:**
-| 类名 | 测试方法数 | 说明 |
+| 测试类 | 测试方法数 | 说明 |
 |------|----------|------|
 | TestSanity | 5 | 核心功能冒烟测试 |
-| **总计** | **5** | **核心覆盖** ✅ |
+| **总计** | **5** | - |
 
 ---
 
-### 7.4 覆盖率目标（已废弃）
+### 7.4 测试报告要求（已废弃）
 
-> ⚠️ 此节内容已废弃，请参考 8.6 节
+> ⚠️ 此节内容已废弃，请参考第11章测试报告规范
 
 ---
 
-## 8. 测试结果总结
+## 8. 测试报告规范
 
-### 8.1 版本区分测试策略
-
-| 版本 | 测试范围 | 测试文件位置 | 执行命令 |
-|------|----------|--------------|----------|
-| **dev** | 完整测试 | `dev/tests/` | `pytest dev/tests/test_api.py` |
-| **stable** | 冒烟测试 | `stable/tests/` | `pytest stable/tests/test_api.py -v -k sanity` |
-
-### 8.2 测试执行状态
-
-#### dev (测试版) - 完整测试
-```
-总用例数：17
-通过：17
-失败：0
-通过率：100%
-
-测试类型分布：
-- 目录结构测试：5/5 ✅
-- API 端点测试：17/17 ✅
+### 8.1 报告文件命名规则
 - Playwright UI 测试：20/20 ⏳ (待执行)
 ```
 
@@ -1229,131 +1188,6 @@ EOF
 
 ---
 
-## 14. 测试报告规范
-
-### 14.1 报告文件命名规则
-
-```
-TRACKER_TEST_REPORT_{版本号}_{YYYYMMDD}_{HHMM}.md
-```
-
-**示例：**
-```
-TRACKER_TEST_REPORT_v0.3.1_20260204_2250.md
-```
-
-### 14.2 报告内容要求
-
-每份测试报告必须包含以下章节：
-
-| 章节 | 必需 | 说明 |
-|------|------|------|
-| 测试摘要 | ✅ | 通过/失败/超时统计 |
-| API 测试结果 | ✅ | 详细测试用例列表 |
-| 冒烟测试结果 | ✅ | 核心功能验证 |
-| UI 测试结果 | ✅ | 界面功能测试 |
-| Bug 修复验证 | ✅ | 对应 Bug 状态 |
-| 测试环境 | ✅ | 版本、环境信息 |
-| 结论 | ✅ | 是否可发布 |
-
-### 14.3 结果判断标准
-
-#### 测试结果状态定义
-
-| 状态 | 定义 | 判定依据 |
-|------|------|----------|
-| ✅ 通过 (PASS) | 测试执行成功，达到预期结果 | 断言全部通过 |
-| ❌ 失败 (FAIL) | 测试执行未达到预期结果 | 断言失败或异常 |
-| ⏱️ 超时 (TIMEOUT) | 测试执行超出预设时间 | 执行时间超过 timeout 设置 |
-| ⏭️ 跳过 (SKIP) | 测试未执行 | 依赖条件不满足 |
-| ❌ 错误 (ERROR) | 测试执行出错 | 未捕获的异常 |
-
-#### 结果优先级
-
-1. **超时视为失败**：超时的测试用例在报告中计入失败统计
-2. **失败必须标注**：每个失败用例需标注具体原因
-3. **耗时记录**：记录执行耗时，便于性能分析
-
-### 14.4 报告模板
-
-**模板文件:** `docs/dev/TEMPLATE_TEST_REPORT.md`
-
-报告模板包含以下结构：
-
-```
-1. 测试摘要（统计表格）
-2. API 测试（详细列表 + 失败/超时标注）
-3. 冒烟测试（详细列表 + 失败/超时标注）
-4. UI 测试（详细列表 + 失败/超时标注）
-5. Bug 修复验证（状态对照表）
-6. 测试环境（版本信息）
-7. 结论（是否可发布建议）
-8. 附录（统计图表、失败分类）
-```
-
-### 14.5 报告生成命令
-
-```bash
-# 生成完整测试报告
-cd /projects/management/tracker/docs/dev
-
-# 手动生成报告
-python3 << 'EOF'
-# 读取测试结果
-# 生成 markdown 报告
-EOF
-
-# 或使用模板
-cp TEMPLATE_TEST_REPORT.md TRACKER_TEST_REPORT_v{版本}_{时间}.md
-# 编辑报告内容
-```
-
-### 14.6 报告归档
-
-- **存放位置**: `docs/dev/`
-- **命名格式**: `TRACKER_TEST_REPORT_{版本}_{时间}.md`
-- **版本对应**: 每个版本发布前生成独立报告
-
-### 14.7 报告示例
-
-```markdown
-# Tracker v0.3.1 测试报告
-
-> **测试日期**: 2026-02-04 22:50:00 GMT+8  
-> **测试版本**: v0.3.1  
-> **测试环境**: dev (localhost:8081)
-
----
-
-## 测试摘要
-
-| 指标 | 结果 |
-|------|------|
-| API 测试 | ✅ 17/17 通过 (100%) |
-| 冒烟测试 | ✅ 6/6 通过 (100%) |
-| UI 测试 | ⏱️ 2/4 通过 (2 超时) |
-| **综合结果** | **部分通过** |
-
----
-
-## 失败测试
-
-| 序号 | 测试项 | 失败原因 | 类型 |
-|------|--------|----------|------|
-| 1 | P005 - 创建项目 | 元素定位超时 | ⏱️ TIMEOUT |
-| 2 | P009 - 创建 TC | 断言失败 | ❌ FAIL |
-
----
-
-## 结论
-
-✅ API 测试全部通过  
-⏱️ 2 个 UI 测试超时，建议排查页面加载问题  
-**建议**: 修复超时问题后重新测试
-```
-
----
-
 ## 附录 A: Playwright 测试脚本模板
 
 ```javascript
@@ -1381,37 +1215,11 @@ test.describe('Tracker UI Tests', () => {
     await page.click('button:has-text("保存")');
     await expect(page.locator('.toast')).toContainText('项目创建成功');
   });
-
-  // ... 更多测试用例
 });
 ```
 
 ---
 
-## 附录 B: CI/CD 集成
-
-```yaml
-# .github/workflows/test.yml
-name: Tests
-
-on: [push, pull_request]
-
-jobs:
-  api-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Run API tests
-        run: pytest tests/
-
-  playwright-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Install Playwright
-        run: npx playwright install --with-deps
-      - name: Start server
-        run: cd stable && python3 server.py &
-      - name: Run Playwright tests
-        run: npx playwright test tests/ui/
-```
+**文档版本**: v0.3  
+**最后更新**: 2026-02-05  
+**维护者**: 小栗子 🌰
