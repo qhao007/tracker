@@ -1,0 +1,48 @@
+# /projects/management/tracker/.gitignore
+
+# ========== 数据目录（不版本控制） ==========
+shared/data/
+user_data/
+test_data/
+*.db
+projects.json
+
+# ========== 测试输出 ==========
+test-results/
+playwright-report/
+htmlcov/
+.coverage
+
+# ========== Python ==========
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+*.egg
+
+# ========== IDE ==========
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ========== 系统文件 ==========
+.DS_Store
+Thumbs.db
+
+# ========== 日志 ==========
+*.log
+npm-debug.log*
+
+# ========== 临时文件 ==========
+*.tmp
+*.temp
+.temp/
+
+# ========== 备份 ==========
+stable/backup_*/
+*.backup
