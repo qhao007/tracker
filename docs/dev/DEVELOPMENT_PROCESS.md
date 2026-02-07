@@ -367,6 +367,34 @@ python3 scripts/data_manager.py create
 
 ### 6.1 发布前检查清单
 
+> **推荐方式**: 使用发布准备脚本自动执行所有检查
+
+```bash
+# 演练模式（只检查，不实际操作）
+cd /projects/management/tracker
+python3 scripts/release_preparation.py --dry-run --version v0.5.0
+
+# 执行完整发布准备
+python3 scripts/release_preparation.py --version v0.5.0
+
+# 选项说明:
+#   --dry-run     演练模式（只检查，不实际操作）
+#   --version     版本号 (必需)
+#   --skip-tests  跳过测试执行
+#   --skip-tag    跳过创建标签
+#   --force       强制继续（忽略警告）
+```
+
+**脚本功能**:
+- 自动运行 API 测试 (pytest)
+- 自动运行 Playwright 冒烟测试
+- 自动运行 BugLog 回归测试
+- 检查 Git 状态
+- 创建发布标签
+- 发现问题时中止发布
+
+**手动执行方式（不推荐）**:
+
 ```bash
 # 1. dev 版本 API 测试全部通过 (17/17) ✅
 cd dev && PYTHONPATH=. pytest tests/test_api.py -v
