@@ -68,6 +68,7 @@ def init_project_db(project_name):
             cover_point TEXT,
             cover_point_details TEXT,
             comments TEXT,
+            priority TEXT DEFAULT 'P0',
             created_at TEXT
         )
     ''')
@@ -78,7 +79,6 @@ def init_project_db(project_name):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             project_id INTEGER,
             dv_milestone TEXT,
-            priority TEXT,
             testbench TEXT,
             category TEXT,
             owner TEXT,
@@ -88,8 +88,12 @@ def init_project_db(project_name):
             coverage_details TEXT,
             comments TEXT,
             status TEXT DEFAULT 'OPEN',
-            completed_date TEXT,
-            created_at TEXT
+            created_at TEXT,
+            coded_date TEXT,
+            fail_date TEXT,
+            pass_date TEXT,
+            removed_date TEXT,
+            target_date TEXT
         )
     ''')
     
@@ -437,14 +441,15 @@ def create_coverpoint():
     cursor = conn.cursor()
     
     cursor.execute('''
-        INSERT INTO cover_point (project_id, feature, sub_feature, cover_point, cover_point_details, comments, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO cover_point (project_id, feature, sub_feature, cover_point, cover_point_details, comments, priority, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ''', (project_id,
           data.get('feature', ''),
           data.get('sub_feature', ''),
           data.get('cover_point', ''),
           data.get('cover_point_details', ''),
           data.get('comments', ''),
+          data.get('priority', 'P0'),
           datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
     
     conn.commit()
@@ -460,6 +465,7 @@ def create_coverpoint():
             'cover_point': data.get('cover_point', ''),
             'cover_point_details': data.get('cover_point_details', ''),
             'comments': data.get('comments', ''),
+            'priority': data.get('priority', 'P0'),
             'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
     })
@@ -483,13 +489,14 @@ def update_coverpoint(cp_id):
     cursor = conn.cursor()
     
     cursor.execute('''
-        UPDATE cover_point SET feature=?, sub_feature=?, cover_point=?, cover_point_details=?, comments=?
+        UPDATE cover_point SET feature=?, sub_feature=?, cover_point=?, cover_point_details=?, comments=?, priority=?
         WHERE id=?
     ''', (data.get('feature', ''),
           data.get('sub_feature', ''),
           data.get('cover_point', ''),
           data.get('cover_point_details', ''),
           data.get('comments', ''),
+          data.get('priority', 'P0'),
           cp_id))
     
     conn.commit()
@@ -612,12 +619,17 @@ def create_testcase():
     conn = get_db(project['name'])
     cursor = conn.cursor()
     
+    today = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
     cursor.execute('''
-        INSERT INTO test_case (project_id, dv_milestone, priority, testbench, category, owner, test_name, scenario_details, checker_details, coverage_details, comments, status, completed_date, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, ?)
+        INSERT INTO test_case (
+            project_id, dv_milestone, testbench, category, owner, test_name, 
+            scenario_details, checker_details, coverage_details, comments, 
+            status, created_at, coded_date, fail_date, pass_date, removed_date, target_date
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, NULL, NULL, NULL, NULL, ?)
     ''', (project_id,
           data.get('dv_milestone', ''),
-          data.get('priority', ''),
           data.get('testbench', ''),
           data.get('category', ''),
           data.get('owner', ''),
@@ -626,8 +638,8 @@ def create_testcase():
           data.get('checker_details', ''),
           data.get('coverage_details', ''),
           data.get('comments', ''),
-          '',
-          datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+          today,
+          data.get('target_date', '')))
     
     tc_id = cursor.lastrowid
     
@@ -647,7 +659,6 @@ def create_testcase():
             'id': tc_id,
             'project_id': project_id,
             'dv_milestone': data.get('dv_milestone', ''),
-            'priority': data.get('priority', ''),
             'testbench': data.get('testbench', ''),
             'category': data.get('category', ''),
             'owner': data.get('owner', ''),
@@ -657,8 +668,12 @@ def create_testcase():
             'coverage_details': data.get('coverage_details', ''),
             'comments': data.get('comments', ''),
             'status': 'OPEN',
-            'completed_date': '',
-            'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'created_at': today,
+            'coded_date': None,
+            'fail_date': None,
+            'pass_date': None,
+            'removed_date': None,
+            'target_date': data.get('target_date', ''),
             'connected_cps': data.get('connections', [])
         }
     })
@@ -682,10 +697,19 @@ def update_testcase(tc_id):
     cursor = conn.cursor()
     
     cursor.execute('''
-        UPDATE test_case SET dv_milestone=?, priority=?, testbench=?, category=?, owner=?, test_name=?, scenario_details=?, checker_details=?, coverage_details=?, comments=?
+        UPDATE test_case SET 
+            dv_milestone=?, 
+            testbench=?, 
+            category=?, 
+            owner=?, 
+            test_name=?, 
+            scenario_details=?, 
+            checker_details=?, 
+            coverage_details=?, 
+            comments=?,
+            target_date=?
         WHERE id=?
     ''', (data.get('dv_milestone', ''),
-          data.get('priority', ''),
           data.get('testbench', ''),
           data.get('category', ''),
           data.get('owner', ''),
@@ -694,6 +718,7 @@ def update_testcase(tc_id):
           data.get('checker_details', ''),
           data.get('coverage_details', ''),
           data.get('comments', ''),
+          data.get('target_date', ''),
           tc_id))
     
     # 更新关联
@@ -743,7 +768,8 @@ def update_status(tc_id):
     if not project_id:
         return jsonify({'error': '需要指定项目'}), 400
     
-    if new_status not in ['OPEN', 'CODED', 'FAIL', 'PASS']:
+    valid_statuses = ['OPEN', 'CODED', 'FAIL', 'PASS', 'REMOVED']
+    if new_status not in valid_statuses:
         return jsonify({'error': '无效状态'}), 400
     
     projects = load_projects()
@@ -755,16 +781,56 @@ def update_status(tc_id):
     conn = get_db(project['name'])
     cursor = conn.cursor()
     
-    completed_date = ''
-    if new_status == 'PASS':
-        completed_date = datetime.now().strftime('%Y-%m-%d')
+    # 获取当前 TC 信息
+    cursor.execute('SELECT status, connected_cps FROM test_case WHERE id=?', (tc_id,))
+    row = cursor.fetchone()
+    if not row:
+        return jsonify({'error': 'TC 不存在'}), 404
     
-    cursor.execute('UPDATE test_case SET status=?, completed_date=? WHERE id=?', 
-                   (new_status, completed_date, tc_id))
+    old_status = row[0]
+    
+    # 状态日期映射
+    status_dates = {
+        'CODED': 'coded_date',
+        'FAIL': 'fail_date',
+        'PASS': 'pass_date',
+        'REMOVED': 'removed_date'
+    }
+    
+    today = datetime.now().strftime('%Y-%m-%d')
+    
+    # 清除所有状态日期
+    cursor.execute('''
+        UPDATE test_case SET 
+            coded_date=NULL, 
+            fail_date=NULL, 
+            pass_date=NULL, 
+            removed_date=NULL 
+        WHERE id=?
+    ''', (tc_id,))
+    
+    # 设置新状态对应的日期
+    if new_status in status_dates:
+        date_field = status_dates[new_status]
+        cursor.execute(f'UPDATE test_case SET {date_field}=? WHERE id=?', (today, tc_id))
+    
+    # 如果是 REMOVED，清除 CP 关联
+    if new_status == 'REMOVED':
+        cursor.execute('DELETE FROM tc_cp_connections WHERE tc_id=?', (tc_id,))
+    
+    # 更新状态
+    cursor.execute('UPDATE test_case SET status=? WHERE id=?', (new_status, tc_id))
     
     conn.commit()
     
-    return jsonify({'success': True, 'status': new_status, 'completed_date': completed_date})
+    # 检查是否需要确认（从 PASS 改为其他状态）
+    need_confirm = (old_status == 'PASS' and new_status != 'PASS')
+    
+    return jsonify({
+        'success': True, 
+        'status': new_status,
+        'need_confirm': need_confirm
+    })
 
 # ============ 统计 ============
 
@@ -797,23 +863,28 @@ def get_stats():
     cursor.execute('SELECT COUNT(*) FROM cover_point')
     total_cp = cursor.fetchone()[0]
     
-    # TC 统计
-    cursor.execute('SELECT COUNT(*) FROM test_case')
+    # TC 统计（REMOVED 不计入 Total）
+    cursor.execute('SELECT COUNT(*) FROM test_case WHERE status != "REMOVED"')
     total_tc = cursor.fetchone()[0]
     
-    cursor.execute("SELECT COUNT(*) FROM test_case WHERE status='OPEN'")
+    cursor.execute('SELECT COUNT(*) FROM test_case WHERE status="OPEN" AND status != "REMOVED"')
     open_tc = cursor.fetchone()[0]
     
-    cursor.execute("SELECT COUNT(*) FROM test_case WHERE status='CODED'")
+    cursor.execute('SELECT COUNT(*) FROM test_case WHERE status="CODED"')
     coded_tc = cursor.fetchone()[0]
     
-    cursor.execute("SELECT COUNT(*) FROM test_case WHERE status='FAIL'")
+    cursor.execute('SELECT COUNT(*) FROM test_case WHERE status="FAIL"')
     fail_tc = cursor.fetchone()[0]
     
-    cursor.execute("SELECT COUNT(*) FROM test_case WHERE status='PASS'")
+    cursor.execute('SELECT COUNT(*) FROM test_case WHERE status="PASS"')
     pass_tc = cursor.fetchone()[0]
     
-    # 计算覆盖率
+    # Pass Rate 计算: PASS / Total * 100%
+    pass_rate = 0
+    if total_tc > 0:
+        pass_rate = round(pass_tc / total_tc * 100, 1)
+    
+    # 计算覆盖率（只统计非 REMOVED 的 TC）
     coverage = 0
     if total_cp > 0:
         cursor.execute('SELECT id FROM cover_point')
@@ -839,6 +910,7 @@ def get_stats():
         'coded_tc': coded_tc,
         'fail_tc': fail_tc,
         'pass_tc': pass_tc,
+        'pass_rate': f'{pass_rate}%',
         'coverage': f'{coverage}%'
     })
 

@@ -41,6 +41,7 @@ class CoverPoint(db.Model):
     cover_point = db.Column(db.String(500), nullable=False)      # Cover Point（首要）
     cover_point_details = db.Column(db.Text)                     # Cover Point Details
     comments = db.Column(db.Text)                                # Comments
+    priority = db.Column(db.String(3), default='P0')            # Priority (P0/P1/P2)
     
     created_at = db.Column(db.String(20), default=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
     
@@ -58,6 +59,7 @@ class CoverPoint(db.Model):
             'cover_point': self.cover_point,
             'cover_point_details': self.cover_point_details,
             'comments': self.comments,
+            'priority': self.priority,
             'created_at': self.created_at
         }
 
@@ -67,21 +69,27 @@ class TestCase(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
     
     # 字段
-    dv_milestone = db.Column(db.String(50))          # DV Milestone
-    priority = db.Column(db.String(20))              # Priority
-    testbench = db.Column(db.String(200), nullable=False)  # TestBench
-    category = db.Column(db.String(100))             # Category
-    owner = db.Column(db.String(100))                # Owner
-    test_name = db.Column(db.String(500), nullable=False)  # Test Name（首要）
-    scenario_details = db.Column(db.Text)            # Scenario Details
-    checker_details = db.Column(db.Text)             # Checker Details（可隐藏）
-    coverage_details = db.Column(db.Text)            # Coverage Details（可隐藏）
-    comments = db.Column(db.Text)                    # Comments（可隐藏）
+    dv_milestone = db.Column(db.String(10))                        # DV Milestone (DV0.3/DV0.5/DV0.7/DV1.0)
+    priority = db.Column(db.String(20))                            # Priority (已废弃，保留兼容性)
+    testbench = db.Column(db.String(200), nullable=False)          # TestBench
+    category = db.Column(db.String(100))                           # Category
+    owner = db.Column(db.String(100))                             # Owner
+    test_name = db.Column(db.String(500), nullable=False)         # Test Name（首要）
+    scenario_details = db.Column(db.Text)                          # Scenario Details
+    checker_details = db.Column(db.Text)                           # Checker Details（可隐藏）
+    coverage_details = db.Column(db.Text)                         # Coverage Details（可隐藏）
+    comments = db.Column(db.Text)                                 # Comments（可隐藏）
     
     # 系统字段
-    status = db.Column(db.String(20), default='OPEN')  # OPEN/CODED/FAIL/PASS
-    completed_date = db.Column(db.String(20))          # 完成日期
+    status = db.Column(db.String(20), default='OPEN')             # OPEN/CODED/FAIL/PASS/REMOVED
     created_at = db.Column(db.String(20), default=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+    
+    # 日期字段
+    coded_date = db.Column(db.String(20))                         # 状态变为 CODED 的日期
+    fail_date = db.Column(db.String(20))                          # 状态变为 FAIL 的日期
+    pass_date = db.Column(db.String(20))                          # 状态变为 PASS 的日期
+    removed_date = db.Column(db.String(20))                       # 状态变为 REMOVED 的日期
+    target_date = db.Column(db.String(20))                        # 目标完成日期
     
     # 关系
     connected_cps = db.relationship('CoverPoint',
@@ -93,7 +101,6 @@ class TestCase(db.Model):
             'id': self.id,
             'project_id': self.project_id,
             'dv_milestone': self.dv_milestone,
-            'priority': self.priority,
             'testbench': self.testbench,
             'category': self.category,
             'owner': self.owner,
@@ -103,8 +110,12 @@ class TestCase(db.Model):
             'coverage_details': self.coverage_details,
             'comments': self.comments,
             'status': self.status,
-            'completed_date': self.completed_date,
             'created_at': self.created_at,
+            'coded_date': self.coded_date,
+            'fail_date': self.fail_date,
+            'pass_date': self.pass_date,
+            'removed_date': self.removed_date,
+            'target_date': self.target_date,
             'connected_cps': [cp.id for cp in self.connected_cps]
         }
 
