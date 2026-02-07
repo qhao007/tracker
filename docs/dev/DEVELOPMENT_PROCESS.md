@@ -438,7 +438,7 @@ python3 scripts/release.py --dry-run
 python3 scripts/release.py --version v0.5.0 --force
 ```
 
-### 6.3 发布后验证
+### 6.4 发布后验证
 
 ```bash
 # 检查服务状态
