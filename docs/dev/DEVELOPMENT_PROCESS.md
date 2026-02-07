@@ -242,34 +242,124 @@ git push origin develop
 
 ### 5.1 测试类型
 
-| 测试类型 | 执行方式 | 覆盖范围 |
-|----------|----------|----------|
-| **单元测试** | pytest | API 接口 |
-| **Playwright 测试** | UI 自动化 | 核心功能 |
-| **手动测试** | 人工验收 | 界面体验 |
+| 测试类型 | 执行方式 | 覆盖范围 | 测试文件 |
+|----------|----------|----------|----------|
+| **单元测试** | pytest | API 接口 | `tests/test_api.py` |
+| **Playwright 冒烟测试** | UI 自动化 | 核心功能点 | `tests/test_smoke.spec.ts` |
+| **BugLog 回归测试** | UI 自动化 | Bug 修复验证 | `tests/tracker.spec.ts` |
+| **playwright_firefox.js** | UI 自动化 | 基础功能验证 | `playwright_firefox.js` |
+| **手动测试** | 人工验收 | 界面体验 | - |
 
 ### 5.2 测试执行
 
 ```bash
-# API 测试 (dev 版本)
+# ========== API 测试 (dev 版本) ==========
 cd dev
 PYTHONPATH=. pytest tests/test_api.py -v
+# 覆盖: 17 个 API 接口测试 (100% 通过)
 
-# Playwright 冒烟测试
+# ========== Playwright 冒烟测试 ==========
 cd dev
-npx playwright test tests/test_smoke.spec.ts --project=firefox
+npx playwright test tests/test_smoke.spec.ts --project=firefox --timeout=60000
+# 覆盖: F001, F004, F005, F007, F012 核心功能
+# 测试文件: tests/test_smoke.spec.ts
+# 期望: 6/6 通过
 
-# BugLog 回归测试
+# ========== BugLog 回归测试 ==========
 cd dev
-npx playwright test tests/tracker.spec.ts --project=firefox
+npx playwright test tests/tracker.spec.ts --project=firefox --timeout=60000
+# 覆盖: BUG-002, BUG-007, BUG-008, BUG-009, BUG-010, FEAT-001
+# 测试文件: tests/tracker.spec.ts
+# 期望: 11/11 通过
+
+# ========== playwright_firefox.js ==========
+cd dev
+node playwright_firefox.js
+# 覆盖: P001-P014 基础功能验证
+# 测试文件: playwright_firefox.js
+```
+
+### 5.3 Bug 处理流程
+
+测试中发现代码 bug 时，必须添加到 BugLog：
+
+**添加步骤**:
+1. 填写 BugLog 模板 (`/projects/management/feedbacks/new/BugLog_YYYYMMDD.md`)
+2. 提交到 feedbacks/new/ 目录
+3. 评审后标记为待修复
+4. 修复后更新 tracker_BUGLOG.md
+5. 编写回归测试用例
+
+**BugLog 模板位置**: `/projects/management/feedbacks/new/BugLog_YYYYMMDD.md`
+
+### 5.4 测试报告发布
+
+测试完成后，必须按照测试报告模板发布结果：
+
+**报告要求**:
+1. 使用模板: `docs/dev/TEMPLATE_TEST_REPORT.md`
+2. 包含整体测试开始和完成时间
+3. 包含所有测试类型的通过/失败统计
+4. 包含 BugLog 回归测试详细结果
+5. 发布到: `docs/dev/TRACKER_TEST_REPORT_v{version}_{YYYYMMDD}.md`
+
+**报告模板结构**:
+```
+## 测试摘要
+| 测试类型 | 总数 | 通过 | 失败 | 通过率 |
+
+## 测试执行时间
+ | 开始时间 || 测试阶段 完成时间 | 持续时间 |
+
+## API 测试结果
+...
+
+## Playwright 冒烟测试结果
+...
+
+## BugLog 回归测试结果
+...
+```
+
+**发布命令**:
+```bash
+# 1. 复制测试报告模板
+cp docs/dev/TEMPLATE_TEST_REPORT.md \
+   docs/dev/TRACKER_TEST_REPORT_v0.5.0_20260207.md
+
+# 2. 编辑测试报告，填写测试结果
+
+# 3. 提交测试报告
+git add docs/dev/TRACKER_TEST_REPORT_*.md
+git commit -m "docs: 添加 v0.5.0 测试报告"
 ```
 
 ### 5.3 测试数据
 
-| 版本 | 数据目录 | 说明 |
-|------|----------|------|
-| **dev** | `test_data/` | 测试数据，与用户数据隔离 |
-| **stable** | `user_data/` | 用户真实数据，只读验证 |
+| 测试类型 | 数据目录 | 说明 |
+|----------|----------|------|
+| **pytest API 测试** | `test_data/` | dev 版本使用，独立测试 |
+| **Playwright 冒烟测试** | `test_data/` | 使用测试项目数据 |
+| **BugLog 回归测试** | `test_data/` | 使用测试项目数据 |
+| **playwright_firefox.js** | `user_data/` | stable 版本，只读验证 |
+| **stable 冒烟测试** | `user_data/` | 用户数据，只读操作 |
+
+### 5.4 测试标准
+
+| 版本 | 通过标准 | 测试范围 |
+|------|----------|----------|
+| **dev** | 100% 通过 | API + Playwright + BugLog 回归 |
+| **stable** | 100% 通过 | playwright_firefox.js (只读) |
+
+### 5.5 常见测试问题
+
+**Q: 测试数据不足导致测试失败？**
+
+A: 补充测试数据：
+```bash
+# 创建测试项目
+python3 scripts/data_manager.py create
+```
 
 ---
 
@@ -278,19 +368,22 @@ npx playwright test tests/tracker.spec.ts --project=firefox
 ### 6.1 发布前检查清单
 
 ```bash
-# 1. dev 版本测试全部通过 ✅
+# 1. dev 版本 API 测试全部通过 (17/17) ✅
 cd dev && PYTHONPATH=. pytest tests/test_api.py -v
 
-# 2. Playwright 测试通过 ✅
-cd dev && npx playwright test tests/ --project=firefox
+# 2. dev 版本 Playwright 冒烟测试通过 (6/6) ✅
+cd dev && npx playwright test tests/test_smoke.spec.ts --project=firefox --timeout=60000
 
-# 3. Git 代码已合并到 develop ✅
+# 3. dev 版本 BugLog 回归测试通过 (11/11) ✅
+cd dev && npx playwright test tests/tracker.spec.ts --project=firefox --timeout=60000
+
+# 4. Git 代码已合并到 develop ✅
 git checkout develop && git status
 
-# 4. 创建发布标签
+# 5. 创建发布标签
 git checkout main
 git merge develop
-git tag -a v0.4.0 -m "Release v0.4.0"
+git tag -a v0.5.0 -m "Release v0.5.0"
 ```
 
 ### 6.2 执行发布
@@ -336,8 +429,8 @@ sudo systemctl restart tracker
 
 | 类型 | 文件名 | 说明 |
 |------|--------|------|
-| 规格书 | `tracker_规格书_v0.3.md` | 功能定义、架构设计 |
-| 测试计划 | `tracker_测试计划.md` | 测试策略、用例 |
+| 规格书 | `tracker_SPECIFICATION.md` | 功能定义、架构设计 |
+| 测试计划 | `tracker_TEST_PLAN.md` | 测试策略、用例 |
 | 发布报告 | `TRACKER_TEST_REPORT_*.md` | 测试结果 |
 | 功能需求 | `FEATURE_*.md` | 新功能详细定义 |
 | 开发规范 | `DEVELOPMENT_PROCESS.md` | 本文档 |
@@ -347,8 +440,8 @@ sudo systemctl restart tracker
 ```
 /projects/management/tracker/docs/
 ├── dev/                  # 开发相关文档
-│   ├── tracker_规格书_v0.3.md
-│   ├── tracker_测试计划.md
+│   ├── tracker_SPECIFICATION.md
+│   ├── tracker_TEST_PLAN.md
 │   ├── DEVELOPMENT_PROCESS.md
 │   ├── TEMPLATE_FEATURE_REQUEST.md
 │   └── TEMPLATE_RELEASE_NOTES.md
@@ -412,6 +505,6 @@ journalctl -u tracker -f
 
 ---
 
-**文档版本**: v1.0  
-**最后更新**: 2026-02-05  
+**文档版本**: v1.1  
+**最后更新**: 2026-02-07  
 **维护者**: 小栗子 🌰

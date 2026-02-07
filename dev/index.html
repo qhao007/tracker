@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>芯片验证 Tracker v1.0</title>
+    <title>芯片验证 Tracker</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: Microsoft YaHei, -apple-system, sans-serif; background: #f5f5f5; font-size: 13px; color: #333; }
@@ -42,7 +42,7 @@
         .data-table tr:nth-child(even) { background: #f9f9f9; }
         .data-table tr:hover { background: #e8f4fc; }
         .cp-table th:nth-child(1) { width: 13%; } .cp-table th:nth-child(2) { width: 10%; } .cp-table th:nth-child(3) { width: 15%; } .cp-table th:nth-child(4) { width: 30%; } .cp-table th:nth-child(5) { width: 12%; } .cp-table th:nth-child(6) { width: 10%; }
-        .tc-table th:nth-child(1) { width: 8%; } .tc-table th:nth-child(2) { width: 8%; } .tc-table th:nth-child(3) { width: 6%; } .tc-table th:nth-child(4) { width: 17%; } .tc-table th:nth-child(5) { width: 19%; } .tc-table th:nth-child(6) { width: 7%; } .tc-table th:nth-child(7) { width: 5%; }
+        .tc-table th:nth-child(1) { width: 5%; } .tc-table th:nth-child(2) { width: 7%; } .tc-table th:nth-child(3) { width: 6%; } .tc-table th:nth-child(4) { width: 15%; } .tc-table th:nth-child(5) { width: 17%; } .tc-table th:nth-child(6) { width: 17%; } .tc-table th:nth-child(7) { width: 7%; } .tc-table th:nth-child(8) { width: 8%; } .tc-table th:nth-child(9) { width: 8%; }
         .status-badge { padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: bold; }
         .coverage-badge { padding: 3px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; min-width: 45px; text-align: center; display: inline-block; }
         .coverage-detail { display: block; font-size: 10px; color: #666; margin-top: 2px; }
@@ -142,7 +142,7 @@
                 <div class="toolbar-right"><span style="color: #666; font-size: 12px;">共 <span id="tcCount">0</span> 条</span></div>
             </div>
             <table class="data-table tc-table" id="tcTable">
-                <thead><tr><th>ID</th><th>TestBench</th><th>Category</th><th>Owner</th><th>Test Name</th><th>Scenario</th><th>Status</th><th>操作</th></tr></thead>
+                <thead><tr><th>ID</th><th>TestBench</th><th>Category</th><th>Owner</th><th>Test Name</th><th>Scenario</th><th>Status</th><th>Completed</th><th>操作</th></tr></thead>
                 <tbody id="tcList"></tbody>
             </table>
         </div>
@@ -215,9 +215,9 @@
             <div class="modal-header"><span>关于 Tracker</span><button class="modal-close" onclick="closeModal('versionModal')">&times;</button></div>
             <div class="modal-body" style="text-align: center;">
                 <h2 style="color: #2170bb;">芯片验证 Tracker</h2>
-                <p style="font-size: 24px; font-weight: bold; margin: 10px 0;">v1.0</p>
-                <p style="color: #4CAF50; font-weight: bold;">正式版</p>
-                <hr style="margin: 15px 0;"><p style="color: #666;">发布于 2026-02-03</p>
+                <p style="font-size: 24px; font-weight: bold; margin: 10px 0;" id="versionDisplay">v0.0.0</p>
+                <p style="color: #4CAF50; font-weight: bold;" id="versionTypeDisplay">正式版</p>
+                <hr style="margin: 15px 0;"><p style="color: #666;" id="versionDateDisplay">发布日期: -</p>
             </div>
         </div>
     </div>
@@ -233,8 +233,15 @@
                 const res = await fetch(`${API_BASE}/version`);
                 const data = await res.json();
                 const tag = document.getElementById('versionTag');
-                tag.textContent = data.version_type;
+                // 显示版本号和类型: "v0.5.0 正式版" 或 "v0.5.0 测试版"
+                tag.textContent = `v${data.version} ${data.version_type}`;
+                tag.title = `发布日期: ${data.release_date}`;
                 if (data.version_type === '测试版') tag.classList.add('test');
+                // 更新关于对话框
+                document.getElementById('versionDisplay').textContent = `v${data.version}`;
+                document.getElementById('versionTypeDisplay').textContent = data.version_type;
+                document.getElementById('versionTypeDisplay').style.color = data.version_type === '测试版' ? '#ff9800' : '#4CAF50';
+                document.getElementById('versionDateDisplay').textContent = `发布日期: ${data.release_date}`;
             } catch (e) { console.error('加载版本信息失败:', e); }
         }
         
@@ -324,11 +331,12 @@
             });
             document.getElementById('tcCount').textContent = filtered.length;
             const tbody = document.getElementById('tcList');
-            if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #999; padding: 30px;">暂无数据</td></tr>'; return; }
+            if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: #999; padding: 30px;">暂无数据</td></tr>'; return; }
             tbody.innerHTML = filtered.map(tc => {
                 const hasDetails = tc.checker_details || tc.coverage_details || tc.comments;
                 const detailsId = `tc-details-${tc.id}`;
-                return `<tr><td>${tc.id}</td><td>${escapeHtml(tc.testbench)}</td><td>${escapeHtml(tc.category || '')}</td><td>${escapeHtml(tc.owner || '')}</td><td><strong>${escapeHtml(tc.test_name)}</strong></td><td>${escapeHtml(tc.scenario_details || '')}</td><td><select class="status-select" onchange="updateTCStatus(${tc.id}, this.value)"><option value="OPEN" ${tc.status === 'OPEN' ? 'selected' : ''}>OPEN</option><option value="CODED" ${tc.status === 'CODED' ? 'selected' : ''}>CODED</option><option value="FAIL" ${tc.status === 'FAIL' ? 'selected' : ''}>FAIL</option><option value="PASS" ${tc.status === 'PASS' ? 'selected' : ''}>PASS</option></select></td><td><div class="action-btns"><button class="action-btn edit" onclick="editTC(${tc.id})">编辑</button><button class="action-btn delete" onclick="deleteTC(${tc.id})">删除</button></div>${hasDetails ? `<div class="details-toggle" onclick="toggleDetails('${detailsId}')">[详情▼]</div>` : ''}</td></tr>${hasDetails ? `<tr><td colspan="8" style="padding: 0;"><div class="details-content" id="${detailsId}">${tc.checker_details ? `<div class="detail-row"><span class="detail-label">Checker:</span><span class="detail-value">${escapeHtml(tc.checker_details)}</span></div>` : ''}${tc.coverage_details ? `<div class="detail-row"><span class="detail-label">Coverage:</span><span class="detail-value">${escapeHtml(tc.coverage_details)}</span></div>` : ''}${tc.comments ? `<div class="detail-row"><span class="detail-label">Comments:</span><span class="detail-value">${escapeHtml(tc.comments)}</span></div>` : ''}</div></td></tr>` : ''}`;
+                const completedDate = tc.status === 'PASS' ? (tc.completed_date || '-') : '-';
+                return `<tr><td>${tc.id}</td><td>${escapeHtml(tc.testbench)}</td><td>${escapeHtml(tc.category || '')}</td><td>${escapeHtml(tc.owner || '')}</td><td><strong>${escapeHtml(tc.test_name)}</strong></td><td>${escapeHtml(tc.scenario_details || '')}</td><td><select class="status-select" onchange="updateTCStatus(${tc.id}, this.value)"><option value="OPEN" ${tc.status === 'OPEN' ? 'selected' : ''}>OPEN</option><option value="CODED" ${tc.status === 'CODED' ? 'selected' : ''}>CODED</option><option value="FAIL" ${tc.status === 'FAIL' ? 'selected' : ''}>FAIL</option><option value="PASS" ${tc.status === 'PASS' ? 'selected' : ''}>PASS</option></select></td><td>${completedDate}</td><td><div class="action-btns"><button class="action-btn edit" onclick="editTC(${tc.id})">编辑</button><button class="action-btn delete" onclick="deleteTC(${tc.id})">删除</button></div>${hasDetails ? `<div class="details-toggle" onclick="toggleDetails('${detailsId}')">[详情▼]</div>` : ''}</td></tr>${hasDetails ? `<tr><td colspan="9" style="padding: 0;"><div class="details-content" id="${detailsId}">${tc.checker_details ? `<div class="detail-row"><span class="detail-label">Checker:</span><span class="detail-value">${escapeHtml(tc.checker_details)}</span></div>` : ''}${tc.coverage_details ? `<div class="detail-row"><span class="detail-label">Coverage:</span><span class="detail-value">${escapeHtml(tc.coverage_details)}</span></div>` : ''}${tc.comments ? `<div class="detail-row"><span class="detail-label">Comments:</span><span class="detail-value">${escapeHtml(tc.comments)}</span></div>` : ''}</div></td></tr>` : ''}`;
             }).join('');
         }
         

@@ -58,18 +58,26 @@ test.describe('Tracker v0.3.1 关键功能测试', () => {
     // F007: 状态跟踪 - OPEN → CODED → FAIL → PASS
     await page.click('text=Test Cases');
     await page.waitForTimeout(1000);
-    
+
     // 找到状态选择器
     const select = page.locator('select.status-select').first();
     await expect(select).toBeVisible({ timeout: 10000 });
-    
-    // 切换状态
+
+    // 获取初始状态
     const initialStatus = await select.inputValue();
-    await select.selectOption({ index: 1 });
-    await page.waitForTimeout(500);
-    
+
+    // 选择一个不同的状态（OPEN→CODED→FAIL→PASS 循环）
+    const statusOrder = ['OPEN', 'CODED', 'FAIL', 'PASS'];
+    const currentIndex = statusOrder.indexOf(initialStatus);
+    const nextStatus = statusOrder[(currentIndex + 1) % statusOrder.length];
+
+    // 切换到下一个状态
+    await select.selectOption({ value: nextStatus });
+    await page.waitForTimeout(1000);
+
+    // 验证状态已更新
     const newStatus = await select.inputValue();
-    expect(newStatus).not.toBe(initialStatus);
+    expect(newStatus).toBe(nextStatus);
   });
   
   test('F012-CP覆盖率显示', async ({ page }) => {

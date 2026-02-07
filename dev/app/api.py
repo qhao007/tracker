@@ -120,10 +120,27 @@ def jsonify_project(project_name, data):
 @api.route('/api/version', methods=['GET'])
 def get_version():
     """获取版本信息"""
+    import os
+    version_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'VERSION')
+    version = '1.0.0'
+    release_date = '2026-02-04'
+    if os.path.exists(version_file):
+        try:
+            with open(version_file, 'r') as f:
+                lines = f.readlines()
+                for line in lines:
+                    if '=' in line:
+                        key, value = line.strip().split('=', 1)
+                        if key == 'VERSION':
+                            version = value
+                        elif key == 'RELEASE_DATE':
+                            release_date = value
+        except:
+            pass
     return jsonify({
-        'version': '1.0.0',
+        'version': version,
         'version_type': '正式版',
-        'release_date': '2026-02-04'
+        'release_date': release_date
     })
 
 # ============ 项目管理 ============
