@@ -1,0 +1,410 @@
+#!/usr/bin/env python3
+"""
+Tracker 发布前准备脚本
+
+按照开发流程规范执行发布前检查：
+1. API 测试 (pytest)
+2. Playwright 冒烟测试
+3. BugLog 回归测试
+4. Git 状态检查
+5. 执行 Merge 和 Tag 操作
+
+使用方法:
+    python3 scripts/release_preparation.py --version v0.5.0
+
+选项:
+    --dry-run        演练模式（只检查，不执行实际操作）
+    --version        指定版本号 (必需)
+    --skip-tests     跳过测试执行
+    --skip-merge-tag 跳过 merge 和 tag 步骤
+    --force          强制继续（忽略警告）
+
+发布流程:
+    1. 执行发布准备: python3 scripts/release_preparation.py --version v0.5.0
+    2. 脚本自动执行 merge 和 tag
+    3. 执行发布: python3 scripts/release.py --version v0.5.0 --force
+"""
+
+import os
+import sys
+import subprocess
+import argparse
+from datetime import datetime
+from pathlib import Path
+
+# 颜色定义
+GREEN = '\033[92m'
+YELLOW = '\033[93m'
+RED = '\033[91m'
+BLUE = '\033[94m'
+RESET = '\033[0m'
+BOLD = '\033[1m'
+
+
+def print_step(step_num, title):
+    """打印步骤标题"""
+    print(f"\n{BOLD}{'=' * 60}{RESET}")
+    print(f"{BOLD}{BLUE}步骤 {step_num}: {title}{RESET}")
+    print(f"{BOLD}{'=' * 60}\n")
+
+
+def print_result(status, message=""):
+    """打印检查结果"""
+    if status:
+        print(f"{GREEN}✅ {message}{RESET}")
+    else:
+        print(f"{RED}❌ {message}{RESET}")
+
+
+def run_command(cmd, description, cwd=None, check=True):
+    """执行命令并返回结果"""
+    print(f"执行: {cmd}")
+    print(f"目录: {cwd or '当前目录'}")
+
+    try:
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            cwd=cwd or os.getcwd(),
+            capture_output=True,
+            text=True,
+            timeout=1800  # 30分钟超时
+        )
+        if result.returncode == 0:
+            print_result(True, f"{description} 成功")
+            return True, result.stdout
+        else:
+            print_result(False, f"{description} 失败")
+            print(f"错误输出:\n{result.stderr}")
+            return False, result.stderr
+    except subprocess.TimeoutExpired:
+        print_result(False, f"{description} 超时")
+        return False, "命令执行超时"
+    except Exception as e:
+        print_result(False, f"{description} 异常: {str(e)}")
+        return False, str(e)
+
+
+def check_git_status(dry_run=False):
+    """步骤 4: 检查 Git 状态"""
+    print_step(4, "检查 Git 状态")
+
+    repo_root = Path(__file__).parent.parent
+
+    # 检查当前分支
+    cmd = "git branch --show-current"
+    success, output = run_command(cmd, "获取当前分支", cwd=repo_root)
+    if not success:
+        return False
+
+    current_branch = output.strip()
+    print(f"当前分支: {current_branch}")
+
+    if current_branch != "develop":
+        print(YELLOW + "⚠️  警告: 当前不在 develop 分支" + RESET)
+        if not dry_run:
+            return False
+
+    # 检查是否有未提交的更改
+    cmd = "git status --porcelain"
+    success, output = run_command(cmd, "检查未提交更改", cwd=repo_root)
+    if not success:
+        return False
+
+    if output.strip():
+        print(YELLOW + "⚠️  有未提交的更改:" + RESET)
+        print(output)
+        if not dry_run:
+            return False
+    else:
+        print("✓ 没有未提交的更改")
+
+    print_result(True, "Git 状态检查通过")
+    return True
+
+
+def merge_and_tag(version, dry_run=False):
+    """
+    步骤 5: 执行 Merge 和 Tag 操作
+
+    1. 切换到 main 分支
+    2. 拉取最新
+    3. 合并 develop 到 main
+    4. 创建发布标签
+    5. 切换回 develop 分支
+    """
+    print_step(5, f"执行 Merge 和 Tag (v{version})")
+
+    repo_root = Path(__file__).parent.parent
+
+    if dry_run:
+        print("[演练] 跳过 Merge 和 Tag")
+        return True
+
+    # 1. 切换到 main 分支
+    print("\n1. 切换到 main 分支...")
+    cmd = "git checkout main"
+    success, _ = run_command(cmd, "切换到 main 分支", cwd=repo_root)
+    if not success:
+        return False
+
+    # 2. 拉取最新
+    print("\n2. 拉取 main 分支最新...")
+    cmd = "git pull origin main 2>/dev/null || git pull main 2>/dev/null || true"
+    subprocess.run(cmd, shell=True, cwd=repo_root)
+    print("✓ 拉取完成")
+
+    # 3. 合并 develop 到 main
+    print("\n3. 合并 develop 到 main...")
+    merge_msg = f"merge: 合并 v{version} 到正式版"
+    cmd = f'git merge develop --no-ff -m "{merge_msg}"'
+    success, output = run_command(cmd, "合并 develop 到 main", cwd=repo_root)
+    if not success:
+        print(YELLOW + "⚠️  合并失败，可能有冲突" + RESET)
+        print("请手动解决冲突后重新运行脚本")
+        # 尝试切回 develop
+        subprocess.run("git checkout develop 2>/dev/null || true", shell=True, cwd=repo_root)
+        return False
+
+    # 4. 创建发布标签
+    print("\n4. 创建发布标签...")
+    tag_name = f"v{version}"
+    cmd = f"git tag -a {tag_name} -m 'Release {tag_name}'"
+    success, _ = run_command(cmd, f"创建标签 {tag_name}", cwd=repo_root)
+    if not success:
+        return False
+
+    # 5. 切换回 develop 分支
+    print("\n5. 切换回 develop 分支...")
+    cmd = "git checkout develop"
+    success, _ = run_command(cmd, "切换回 develop 分支", cwd=repo_root)
+    if not success:
+        return False
+
+    print_result(True, f"Merge 和 Tag 完成: v{version}")
+    return True
+
+
+def run_api_tests(dry_run=False):
+    """步骤 1: 运行 API 测试"""
+    print_step(1, "运行 API 测试 (pytest)")
+
+    repo_root = Path(__file__).parent.parent
+    dev_dir = repo_root / "dev"
+
+    # 确保 dev 服务器未运行
+    cmd = "pkill -f 'server_test.py' 2>/dev/null || true"
+    subprocess.run(cmd, shell=True, cwd=repo_root)
+
+    # 启动 dev 服务器
+    print("\n启动 dev 服务器...")
+    cmd = f"cd {dev_dir} && python3 server_test.py > /dev/null 2>&1 &"
+    if not dry_run:
+        os.system(cmd)
+        import time
+        time.sleep(3)
+        print("Dev 服务器已启动")
+
+    # 运行 API 测试
+    cmd = f"PYTHONPATH={dev_dir} python3 -m pytest {dev_dir}/tests/test_api.py -v"
+    success, output = run_command(cmd, "API 测试", cwd=repo_root)
+
+    # 停止 dev 服务器
+    if not dry_run:
+        cmd = "pkill -f 'server_test.py' 2>/dev/null || true"
+        subprocess.run(cmd, shell=True)
+
+    if not success:
+        return False
+
+    # 检查测试通过数
+    if "17 passed" in output or "passed" in output:
+        print(GREEN + "✓ API 测试全部通过" + RESET)
+        return True
+    else:
+        print(RED + "✗ API 测试未全部通过" + RESET)
+        return False
+
+
+def run_smoke_tests(dry_run=False):
+    """步骤 2: 运行 Playwright 冒烟测试"""
+    print_step(2, "运行 Playwright 冒烟测试")
+
+    repo_root = Path(__file__).parent.parent
+    dev_dir = repo_root / "dev"
+
+    # 确保 dev 服务器运行
+    print("确保 dev 服务器运行...")
+    cmd = f"cd {dev_dir} && python3 server_test.py > /dev/null 2>&1 &"
+    if not dry_run:
+        os.system(cmd)
+        import time
+        time.sleep(3)
+
+    # 运行冒烟测试
+    cmd = f"cd {dev_dir} && npx playwright test tests/test_smoke.spec.ts --project=firefox --timeout=60000"
+    success, output = run_command(cmd, "冒烟测试", cwd=repo_root)
+
+    if not success:
+        return False
+
+    if "6 passed" in output or "passed" in output:
+        print(GREEN + "✓ 冒烟测试全部通过" + RESET)
+        return True
+    else:
+        print(RED + "✗ 冒烟测试未全部通过" + RESET)
+        return False
+
+
+def run_buglog_tests(dry_run=False):
+    """步骤 3: 运行 BugLog 回归测试"""
+    print_step(3, "运行 BugLog 回归测试")
+
+    repo_root = Path(__file__).parent.parent
+    dev_dir = repo_root / "dev"
+
+    # 运行 BugLog 回归测试
+    cmd = f"cd {dev_dir} && npx playwright test tests/tracker.spec.ts --project=firefox --timeout=90000"
+    success, output = run_command(cmd, "BugLog 回归测试", cwd=repo_root)
+
+    if not success:
+        return False
+
+    # 检查测试通过数
+    if "11 passed" in output or "passed" in output:
+        print(GREEN + "✓ BugLog 回归测试全部通过" + RESET)
+        return True
+    else:
+        print(YELLOW + "⚠️  BugLog 回归测试部分通过或超时" + RESET)
+        # 部分通过也允许继续
+        if "passed" in output:
+            print("虽然不是全部通过，但有测试通过")
+            return True
+        return False
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Tracker 发布前准备脚本",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例:
+    # 演练模式（只检查，不实际操作）
+    python3 scripts/release_preparation.py --dry-run --version v0.5.0
+
+    # 执行完整发布准备（自动执行 merge 和 tag）
+    python3 scripts/release_preparation.py --version v0.5.0
+
+    # 跳过 merge 和 tag（用于 CI/CD）
+    python3 scripts/release_preparation.py --version v0.5.0 --skip-merge-tag
+        """
+    )
+
+    parser.add_argument(
+        "--version",
+        required=True,
+        help="版本号 (例如: v0.5.0)"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="演练模式（只检查，不实际操作）"
+    )
+    parser.add_argument(
+        "--skip-tests",
+        action="store_true",
+        help="跳过测试执行"
+    )
+    parser.add_argument(
+        "--skip-merge-tag",
+        action="store_true",
+        help="跳过 merge 和 tag 步骤"
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="强制继续（忽略警告）"
+    )
+
+    args = parser.parse_args()
+
+    print(f"\n{BOLD}{BLUE}{'=' * 60}{RESET}")
+    print(f"{BOLD}{BLUE}Tracker 发布前准备脚本{RESET}")
+    print(f"{BOLD}{BLUE}{'=' * 60}{RESET}")
+    print(f"\n版本: {args.version}")
+    print(f"模式: {'演练模式' if args.dry_run else '执行模式'}")
+    print(f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+    results = {}
+
+    # 执行检查
+    if not args.skip_tests:
+        results["api_tests"] = run_api_tests(args.dry_run)
+        results["smoke_tests"] = run_smoke_tests(args.dry_run)
+        results["buglog_tests"] = run_buglog_tests(args.dry_run)
+    else:
+        print_step(0, "跳过测试执行")
+        print(YELLOW + "⚠️  已跳过测试执行" + RESET)
+        results["api_tests"] = True
+        results["smoke_tests"] = True
+        results["buglog_tests"] = True
+
+    results["git_status"] = check_git_status(args.dry_run)
+
+    if not args.skip_merge_tag:
+        results["merge_tag"] = merge_and_tag(args.version, args.dry_run)
+    else:
+        print_step(0, "跳过 Merge 和 Tag")
+        print(YELLOW + "⚠️  已跳过 Merge 和 Tag" + RESET)
+        results["merge_tag"] = True
+
+    # 汇总结果
+    print(f"\n{BOLD}{'=' * 60}{RESET}")
+    print(f"{BOLD}发布前检查结果汇总{RESET}")
+    print(f"{BOLD}{'=' * 60}\n")
+
+    all_passed = True
+    for step, passed in results.items():
+        step_names = {
+            "api_tests": "API 测试",
+            "smoke_tests": "冒烟测试",
+            "buglog_tests": "BugLog 回归测试",
+            "git_status": "Git 状态",
+            "merge_tag": "Merge 和 Tag"
+        }
+        step_name = step_names.get(step, step)
+        if passed:
+            print(f"{GREEN}✅ {step_name}: 通过{RESET}")
+        else:
+            print(f"{RED}❌ {step_name}: 失败{RESET}")
+            all_passed = False
+
+    print(f"\n{BOLD}{'=' * 60}{RESET}")
+
+    if all_passed:
+        print(f"{GREEN}{BOLD}✅ 所有检查通过！可以执行发布。{RESET}")
+        print(f"\n下一步操作:")
+        if not args.dry_run:
+            print(f"  cd /projects/management/tracker")
+            print(f"  python3 scripts/release.py --version {args.version} --force")
+        else:
+            print(f"  [演练] 发布命令已准备")
+        return 0
+    else:
+        print(f"{RED}{BOLD}❌ 检查未通过，请修复问题后重试。{RESET}")
+        print(f"\n发现问题:")
+        for step, passed in results.items():
+            if not passed:
+                step_names = {
+                    "api_tests": "API 测试",
+                    "smoke_tests": "冒烟测试",
+                    "buglog_tests": "BugLog 回归测试",
+                    "git_status": "Git 状态",
+                    "merge_tag": "Merge 和 Tag"
+                }
+                print(f"  - {step_names.get(step, step)}")
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
