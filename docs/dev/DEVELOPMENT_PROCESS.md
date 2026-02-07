@@ -279,6 +279,61 @@ node playwright_firefox.js
 # 测试文件: playwright_firefox.js
 ```
 
+### 5.3 Bug 处理流程
+
+测试中发现代码 bug 时，必须添加到 BugLog：
+
+**添加步骤**:
+1. 填写 BugLog 模板 (`/projects/management/feedbacks/new/BugLog_YYYYMMDD.md`)
+2. 提交到 feedbacks/new/ 目录
+3. 评审后标记为待修复
+4. 修复后更新 tracker_BUGLOG.md
+5. 编写回归测试用例
+
+**BugLog 模板位置**: `/projects/management/feedbacks/new/BugLog_YYYYMMDD.md`
+
+### 5.4 测试报告发布
+
+测试完成后，必须按照测试报告模板发布结果：
+
+**报告要求**:
+1. 使用模板: `docs/dev/TEMPLATE_TEST_REPORT.md`
+2. 包含整体测试开始和完成时间
+3. 包含所有测试类型的通过/失败统计
+4. 包含 BugLog 回归测试详细结果
+5. 发布到: `docs/dev/TRACKER_TEST_REPORT_v{version}_{YYYYMMDD}.md`
+
+**报告模板结构**:
+```
+## 测试摘要
+| 测试类型 | 总数 | 通过 | 失败 | 通过率 |
+
+## 测试执行时间
+ | 开始时间 || 测试阶段 完成时间 | 持续时间 |
+
+## API 测试结果
+...
+
+## Playwright 冒烟测试结果
+...
+
+## BugLog 回归测试结果
+...
+```
+
+**发布命令**:
+```bash
+# 1. 复制测试报告模板
+cp docs/dev/TEMPLATE_TEST_REPORT.md \
+   docs/dev/TRACKER_TEST_REPORT_v0.5.0_20260207.md
+
+# 2. 编辑测试报告，填写测试结果
+
+# 3. 提交测试报告
+git add docs/dev/TRACKER_TEST_REPORT_*.md
+git commit -m "docs: 添加 v0.5.0 测试报告"
+```
+
 ### 5.3 测试数据
 
 | 测试类型 | 数据目录 | 说明 |
