@@ -7,7 +7,7 @@ Tracker 发布前准备脚本
 2. Playwright 冒烟测试
 3. BugLog 回归测试
 4. Git 状态检查
-5. 交互式 Merge 和 Tag 操作
+5. 执行 Merge 和 Tag 操作
 
 使用方法:
     python3 scripts/release_preparation.py --version v0.5.0
@@ -16,15 +16,13 @@ Tracker 发布前准备脚本
     --dry-run        演练模式（只检查，不执行实际操作）
     --version        指定版本号 (必需)
     --skip-tests     跳过测试执行
-    --skip-merge-tag 跳过交互式 merge 和 tag 步骤
+    --skip-merge-tag 跳过 merge 和 tag 步骤
     --force          强制继续（忽略警告）
 
 发布流程:
     1. 执行发布准备: python3 scripts/release_preparation.py --version v0.5.0
-    2. 脚本检查通过后会打印命令
-    3. 你执行 merge 和 tag 命令
-    4. 脚本验证结果
-    5. 执行发布: python3 scripts/release.py --version v0.5.0 --force
+    2. 脚本自动执行 merge 和 tag
+    3. 执行发布: python3 scripts/release.py --version v0.5.0 --force
 """
 
 import os
@@ -125,108 +123,66 @@ def check_git_status(dry_run=False):
     return True
 
 
-def interactive_merge_and_tag(version, dry_run=False):
+def merge_and_tag(version, dry_run=False):
     """
-    步骤 5: 交互式 Merge 和 Tag
+    步骤 5: 执行 Merge 和 Tag 操作
 
-    这个步骤是交互式的：
-    1. 打印需要执行的命令
-    2. 等待用户执行并确认
-    3. 验证结果
+    1. 切换到 main 分支
+    2. 拉取最新
+    3. 合并 develop 到 main
+    4. 创建发布标签
+    5. 切换回 develop 分支
     """
-    print_step(5, "交互式 Merge 和 Tag 操作")
+    print_step(5, f"执行 Merge 和 Tag (v{version})")
 
     repo_root = Path(__file__).parent.parent
 
     if dry_run:
-        print("[演练] 跳过交互式步骤")
+        print("[演练] 跳过 Merge 和 Tag")
         return True
 
-    # 打印需要执行的命令
-    print(f"\n{BOLD}请执行以下命令:{RESET}\n")
+    # 1. 切换到 main 分支
+    print("\n1. 切换到 main 分支...")
+    cmd = "git checkout main"
+    success, _ = run_command(cmd, "切换到 main 分支", cwd=repo_root)
+    if not success:
+        return False
 
-    print(f"{GREEN}# 1. 切换到 main 分支并合并 develop{RESET}")
-    print(f"{YELLOW}git checkout main{RESET}")
-    print(f"{YELLOW}git pull origin main 2>/dev/null || git pull main 2>/dev/null || true{RESET}")
-    merge_cmd = f'git merge develop --no-ff -m "merge: 合并 v{version} 到正式版"'
-    print(f"{YELLOW}{merge_cmd}{RESET}")
+    # 2. 拉取最新
+    print("\n2. 拉取 main 分支最新...")
+    cmd = "git pull origin main 2>/dev/null || git pull main 2>/dev/null || true"
+    subprocess.run(cmd, shell=True, cwd=repo_root)
+    print("✓ 拉取完成")
 
-    print(f"\n{GREEN}# 2. 创建发布标签{RESET}")
-    tag_cmd = f"git tag -a v{version} -m 'Release v{version}'"
-    print(f"{YELLOW}{tag_cmd}{RESET}")
+    # 3. 合并 develop 到 main
+    print("\n3. 合并 develop 到 main...")
+    merge_msg = f"merge: 合并 v{version} 到正式版"
+    cmd = f'git merge develop --no-ff -m "{merge_msg}"'
+    success, output = run_command(cmd, "合并 develop 到 main", cwd=repo_root)
+    if not success:
+        print(YELLOW + "⚠️  合并失败，可能有冲突" + RESET)
+        print("请手动解决冲突后重新运行脚本")
+        # 尝试切回 develop
+        subprocess.run("git checkout develop 2>/dev/null || true", shell=True, cwd=repo_root)
+        return False
 
-    print(f"\n{GREEN}# 3. 切换回 develop 分支{RESET}")
-    print(f"{YELLOW}git checkout develop{RESET}")
+    # 4. 创建发布标签
+    print("\n4. 创建发布标签...")
+    tag_name = f"v{version}"
+    cmd = f"git tag -a {tag_name} -m 'Release {tag_name}'"
+    success, _ = run_command(cmd, f"创建标签 {tag_name}", cwd=repo_root)
+    if not success:
+        return False
 
-    print(f"\n{BOLD}{'=' * 60}{RESET}")
-    print(f"{BOLD}等待确认...{RESET}")
-    print(f"{BOLD}{'=' * 60}\n")
+    # 5. 切换回 develop 分支
+    print("\n5. 切换回 develop 分支...")
+    cmd = "git checkout develop"
+    success, _ = run_command(cmd, "切换回 develop 分支", cwd=repo_root)
+    if not success:
+        return False
 
+    print_result(True, f"Merge 和 Tag 完成: v{version}")
     return True
-
-
-def verify_merge_and_tag(version):
-    """
-    验证 Merge 和 Tag 是否正确完成
-    """
-    repo_root = Path(__file__).parent.parent
-
-    print(f"\n{BOLD}{'=' * 60}{RESET}")
-    print(f"{BOLD}验证 Merge 和 Tag 结果{RESET}")
-    print(f"{BOLD}{'=' * 60}\n")
-
-    all_verified = True
-
-    # 1. 检查 main 分支是否包含 develop 的提交
-    print("1. 验证 main 分支已合并...")
-    cmd = "git log main --oneline -1 --format='%H'"
-    result = subprocess.run(cmd, shell=True, cwd=repo_root, capture_output=True, text=True)
-    main_head = result.stdout.strip()
-
-    cmd = "git log develop --oneline -1 --format='%H'"
-    result = subprocess.run(cmd, shell=True, cwd=repo_root, capture_output=True, text=True)
-    develop_head = result.stdout.strip()
-
-    cmd = f"git merge-base --is-ancestor {develop_head} {main_head}"
-    result = subprocess.run(cmd, shell=True, cwd=repo_root)
-    if result.returncode == 0:
-        print_result(True, "main 分支已包含 develop 的提交")
-    else:
-        print_result(False, "main 分支未包含 develop 的提交")
-        print(f"  develop 最新: {develop_head[:8]}")
-        print(f"  main 最新: {main_head[:8]}")
-        all_verified = False
-
-    # 2. 检查标签是否存在
-    if all_verified:
-        print("\n2. 验证标签存在...")
-        cmd = f"git tag -l v{version}"
-        result = subprocess.run(cmd, shell=True, cwd=repo_root, capture_output=True, text=True)
-        if result.stdout.strip() == f"v{version}":
-            print_result(True, f"标签 v{version} 已创建")
-        else:
-            print_result(False, f"标签 v{version} 不存在")
-            all_verified = False
-
-    # 3. 检查标签指向的提交
-    if all_verified:
-        print("\n3. 验证标签指向...")
-        cmd = f"git rev-parse v{version}^{{commit}}"
-        result = subprocess.run(cmd, shell=True, cwd=repo_root, capture_output=True, text=True)
-        if result.returncode == 0:
-            tag_commit = result.stdout.strip()
-            if tag_commit == main_head:
-                print_result(True, f"标签指向 main 最新提交")
-            else:
-                print_result(False, f"标签未指向 main 最新提交")
-                print(f"  标签指向: {tag_commit[:8]}")
-                print(f"  main 指向: {main_head[:8]}")
-                all_verified = False
-        else:
-            print_result(False, "无法解析标签")
-            all_verified = False
-
-    return all_verified
 
 
 def run_api_tests(dry_run=False):
@@ -336,9 +292,8 @@ def main():
     # 演练模式（只检查，不实际操作）
     python3 scripts/release_preparation.py --dry-run --version v0.5.0
 
-    # 执行完整发布准备（交互式 merge 和 tag）
+    # 执行完整发布准备（自动执行 merge 和 tag）
     python3 scripts/release_preparation.py --version v0.5.0
-    # 脚本检查通过后会打印命令，请执行后再确认
 
     # 跳过 merge 和 tag（用于 CI/CD）
     python3 scripts/release_preparation.py --version v0.5.0 --skip-merge-tag
@@ -363,7 +318,7 @@ def main():
     parser.add_argument(
         "--skip-merge-tag",
         action="store_true",
-        help="跳过交互式 merge 和 tag 步骤（用于 CI/CD 环境）"
+        help="跳过 merge 和 tag 步骤"
     )
     parser.add_argument(
         "--force",
@@ -397,21 +352,11 @@ def main():
     results["git_status"] = check_git_status(args.dry_run)
 
     if not args.skip_merge_tag:
-        results["merge_tag"] = interactive_merge_and_tag(args.version, args.dry_run)
+        results["merge_tag"] = merge_and_tag(args.version, args.dry_run)
     else:
-        print_step(0, "跳过交互式 Merge 和 Tag")
+        print_step(0, "跳过 Merge 和 Tag")
         print(YELLOW + "⚠️  已跳过 Merge 和 Tag" + RESET)
         results["merge_tag"] = True
-
-    # 验证 Merge 和 Tag 结果
-    if not args.dry_run and not args.skip_merge_tag:
-        verification_passed = verify_merge_and_tag(args.version)
-        if not verification_passed:
-            print(f"\n{RED}{BOLD}❌ Merge 或 Tag 验证失败！{RESET}")
-            print("请修复问题后重新运行发布准备脚本。")
-            return 1
-        else:
-            print(f"\n{GREEN}{BOLD}✅ Merge 和 Tag 验证通过！{RESET}")
 
     # 汇总结果
     print(f"\n{BOLD}{'=' * 60}{RESET}")
