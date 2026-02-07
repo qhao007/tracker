@@ -365,17 +365,30 @@ python3 scripts/data_manager.py create
 
 ## 6. 发布流程
 
-### 6.1 执行发布准备脚本
-
 > **重要**: 只有发布准备脚本成功完成后，才可以执行发布脚本。
+
+**发布流程**:
+```
+1. 执行发布准备脚本
+   ├── API 测试
+   ├── 冒烟测试
+   ├── BugLog 回归测试
+   ├── VERSION 更新和提交 ← 自动
+   ├── Git 状态检查
+   └── Merge 和 Tag ← 自动
+
+2. 执行发布脚本
+```
+
+### 6.1 执行发布准备脚本
 
 ```bash
 cd /projects/management/tracker
 
-# 1. 演练模式（只检查，不实际操作）
+# 演练模式（只检查，不实际操作）
 python3 scripts/release_preparation.py --dry-run --version v0.5.0
 
-# 2. 执行完整发布准备
+# 执行完整发布准备
 python3 scripts/release_preparation.py --version v0.5.0
 ```
 
@@ -401,36 +414,7 @@ python3 scripts/release_preparation.py --version v0.5.0
 > **规则 1**: 发布准备脚本必须成功（exit code 0）才能执行发布脚本。  
 > **规则 2**: 发布脚本执行过程中报错，则发行中止。
 
-**发布流程**:
-```
-1. 执行发布准备脚本
-   ├── API 测试
-   ├── 冒烟测试
-   ├── BugLog 回归测试
-   ├── VERSION 更新和提交 ← 自动
-   ├── Git 状态检查
-   └── Merge 和 Tag ← 自动
-
-2. 执行发布脚本
-```
-
-### 6.2 VERSION 文件更新
-
-> **说明**: VERSION 更新已集成到发布准备脚本中，自动执行。
-
-```bash
-# 发布准备脚本会自动:
-# 1. 更新 dev/VERSION 文件
-# 2. 提交 VERSION 更新
-# 3. 执行 merge 和 tag
-
-# 手动更新（可选）
-cd /projects/management/tracker/dev
-cat > VERSION << 'EOF'
-VERSION=v0.5.1
-RELEASE_DATE=YYYY-MM-DD
-EOF
-### 6.3 执行发布
+### 6.2 执行发布
 
 ```bash
 cd /projects/management/tracker
@@ -442,7 +426,7 @@ python3 scripts/release.py --dry-run
 python3 scripts/release.py --version v0.5.0 --force
 ```
 
-### 6.4 发布后验证
+### 6.3 发布后验证
 
 ```bash
 # 检查服务状态
@@ -452,7 +436,7 @@ sudo systemctl status tracker
 curl http://localhost:8080/api/version
 ```
 
-### 6.5 回滚
+### 6.4 回滚
 
 ```bash
 # 方式1：使用发布脚本回滚
@@ -549,6 +533,6 @@ journalctl -u tracker -f
 
 ---
 
-**文档版本**: v1.3  
+**文档版本**: v1.4  
 **最后更新**: 2026-02-07  
 **维护者**: 小栗子 🌰
