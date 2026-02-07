@@ -402,31 +402,31 @@ python3 scripts/release_preparation.py --version v0.5.0
 
 **发布流程**:
 ```
-发布准备脚本 (含 Git Merge & Tag) → 发布脚本 → 服务重启
-         ✅                            ✅         ✅
+1. develop 分支更新 VERSION 文件 ← 必需
+2. 提交 VERSION 更新
+3. 发布准备脚本 (Git Merge & Tag)
+4. 执行发布脚本
 ```
 
-**手动执行方式（不推荐）**:
+### 6.2 VERSION 文件更新
+
+> **重要**: VERSION 文件必须在 develop 分支**更新并提交**后，才能执行发布准备脚本。
+
 ```bash
-# 1. dev 版本 API 测试全部通过 (17/17) ✅
-cd dev && PYTHONPATH=. pytest tests/test_api.py -v
+# 1. 更新 VERSION 文件
+cd /projects/management/tracker/dev
+cat > VERSION << 'EOF'
+VERSION=v0.5.1
+RELEASE_DATE=YYYY-MM-DD
+EOF
 
-# 2. dev 版本 Playwright 冒烟测试通过 (6/6) ✅
-cd dev && npx playwright test tests/test_smoke.spec.ts --project=firefox --timeout=60000
-
-# 3. dev 版本 BugLog 回归测试通过 (11/11) ✅
-cd dev && npx playwright test tests/tracker.spec.ts --project=firefox --timeout=90000
-
-# 4. Git 代码已合并到 develop ✅
-git checkout develop && git status
-
-# 5. 创建发布标签
-git checkout main
-git merge develop
-git tag -a v0.5.0 -m "Release v0.5.0"
+# 2. 提交 VERSION 更新
+cd /projects/management/tracker
+git add dev/VERSION
+git commit -m "chore: 更新 VERSION 文件为 v0.5.1"
 ```
 
-### 6.2 执行发布### 6.2 执行发布
+### 6.3 执行发布
 
 ```bash
 cd /projects/management/tracker
@@ -435,7 +435,7 @@ cd /projects/management/tracker
 python3 scripts/release.py --dry-run
 
 # 实际发布
-python3 scripts/release.py --version v0.4.0 --force
+python3 scripts/release.py --version v0.5.0 --force
 ```
 
 ### 6.3 发布后验证
@@ -545,6 +545,6 @@ journalctl -u tracker -f
 
 ---
 
-**文档版本**: v1.1  
+**文档版本**: v1.2  
 **最后更新**: 2026-02-07  
 **维护者**: 小栗子 🌰
