@@ -6,8 +6,9 @@ Tracker 发布前准备脚本
 1. API 测试 (pytest)
 2. Playwright 冒烟测试
 3. BugLog 回归测试
-4. Git 状态检查
-5. 执行 Merge 和 Tag 操作
+4. VERSION 更新和提交
+5. Git 状态检查
+6. Merge 和 Tag 操作
 
 使用方法:
     python3 scripts/release_preparation.py --version v0.5.0
@@ -16,12 +17,12 @@ Tracker 发布前准备脚本
     --dry-run        演练模式（只检查，不执行实际操作）
     --version        指定版本号 (必需)
     --skip-tests     跳过测试执行
-    --skip-merge-tag 跳过 merge 和 tag 步骤
+    --skip-version   跳过 VERSION 更新（用于手动更新）
     --force          强制继续（忽略警告）
 
 发布流程:
     1. 执行发布准备: python3 scripts/release_preparation.py --version v0.5.0
-    2. 脚本自动执行 merge 和 tag
+    2. 脚本自动执行 VERSION 更新、Git Merge 和 Tag
     3. 执行发布: python3 scripts/release.py --version v0.5.0 --force
 """
 
@@ -85,9 +86,52 @@ def run_command(cmd, description, cwd=None, check=True):
         return False, str(e)
 
 
+def update_version(version, dry_run=False):
+    """
+    步骤 4: 更新 VERSION 文件并提交
+
+    1. 更新 dev/VERSION 文件
+    2. 提交到 develop 分支
+    """
+    print_step(4, f"更新 VERSION 文件 (v{version})")
+
+    repo_root = Path(__file__).parent.parent
+    version_file = repo_root / "dev" / "VERSION"
+
+    if dry_run:
+        print("[演练] 跳过 VERSION 更新")
+        return True
+
+    # 获取当前日期
+    release_date = datetime.now().strftime("%Y-%m-%d")
+
+    # 更新 VERSION 文件
+    print(f"\n1. 更新 VERSION 文件...")
+    try:
+        with open(version_file, 'w') as f:
+            f.write(f"VERSION={version}\n")
+            f.write(f"RELEASE_DATE={release_date}\n")
+        print_result(True, "VERSION 文件已更新")
+    except Exception as e:
+        print_result(False, f"VERSION 文件更新失败: {str(e)}")
+        return False
+
+    # 提交 VERSION 更新
+    print(f"\n2. 提交 VERSION 更新...")
+    cmd = f'git add dev/VERSION && git commit -m "chore: 更新 VERSION 文件为 {version}"'
+    success, _ = run_command(cmd, "提交 VERSION 更新", cwd=repo_root)
+    if not success:
+        return False
+
+    print_result(True, f"VERSION 已更新并提交: v{version}")
+    return True
+
+
 def check_git_status(dry_run=False):
-    """步骤 4: 检查 Git 状态"""
-    print_step(4, "检查 Git 状态")
+    """
+    步骤 5: 检查 Git 状态
+    """
+    print_step(5, "检查 Git 状态")
 
     repo_root = Path(__file__).parent.parent
 
@@ -125,7 +169,7 @@ def check_git_status(dry_run=False):
 
 def merge_and_tag(version, dry_run=False):
     """
-    步骤 5: 执行 Merge 和 Tag 操作
+    步骤 6: 执行 Merge 和 Tag 操作
 
     1. 切换到 main 分支
     2. 拉取最新
@@ -133,7 +177,7 @@ def merge_and_tag(version, dry_run=False):
     4. 创建发布标签
     5. 切换回 develop 分支
     """
-    print_step(5, f"执行 Merge 和 Tag (v{version})")
+    print_step(6, f"执行 Merge 和 Tag (v{version})")
 
     repo_root = Path(__file__).parent.parent
 
@@ -162,7 +206,6 @@ def merge_and_tag(version, dry_run=False):
     if not success:
         print(YELLOW + "⚠️  合并失败，可能有冲突" + RESET)
         print("请手动解决冲突后重新运行脚本")
-        # 尝试切回 develop
         subprocess.run("git checkout develop 2>/dev/null || true", shell=True, cwd=repo_root)
         return False
 
@@ -292,11 +335,14 @@ def main():
     # 演练模式（只检查，不实际操作）
     python3 scripts/release_preparation.py --dry-run --version v0.5.0
 
-    # 执行完整发布准备（自动执行 merge 和 tag）
+    # 执行完整发布准备
     python3 scripts/release_preparation.py --version v0.5.0
 
-    # 跳过 merge 和 tag（用于 CI/CD）
-    python3 scripts/release_preparation.py --version v0.5.0 --skip-merge-tag
+    # 跳过测试（仅执行 VERSION 更新和 Merge/Tag）
+    python3 scripts/release_preparation.py --version v0.5.0 --skip-tests
+
+    # 跳过 VERSION 更新（用于手动更新）
+    python3 scripts/release_preparation.py --version v0.5.0 --skip-version
         """
     )
 
@@ -316,9 +362,9 @@ def main():
         help="跳过测试执行"
     )
     parser.add_argument(
-        "--skip-merge-tag",
+        "--skip-version",
         action="store_true",
-        help="跳过 merge 和 tag 步骤"
+        help="跳过 VERSION 更新（用于手动更新）"
     )
     parser.add_argument(
         "--force",
@@ -349,14 +395,17 @@ def main():
         results["smoke_tests"] = True
         results["buglog_tests"] = True
 
+    # VERSION 更新
+    if not args.skip_version:
+        results["version_update"] = update_version(args.version, args.dry_run)
+    else:
+        print_step(0, "跳过 VERSION 更新")
+        print(YELLOW + "⚠️  已跳过 VERSION 更新" + RESET)
+        results["version_update"] = True
+
     results["git_status"] = check_git_status(args.dry_run)
 
-    if not args.skip_merge_tag:
-        results["merge_tag"] = merge_and_tag(args.version, args.dry_run)
-    else:
-        print_step(0, "跳过 Merge 和 Tag")
-        print(YELLOW + "⚠️  已跳过 Merge 和 Tag" + RESET)
-        results["merge_tag"] = True
+    results["merge_tag"] = merge_and_tag(args.version, args.dry_run)
 
     # 汇总结果
     print(f"\n{BOLD}{'=' * 60}{RESET}")
@@ -369,6 +418,7 @@ def main():
             "api_tests": "API 测试",
             "smoke_tests": "冒烟测试",
             "buglog_tests": "BugLog 回归测试",
+            "version_update": "VERSION 更新",
             "git_status": "Git 状态",
             "merge_tag": "Merge 和 Tag"
         }
@@ -399,6 +449,7 @@ def main():
                     "api_tests": "API 测试",
                     "smoke_tests": "冒烟测试",
                     "buglog_tests": "BugLog 回归测试",
+                    "version_update": "VERSION 更新",
                     "git_status": "Git 状态",
                     "merge_tag": "Merge 和 Tag"
                 }
