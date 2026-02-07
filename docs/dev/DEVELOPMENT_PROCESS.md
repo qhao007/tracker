@@ -402,8 +402,8 @@ python3 scripts/release_preparation.py --version v0.5.0
 
 **发布流程**:
 ```
-发布准备脚本 → Git Merge & Tag → 发布脚本 → 服务重启
-     ✅              ✅           ✅         ✅
+发布准备脚本 (含 Git Merge & Tag) → 发布脚本 → 服务重启
+         ✅                            ✅         ✅
 ```
 
 **手动执行方式（不推荐）**:
