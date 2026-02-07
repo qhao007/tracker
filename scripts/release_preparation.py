@@ -169,7 +169,7 @@ def run_api_tests(dry_run=False):
     dev_dir = repo_root / "dev"
 
     # 确保 dev 服务器未运行
-    cmd = "pkill -f 'server_test.py' 2>/dev/null || echo "无运行中的服务器""
+    cmd = "pkill -f 'server_test.py' 2>/dev/null 2>&1 || true  # 无运行中的服务器"
     run_command(cmd, "停止 dev 服务器")
 
     # 启动 dev 服务器
@@ -189,7 +189,7 @@ def run_api_tests(dry_run=False):
 
     # 停止 dev 服务器
     if not dry_run:
-        cmd = "pkill -f 'server_test.py' 2>/dev/null || echo "已停止""
+        cmd = "pkill -f 'server_test.py' 2>/dev/null 2>&1 || true  # 已停止"
         run_command(cmd, "停止 dev 服务器")
 
     if not success:
