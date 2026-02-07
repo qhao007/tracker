@@ -50,7 +50,8 @@
         .bg-yellow { background: #ff9800; color: white; }
         .bg-gray { background: #9e9e9e; color: white; }
         .bg-red { background: #f44336; color: white; }
-        .status-OPEN { background: #e3f2fd; color: #1976d2; } .status-CODED { background: #fff3e0; color: #f57c00; } .status-FAIL { background: #ffebee; color: #d32f2f; } .status-PASS { background: #e8f5e9; color: #388e3c; }
+        .status-OPEN { background: #e3f2fd; color: #1976d2; }
+.status-REMOVED { background: #f5f5f5; color: #9e9e9e; text-decoration: line-through; } .status-CODED { background: #fff3e0; color: #f57c00; } .status-FAIL { background: #ffebee; color: #d32f2f; } .status-PASS { background: #e8f5e9; color: #388e3c; }
         .details-toggle { color: #2170bb; cursor: pointer; font-size: 11px; text-decoration: underline; }
         .details-content { display: none; margin-top: 5px; padding: 8px; background: #f5f5f5; border-radius: 3px; font-size: 11px; }
         .details-content.show { display: block; }
@@ -121,6 +122,9 @@
         <div id="cpPanel">
             <div class="toolbar">
                 <div class="toolbar-left">
+            <button class="btn" onclick="showBatchStatusModal()">📋 批量更新状态</button>
+            <button class="btn" onclick="showBatchTargetDateModal()">📅 批量修改 Target Date</button>
+            <button class="btn" onclick="showBatchDvMilestoneModal()">🏷️ 批量修改 DV Milestone</button>
                     <button class="btn btn-primary" onclick="openCPModal()">+ 添加 CP</button>
                     <input type="text" class="search-input" placeholder="搜索..." onkeyup="filterCP(this.value)">
                 </div>
@@ -134,6 +138,9 @@
         <div id="tcPanel" style="display: none;">
             <div class="toolbar">
                 <div class="toolbar-left">
+            <button class="btn" onclick="showBatchStatusModal()">📋 批量更新状态</button>
+            <button class="btn" onclick="showBatchTargetDateModal()">📅 批量修改 Target Date</button>
+            <button class="btn" onclick="showBatchDvMilestoneModal()">🏷️ 批量修改 DV Milestone</button>
                     <button class="btn btn-primary" onclick="openTCModal()">+ 添加 TC</button>
                     <input type="text" class="search-input" placeholder="搜索..." onkeyup="filterTC(this.value)">
                     <select onchange="filterTCStatus(this.value)"><option value="">全部状态</option><option value="OPEN">OPEN</option><option value="CODED">CODED</option><option value="FAIL">FAIL</option><option value="PASS">PASS</option></select>
@@ -351,7 +358,7 @@
         function openCPModal(id = null) {
             document.getElementById('cpModalTitle').textContent = id ? '编辑 Cover Point' : '添加 Cover Point';
             document.getElementById('cpId').value = id || '';
-            if (id) { const cp = coverPoints.find(c => c.id === id); if (cp) { document.getElementById('cpFeature').value = cp.feature; document.getElementById('cpSubFeature').value = cp.sub_feature || ''; document.getElementById('cpCoverPoint').value = cp.cover_point; document.getElementById('cpDetails').value = cp.cover_point_details || ''; document.getElementById('cpComments').value = cp.comments || ''; } }
+            if (id) { const cp = coverPoints.find(c => c.id === id); if (cp) { document.getElementById('cpPriority').value = cp.priority || 'P0'; document.getElementById('cpFeature').value = cp.feature; document.getElementById('cpSubFeature').value = cp.sub_feature || ''; document.getElementById('cpCoverPoint').value = cp.cover_point; document.getElementById('cpDetails').value = cp.cover_point_details || ''; document.getElementById('cpComments').value = cp.comments || ''; } }
             else { document.getElementById('cpForm').reset(); }
             document.getElementById('cpModal').classList.add('active');
         }
@@ -360,7 +367,7 @@
             document.getElementById('tcModalTitle').textContent = id ? '编辑 Test Case' : '添加 Test Case';
             document.getElementById('tcId').value = id || '';
             document.getElementById('cpCheckboxes').innerHTML = coverPoints.map(cp => `<div class="checkbox-item"><input type="checkbox" id="cp_${cp.id}" value="${cp.id}"><label for="cp_${cp.id}">${escapeHtml(cp.cover_point)}</label></div>`).join('') || '<p style="color: #999;">请先添加 Cover Points</p>';
-            if (id) { const tc = testCases.find(t => t.id === id); if (tc) { document.getElementById('tcTestbench').value = tc.testbench; document.getElementById('tcCategory').value = tc.category || ''; document.getElementById('tcOwner').value = tc.owner || ''; document.getElementById('tcTestName').value = tc.test_name; document.getElementById('tcScenario').value = tc.scenario_details || ''; document.getElementById('tcChecker').value = tc.checker_details || ''; document.getElementById('tcCoverage').value = tc.coverage_details || ''; document.getElementById('tcComments').value = tc.comments || ''; tc.connected_cps && tc.connected_cps.forEach(cpId => { const cb = document.getElementById(`cp_${cpId}`); if (cb) cb.checked = true; }); } }
+            if (id) { const tc = testCases.find(t => t.id === id); if (tc) { document.getElementById('tcDvMilestone').value = tc.dv_milestone || ''; document.getElementById('tcTargetDate').value = tc.target_date || ''; document.getElementById('tcTestbench').value = tc.testbench; document.getElementById('tcCategory').value = tc.category || ''; document.getElementById('tcOwner').value = tc.owner || ''; document.getElementById('tcTestName').value = tc.test_name; document.getElementById('tcScenario').value = tc.scenario_details || ''; document.getElementById('tcChecker').value = tc.checker_details || ''; document.getElementById('tcCoverage').value = tc.coverage_details || ''; document.getElementById('tcComments').value = tc.comments || ''; tc.connected_cps && tc.connected_cps.forEach(cpId => { const cb = document.getElementById(`cp_${cpId}`); if (cb) cb.checked = true; }); } }
             else { document.getElementById('tcForm').reset(); }
             document.getElementById('tcModal').classList.add('active');
         }
@@ -368,7 +375,7 @@
         async function saveCP(e) {
             e.preventDefault();
             const id = document.getElementById('cpId').value;
-            const data = { project_id: currentProject.id, feature: document.getElementById('cpFeature').value, sub_feature: document.getElementById('cpSubFeature').value, cover_point: document.getElementById('cpCoverPoint').value, cover_point_details: document.getElementById('cpDetails').value, comments: document.getElementById('cpComments').value };
+            const data = { project_id: currentProject.id, priority: document.getElementById('cpPriority').value, feature: document.getElementById('cpFeature').value, sub_feature: document.getElementById('cpSubFeature').value, cover_point: document.getElementById('cpCoverPoint').value, cover_point_details: document.getElementById('cpDetails').value, comments: document.getElementById('cpComments').value };
             try { const res = await fetch(`/api/cp${id ? '/'+id : ''}`, { method: id ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }); const result = await res.json(); if (result.success) { closeModal('cpModal'); await loadCP(); } else { alert(result.error || '保存失败'); } } catch (err) { alert('保存失败: ' + err); }
         }
         
@@ -376,7 +383,7 @@
             e.preventDefault();
             const id = document.getElementById('tcId').value;
             const connections = []; document.querySelectorAll('#cpCheckboxes input:checked').forEach(cb => connections.push(parseInt(cb.value)));
-            const data = { project_id: currentProject.id, testbench: document.getElementById('tcTestbench').value, category: document.getElementById('tcCategory').value, owner: document.getElementById('tcOwner').value, test_name: document.getElementById('tcTestName').value, scenario_details: document.getElementById('tcScenario').value, checker_details: document.getElementById('tcChecker').value, coverage_details: document.getElementById('tcCoverage').value, comments: document.getElementById('tcComments').value, connections };
+            const data = { project_id: currentProject.id, dv_milestone: document.getElementById('tcDvMilestone').value, target_date: document.getElementById('tcTargetDate').value, testbench: document.getElementById('tcTestbench').value, category: document.getElementById('tcCategory').value, owner: document.getElementById('tcOwner').value, test_name: document.getElementById('tcTestName').value, scenario_details: document.getElementById('tcScenario').value, checker_details: document.getElementById('tcChecker').value, coverage_details: document.getElementById('tcCoverage').value, comments: document.getElementById('tcComments').value, connections };
             try { const res = await fetch(`/api/tc${id ? '/'+id : ''}`, { method: id ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }); const result = await res.json(); if (result.success) { closeModal('tcModal'); await Promise.all([loadTC(), loadStats()]); } else { alert(result.error || '保存失败'); } } catch (err) { alert('保存失败: ' + err); }
         }
         
