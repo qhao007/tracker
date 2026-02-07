@@ -365,36 +365,48 @@ python3 scripts/data_manager.py create
 
 ## 6. 发布流程
 
-### 6.1 发布前检查清单
+### 6.1 执行发布准备脚本
 
-> **推荐方式**: 使用发布准备脚本自动执行所有检查
+> **重要**: 只有发布准备脚本成功完成后，才可以执行发布脚本。
 
 ```bash
-# 演练模式（只检查，不实际操作）
 cd /projects/management/tracker
+
+# 1. 演练模式（只检查，不实际操作）
 python3 scripts/release_preparation.py --dry-run --version v0.5.0
 
-# 执行完整发布准备
+# 2. 执行完整发布准备
 python3 scripts/release_preparation.py --version v0.5.0
-
-# 选项说明:
-#   --dry-run     演练模式（只检查，不实际操作）
-#   --version     版本号 (必需)
-#   --skip-tests  跳过测试执行
-#   --skip-tag    跳过创建标签
-#   --force       强制继续（忽略警告）
 ```
 
-**脚本功能**:
-- 自动运行 API 测试 (pytest)
-- 自动运行 Playwright 冒烟测试
-- 自动运行 BugLog 回归测试
-- 检查 Git 状态
-- 创建发布标签
-- 发现问题时中止发布
+**发布准备脚本执行内容**:
+| 步骤 | 内容 | 失败处理 |
+|------|------|----------|
+| 1 | API 测试 (pytest) | ❌ 中止发布 |
+| 2 | Playwright 冒烟测试 | ❌ 中止发布 |
+| 3 | BugLog 回归测试 | ⚠️ 部分通过可继续 |
+| 4 | Git 状态检查 | ❌ 中止发布 |
+| 5 | Merge 和 Tag | ❌ 中止发布 |
+
+**发布准备脚本选项**:
+| 选项 | 说明 |
+|------|------|
+| `--dry-run` | 演练模式（只检查） |
+| `--version` | 版本号 (必需) |
+| `--skip-tests` | 跳过测试执行 |
+| `--skip-merge-tag` | 跳过 merge 和 tag |
+| `--force` | 强制继续（忽略警告） |
+
+> **规则 1**: 发布准备脚本必须成功（exit code 0）才能执行发布脚本。  
+> **规则 2**: 发布脚本执行过程中报错，则发行中止。
+
+**发布流程**:
+```
+发布准备脚本 → Git Merge & Tag → 发布脚本 → 服务重启
+     ✅              ✅           ✅         ✅
+```
 
 **手动执行方式（不推荐）**:
-
 ```bash
 # 1. dev 版本 API 测试全部通过 (17/17) ✅
 cd dev && PYTHONPATH=. pytest tests/test_api.py -v
@@ -403,7 +415,7 @@ cd dev && PYTHONPATH=. pytest tests/test_api.py -v
 cd dev && npx playwright test tests/test_smoke.spec.ts --project=firefox --timeout=60000
 
 # 3. dev 版本 BugLog 回归测试通过 (11/11) ✅
-cd dev && npx playwright test tests/tracker.spec.ts --project=firefox --timeout=60000
+cd dev && npx playwright test tests/tracker.spec.ts --project=firefox --timeout=90000
 
 # 4. Git 代码已合并到 develop ✅
 git checkout develop && git status
@@ -414,7 +426,7 @@ git merge develop
 git tag -a v0.5.0 -m "Release v0.5.0"
 ```
 
-### 6.2 执行发布
+### 6.2 执行发布### 6.2 执行发布
 
 ```bash
 cd /projects/management/tracker
