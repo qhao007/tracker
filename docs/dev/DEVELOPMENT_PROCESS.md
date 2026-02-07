@@ -385,8 +385,9 @@ python3 scripts/release_preparation.py --version v0.5.0
 | 1 | API 测试 (pytest) | ❌ 中止发布 |
 | 2 | Playwright 冒烟测试 | ❌ 中止发布 |
 | 3 | BugLog 回归测试 | ⚠️ 部分通过可继续 |
-| 4 | Git 状态检查 | ❌ 中止发布 |
-| 5 | Merge 和 Tag | ❌ 中止发布 |
+| 4 | VERSION 更新和提交 | ❌ 中止发布 |
+| 5 | Git 状态检查 | ❌ 中止发布 |
+| 6 | Merge 和 Tag | ❌ 中止发布 |
 
 **发布准备脚本选项**:
 | 选项 | 说明 |
@@ -394,7 +395,7 @@ python3 scripts/release_preparation.py --version v0.5.0
 | `--dry-run` | 演练模式（只检查） |
 | `--version` | 版本号 (必需) |
 | `--skip-tests` | 跳过测试执行 |
-| `--skip-merge-tag` | 跳过 merge 和 tag |
+| `--skip-version` | 跳过 VERSION 更新 |
 | `--force` | 强制继续（忽略警告） |
 
 > **规则 1**: 发布准备脚本必须成功（exit code 0）才能执行发布脚本。  
@@ -402,30 +403,33 @@ python3 scripts/release_preparation.py --version v0.5.0
 
 **发布流程**:
 ```
-1. develop 分支更新 VERSION 文件 ← 必需
-2. 提交 VERSION 更新
-3. 发布准备脚本 (Git Merge & Tag)
-4. 执行发布脚本
+1. 执行发布准备脚本
+   ├── API 测试
+   ├── 冒烟测试
+   ├── BugLog 回归测试
+   ├── VERSION 更新和提交 ← 自动
+   ├── Git 状态检查
+   └── Merge 和 Tag ← 自动
+
+2. 执行发布脚本
 ```
 
 ### 6.2 VERSION 文件更新
 
-> **重要**: VERSION 文件必须在 develop 分支**更新并提交**后，才能执行发布准备脚本。
+> **说明**: VERSION 更新已集成到发布准备脚本中，自动执行。
 
 ```bash
-# 1. 更新 VERSION 文件
+# 发布准备脚本会自动:
+# 1. 更新 dev/VERSION 文件
+# 2. 提交 VERSION 更新
+# 3. 执行 merge 和 tag
+
+# 手动更新（可选）
 cd /projects/management/tracker/dev
 cat > VERSION << 'EOF'
 VERSION=v0.5.1
 RELEASE_DATE=YYYY-MM-DD
 EOF
-
-# 2. 提交 VERSION 更新
-cd /projects/management/tracker
-git add dev/VERSION
-git commit -m "chore: 更新 VERSION 文件为 v0.5.1"
-```
-
 ### 6.3 执行发布
 
 ```bash
@@ -448,7 +452,7 @@ sudo systemctl status tracker
 curl http://localhost:8080/api/version
 ```
 
-### 6.4 回滚
+### 6.5 回滚
 
 ```bash
 # 方式1：使用发布脚本回滚
@@ -545,6 +549,6 @@ journalctl -u tracker -f
 
 ---
 
-**文档版本**: v1.2  
+**文档版本**: v1.3  
 **最后更新**: 2026-02-07  
 **维护者**: 小栗子 🌰
