@@ -365,17 +365,30 @@ python3 scripts/data_manager.py create
 
 ## 6. 发布流程
 
-### 6.1 执行发布准备脚本
-
 > **重要**: 只有发布准备脚本成功完成后，才可以执行发布脚本。
+
+**发布流程**:
+```
+1. 执行发布准备脚本
+   ├── API 测试
+   ├── 冒烟测试
+   ├── BugLog 回归测试
+   ├── VERSION 更新和提交 ← 自动
+   ├── Git 状态检查
+   └── Merge 和 Tag ← 自动
+
+2. 执行发布脚本
+```
+
+### 6.1 执行发布准备脚本
 
 ```bash
 cd /projects/management/tracker
 
-# 1. 演练模式（只检查，不实际操作）
+# 演练模式（只检查，不实际操作）
 python3 scripts/release_preparation.py --dry-run --version v0.5.0
 
-# 2. 执行完整发布准备
+# 执行完整发布准备
 python3 scripts/release_preparation.py --version v0.5.0
 ```
 
@@ -385,8 +398,9 @@ python3 scripts/release_preparation.py --version v0.5.0
 | 1 | API 测试 (pytest) | ❌ 中止发布 |
 | 2 | Playwright 冒烟测试 | ❌ 中止发布 |
 | 3 | BugLog 回归测试 | ⚠️ 部分通过可继续 |
-| 4 | Git 状态检查 | ❌ 中止发布 |
-| 5 | Merge 和 Tag | ❌ 中止发布 |
+| 4 | VERSION 更新和提交 | ❌ 中止发布 |
+| 5 | Git 状态检查 | ❌ 中止发布 |
+| 6 | Merge 和 Tag | ❌ 中止发布 |
 
 **发布准备脚本选项**:
 | 选项 | 说明 |
@@ -394,39 +408,13 @@ python3 scripts/release_preparation.py --version v0.5.0
 | `--dry-run` | 演练模式（只检查） |
 | `--version` | 版本号 (必需) |
 | `--skip-tests` | 跳过测试执行 |
-| `--skip-merge-tag` | 跳过 merge 和 tag |
+| `--skip-version` | 跳过 VERSION 更新 |
 | `--force` | 强制继续（忽略警告） |
 
 > **规则 1**: 发布准备脚本必须成功（exit code 0）才能执行发布脚本。  
 > **规则 2**: 发布脚本执行过程中报错，则发行中止。
 
-**发布流程**:
-```
-发布准备脚本 (含 Git Merge & Tag) → 发布脚本 → 服务重启
-         ✅                            ✅         ✅
-```
-
-**手动执行方式（不推荐）**:
-```bash
-# 1. dev 版本 API 测试全部通过 (17/17) ✅
-cd dev && PYTHONPATH=. pytest tests/test_api.py -v
-
-# 2. dev 版本 Playwright 冒烟测试通过 (6/6) ✅
-cd dev && npx playwright test tests/test_smoke.spec.ts --project=firefox --timeout=60000
-
-# 3. dev 版本 BugLog 回归测试通过 (11/11) ✅
-cd dev && npx playwright test tests/tracker.spec.ts --project=firefox --timeout=90000
-
-# 4. Git 代码已合并到 develop ✅
-git checkout develop && git status
-
-# 5. 创建发布标签
-git checkout main
-git merge develop
-git tag -a v0.5.0 -m "Release v0.5.0"
-```
-
-### 6.2 执行发布### 6.2 执行发布
+### 6.2 执行发布
 
 ```bash
 cd /projects/management/tracker
@@ -435,7 +423,7 @@ cd /projects/management/tracker
 python3 scripts/release.py --dry-run
 
 # 实际发布
-python3 scripts/release.py --version v0.4.0 --force
+python3 scripts/release.py --version v0.5.0 --force
 ```
 
 ### 6.3 发布后验证
@@ -545,6 +533,6 @@ journalctl -u tracker -f
 
 ---
 
-**文档版本**: v1.1  
+**文档版本**: v1.4  
 **最后更新**: 2026-02-07  
 **维护者**: 小栗子 🌰
