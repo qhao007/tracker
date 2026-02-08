@@ -246,9 +246,7 @@ git push origin develop
 |----------|----------|----------|----------|
 | **单元测试** | pytest | API 接口 | `tests/test_api.py` |
 | **Playwright 冒烟测试** | UI 自动化 | 核心功能点 | `tests/test_smoke.spec.ts` |
-| **BugLog 回归测试** | UI 自动化 | Bug 修复验证 | `tests/tracker.spec.ts` |
-| **playwright_firefox.js** | UI 自动化 | 基础功能验证 | `playwright_firefox.js` |
-| **手动测试** | 人工验收 | 界面体验 | - |
+| **兼容性测试** | Playwright | 数据库兼容性 | 用户数据 → 测试数据 |
 
 ### 5.2 测试执行
 
@@ -256,27 +254,22 @@ git push origin develop
 # ========== API 测试 (dev 版本) ==========
 cd dev
 PYTHONPATH=. pytest tests/test_api.py -v
-# 覆盖: 17 个 API 接口测试 (100% 通过)
+# 覆盖: API 接口测试 (期望: 21/21 通过, v0.6.0)
 
 # ========== Playwright 冒烟测试 ==========
 cd dev
 npx playwright test tests/test_smoke.spec.ts --project=firefox --timeout=60000
-# 覆盖: F001, F004, F005, F007, F012 核心功能
-# 测试文件: tests/test_smoke.spec.ts
-# 期望: 6/6 通过
+# 覆盖: F001, F004, F005, F007, F012 核心功能 + v0.6.0 功能
+# 期望: 12/12 通过 (v0.6.0)
 
-# ========== BugLog 回归测试 ==========
-cd dev
-npx playwright test tests/tracker.spec.ts --project=firefox --timeout=60000
-# 覆盖: BUG-002, BUG-007, BUG-008, BUG-009, BUG-010, FEAT-001
-# 测试文件: tests/tracker.spec.ts
-# 期望: 11/11 通过
-
-# ========== playwright_firefox.js ==========
-cd dev
-node playwright_firefox.js
-# 覆盖: P001-P014 基础功能验证
-# 测试文件: playwright_firefox.js
+# ========== 兼容性测试 ==========
+cd /projects/management/tracker
+# 复制用户数据到测试目录
+python3 scripts/data_manager.py sync
+# 在 dev 版本验证兼容性
+# 访问 http://localhost:8081 测试
+# 清理测试数据
+python3 scripts/data_manager.py clean
 ```
 
 ### 5.3 Bug 处理流程
@@ -288,7 +281,6 @@ node playwright_firefox.js
 2. 提交到 feedbacks/new/ 目录
 3. 评审后标记为待修复
 4. 修复后更新 tracker_BUGLOG.md
-5. 编写回归测试用例
 
 **BugLog 模板位置**: `/projects/management/feedbacks/new/BugLog_YYYYMMDD.md`
 
@@ -300,8 +292,7 @@ node playwright_firefox.js
 1. 使用模板: `docs/dev/TEMPLATE_TEST_REPORT.md`
 2. 包含整体测试开始和完成时间
 3. 包含所有测试类型的通过/失败统计
-4. 包含 BugLog 回归测试详细结果
-5. 发布到: `docs/dev/TRACKER_TEST_REPORT_v{version}_{YYYYMMDD}.md`
+4. 发布到: `docs/dev/TRACKER_TEST_REPORT_v{version}_{YYYYMMDD}.md`
 
 **报告模板结构**:
 ```
@@ -317,7 +308,7 @@ node playwright_firefox.js
 ## Playwright 冒烟测试结果
 ...
 
-## BugLog 回归测试结果
+## 兼容性测试结果
 ...
 ```
 
@@ -325,33 +316,31 @@ node playwright_firefox.js
 ```bash
 # 1. 复制测试报告模板
 cp docs/dev/TEMPLATE_TEST_REPORT.md \
-   docs/dev/TRACKER_TEST_REPORT_v0.5.0_20260207.md
+   docs/dev/TRACKER_TEST_REPORT_v0.6.0_20260208.md
 
 # 2. 编辑测试报告，填写测试结果
 
 # 3. 提交测试报告
 git add docs/dev/TRACKER_TEST_REPORT_*.md
-git commit -m "docs: 添加 v0.5.0 测试报告"
+git commit -m "docs: 添加 v0.6.0 测试报告"
 ```
 
-### 5.3 测试数据
+### 5.5 测试数据
 
 | 测试类型 | 数据目录 | 说明 |
 |----------|----------|------|
 | **pytest API 测试** | `test_data/` | dev 版本使用，独立测试 |
 | **Playwright 冒烟测试** | `test_data/` | 使用测试项目数据 |
-| **BugLog 回归测试** | `test_data/` | 使用测试项目数据 |
-| **playwright_firefox.js** | `user_data/` | stable 版本，只读验证 |
-| **stable 冒烟测试** | `user_data/` | 用户数据，只读操作 |
+| **兼容性测试** | `user_data/` → `test_data/` | 复制用户数据验证兼容性 |
 
-### 5.4 测试标准
+### 5.6 测试标准
 
 | 版本 | 通过标准 | 测试范围 |
 |------|----------|----------|
-| **dev** | 100% 通过 | API + Playwright + BugLog 回归 |
-| **stable** | 100% 通过 | playwright_firefox.js (只读) |
+| **dev** | 100% 通过 | API + 冒烟测试 |
+| **stable** | 100% 通过 | 兼容性测试 (只读) |
 
-### 5.5 常见测试问题
+### 5.7 常见测试问题
 
 **Q: 测试数据不足导致测试失败？**
 
@@ -359,6 +348,16 @@ A: 补充测试数据：
 ```bash
 # 创建测试项目
 python3 scripts/data_manager.py create
+```
+
+**Q: 如何测试用户数据兼容性？**
+
+A: 执行兼容性测试：
+```bash
+cd /projects/management/tracker
+python3 scripts/data_manager.py sync  # 复制用户数据
+# 在 http://localhost:8081 测试
+python3 scripts/data_manager.py clean # 清理
 ```
 
 ---
@@ -372,7 +371,7 @@ python3 scripts/data_manager.py create
 1. 执行发布准备脚本
    ├── API 测试
    ├── 冒烟测试
-   ├── BugLog 回归测试
+   ├── 兼容性测试
    ├── VERSION 更新和提交 ← 自动
    ├── Git 状态检查
    └── Merge 和 Tag ← 自动
@@ -386,10 +385,10 @@ python3 scripts/data_manager.py create
 cd /projects/management/tracker
 
 # 演练模式（只检查，不实际操作）
-python3 scripts/release_preparation.py --dry-run --version v0.5.0
+python3 scripts/release_preparation.py --dry-run --version v0.6.0
 
 # 执行完整发布准备
-python3 scripts/release_preparation.py --version v0.5.0
+python3 scripts/release_preparation.py --version v0.6.0
 ```
 
 **发布准备脚本执行内容**:
@@ -397,7 +396,7 @@ python3 scripts/release_preparation.py --version v0.5.0
 |------|------|----------|
 | 1 | API 测试 (pytest) | ❌ 中止发布 |
 | 2 | Playwright 冒烟测试 | ❌ 中止发布 |
-| 3 | BugLog 回归测试 | ⚠️ 部分通过可继续 |
+| 3 | 兼容性测试 | ⚠️ 部分通过可继续 |
 | 4 | VERSION 更新和提交 | ❌ 中止发布 |
 | 5 | Git 状态检查 | ❌ 中止发布 |
 | 6 | Merge 和 Tag | ❌ 中止发布 |
@@ -533,6 +532,6 @@ journalctl -u tracker -f
 
 ---
 
-**文档版本**: v1.4  
-**最后更新**: 2026-02-07  
+**文档版本**: v1.5  
+**最后更新**: 2026-02-08  
 **维护者**: 小栗子 🌰
