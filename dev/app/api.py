@@ -647,6 +647,59 @@ def get_testcases():
     
     return jsonify(tcs)
 
+@api.route('/api/tc/<int:tc_id>', methods=['GET'])
+def get_testcase(tc_id):
+    """获取 TC 详情"""
+    project_id = request.args.get('project_id', type=int)
+    
+    if not project_id:
+        return jsonify({'error': '需要指定项目'}), 400
+    
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    conn = get_db(project['name'])
+    cursor = conn.cursor()
+    
+    cursor.execute('SELECT * FROM test_case WHERE id = ?', (tc_id,))
+    tc = cursor.fetchone()
+    
+    if not tc:
+        return jsonify({'error': 'Test Case 不存在'}), 404
+    
+    # 获取关联的 CP
+    cursor.execute('''
+        SELECT cp.id, cp.cover_point FROM cover_point cp
+        INNER JOIN tc_cp_connections tcc ON cp.id = tcc.cp_id
+        WHERE tcc.tc_id = ?
+    ''', (tc_id,))
+    connected_cps = [row['id'] for row in cursor.fetchall()]
+    
+    return jsonify({
+        'id': tc['id'],
+        'project_id': tc['project_id'],
+        'dv_milestone': tc['dv_milestone'],
+        'testbench': tc['testbench'],
+        'category': tc['category'],
+        'owner': tc['owner'],
+        'test_name': tc['test_name'],
+        'scenario_details': tc['scenario_details'],
+        'checker_details': tc['checker_details'],
+        'coverage_details': tc['coverage_details'],
+        'comments': tc['comments'],
+        'status': tc['status'],
+        'created_at': tc['created_at'],
+        'coded_date': tc['coded_date'],
+        'fail_date': tc['fail_date'],
+        'pass_date': tc['pass_date'],
+        'removed_date': tc['removed_date'],
+        'target_date': tc['target_date'],
+        'connected_cps': connected_cps
+    })
+
 @api.route('/api/tc', methods=['POST'])
 def create_testcase():
     """创建 TC"""
