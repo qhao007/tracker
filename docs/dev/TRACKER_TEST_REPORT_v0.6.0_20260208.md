@@ -194,6 +194,7 @@ npx playwright test tests/tracker.spec.ts --project=firefox --timeout=60000
 |--------|------|----------|
 | BUG-011 | update_status API 查询不存在的 `connected_cps` 列 | 移除该列查询 |
 | BUG-012 | get_testcases 返回不存在的字段 | 移除 `priority` 和 `completed_date`，添加新日期字段 |
+| BUG-013 | 测试数据库缺少 v0.6.0 新字段 | 创建 fix_test_databases.py 修复所有测试数据库 |
 
 ### 5.3 发布建议
 
@@ -272,8 +273,9 @@ python3 scripts/migrate_v0.6.0.py
 | DV Milestone 字段 | ✅ | API 测试通过 |
 | CP Priority 字段 | ✅ | API 测试通过 |
 | 批量修改状态 | ✅ | API 测试通过 |
+| 添加 CP/TC 功能 | ✅ | BUG-013 修复后验证通过 |
 
 ---
 
-**报告生成时间**: 2026-02-08 09:50:00 GMT+8
+**报告生成时间**: 2026-02-08 10:00:00 GMT+8
 **报告执行人**: 小栗子 🌰
