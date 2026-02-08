@@ -87,6 +87,8 @@ UPDATE cover_points SET priority = 'P0' WHERE priority IS NULL;
 }
 ```
 
+> **说明**: TC 详情 API (`GET /api/tc/{id}`) 额外返回 `connected_cps` 字段，表示关联的 CP ID 列表。
+
 ### 3.2 PATCH /api/tc/{id}/status - 更新状态
 
 **自动设置日期逻辑**:

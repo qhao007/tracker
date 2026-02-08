@@ -438,6 +438,9 @@ DELETE /api/tc/1?project_id=1
 | **fail_date** | string | **FAIL 日期** |
 | **pass_date** | string | **PASS 日期** |
 | **removed_date** | string | **REMOVED 日期** |
+| **connected_cps** | array | **关联的 CP ID 列表** |
+
+> **说明**: `connected_cps` 是 TC 详情 API (`GET /api/tc/{id}`) 的返回字段，表示该 Test Case 关联的 Cover Points。
 
 ### 4.5 统计
 
