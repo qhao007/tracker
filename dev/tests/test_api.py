@@ -333,7 +333,7 @@ class TestTCBatchStatusAPI:
         assert data['success'] == len(tc_ids)
     
     def test_batch_update_status_empty_list(self, client, test_project):
-        """POST /api/tc/batch/status - 空列表"""
+        """POST /api/tc/batch/status - 空列表返回错误"""
         response = client.post('/api/tc/batch/status',
             data=json.dumps({
                 'project_id': test_project["id"],
@@ -341,9 +341,8 @@ class TestTCBatchStatusAPI:
                 'status': 'CODED'
             }),
             content_type='application/json')
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        assert data['success'] == 0
+        # 空列表返回 400 Bad Request
+        assert response.status_code == 400
 
 
 class TestTCBatchTargetDateAPI:
