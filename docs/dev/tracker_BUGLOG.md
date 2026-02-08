@@ -312,6 +312,37 @@
 
 ---
 
+### BUG-014: 前端界面未同步 v0.6.0 新字段
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Critical |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-08 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-02-08 |
+| **修复人** | 小栗子 |
+
+**描述**: 前端界面缺少 v0.6.0 新功能：
+- CP 表格缺少 Priority 列
+- TC 表格缺少 DV Milestone、Target Date、Status Date 列
+- 状态选择缺少 REMOVED 选项
+- Modal 表单缺少 DV Milestone、Target Date、Priority 字段
+- 编辑功能失效
+
+**修复方案**:
+1. 更新 CP 表格表头，添加 Priority 列
+2. 更新 TC 表格表头，添加 DV Milestone、Target Date、Status Date 列
+3. 状态过滤下拉添加 REMOVED 选项
+4. CP Modal 添加 Priority 下拉字段
+5. TC Modal 添加 DV Milestone 和 Target Date 字段
+6. 更新 renderCP 和 renderTC 函数显示新字段
+7. 添加 Priority 徽章 CSS 样式 (P0=红, P1=橙, P2=绿)
+
+**验证**: 前端界面恢复正常，可正常添加/编辑 CP/TC。
+
+---
+
 ## 2. 功能增强
 
 ### FEAT-001: CP 覆盖率计算
@@ -399,6 +430,7 @@ cd dev && npx playwright test tests/tracker.spec.ts --project=firefox
 | BUG-011 | update_status API 查询不存在的列 | v0.6.0 | 2026-02-08 |
 | BUG-012 | get_testcases 返回不存在的字段 | v0.6.0 | 2026-02-08 |
 | BUG-013 | 测试数据库缺少 v0.6.0 新字段 | v0.6.0 | 2026-02-08 |
+| BUG-014 | 前端界面未同步 v0.6.0 新字段 | v0.6.0 | 2026-02-08 |
 
 ---
 
@@ -420,3 +452,4 @@ cd dev && npx playwright test tests/tracker.spec.ts --project=firefox
 | v1.1 | 2026-02-07 | 转换为 Markdown 格式 |
 | v1.2 | 2026-02-08 | 添加 v0.6.0 修复记录 (BUG-011, BUG-012) |
 | v1.3 | 2026-02-08 | 添加 BUG-013 测试数据库字段修复 |
+| v1.4 | 2026-02-08 | 添加 BUG-014 前端界面同步修复 |
