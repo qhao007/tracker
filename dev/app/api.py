@@ -584,7 +584,6 @@ def get_testcases():
             'id': row['id'],
             'project_id': row['project_id'],
             'dv_milestone': row['dv_milestone'],
-            'priority': row['priority'],
             'testbench': row['testbench'],
             'category': row['category'],
             'owner': row['owner'],
@@ -594,8 +593,12 @@ def get_testcases():
             'coverage_details': row['coverage_details'],
             'comments': row['comments'],
             'status': row['status'],
-            'completed_date': row['completed_date'],
             'created_at': row['created_at'],
+            'coded_date': row['coded_date'],
+            'fail_date': row['fail_date'],
+            'pass_date': row['pass_date'],
+            'removed_date': row['removed_date'],
+            'target_date': row['target_date'],
             'connected_cps': connected_cps
         })
     
@@ -782,12 +785,12 @@ def update_status(tc_id):
     cursor = conn.cursor()
     
     # 获取当前 TC 信息
-    cursor.execute('SELECT status, connected_cps FROM test_case WHERE id=?', (tc_id,))
+    cursor.execute('SELECT status FROM test_case WHERE id=?', (tc_id,))
     row = cursor.fetchone()
     if not row:
         return jsonify({'error': 'TC 不存在'}), 404
     
-    old_status = row[0]
+    old_status = row['status']
     
     # 状态日期映射
     status_dates = {
