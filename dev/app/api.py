@@ -513,6 +513,41 @@ def create_coverpoint():
         }
     })
 
+@api.route('/api/cp/<int:cp_id>', methods=['GET'])
+def get_coverpoint(cp_id):
+    """获取 CP 详情"""
+    project_id = request.args.get('project_id', type=int)
+    
+    if not project_id:
+        return jsonify({'error': '需要指定项目'}), 400
+    
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    conn = get_db(project['name'])
+    cursor = conn.cursor()
+    
+    cursor.execute('SELECT * FROM cover_point WHERE id = ?', (cp_id,))
+    cp = cursor.fetchone()
+    
+    if not cp:
+        return jsonify({'error': 'Cover Point 不存在'}), 404
+    
+    return jsonify({
+        'id': cp['id'],
+        'project_id': cp['project_id'],
+        'feature': cp['feature'],
+        'sub_feature': cp['sub_feature'],
+        'cover_point': cp['cover_point'],
+        'cover_point_details': cp['cover_point_details'],
+        'comments': cp['comments'],
+        'priority': cp['priority'],
+        'created_at': cp['created_at']
+    })
+
 @api.route('/api/cp/<int:cp_id>', methods=['PUT'])
 def update_coverpoint(cp_id):
     """更新 CP"""
@@ -531,6 +566,14 @@ def update_coverpoint(cp_id):
     conn = get_db(project['name'])
     cursor = conn.cursor()
     
+    # 获取当前 CP 的 priority 值（如果请求体中没有提供）
+    cursor.execute('SELECT priority FROM cover_point WHERE id=?', (cp_id,))
+    current = cursor.fetchone()
+    current_priority = current['priority'] if current else 'P0'
+    
+    # 如果请求体中没有 priority，保留当前值
+    new_priority = data.get('priority', current_priority)
+    
     cursor.execute('''
         UPDATE cover_point SET feature=?, sub_feature=?, cover_point=?, cover_point_details=?, comments=?, priority=?
         WHERE id=?
@@ -539,7 +582,7 @@ def update_coverpoint(cp_id):
           data.get('cover_point', ''),
           data.get('cover_point_details', ''),
           data.get('comments', ''),
-          data.get('priority', 'P0'),
+          new_priority,
           cp_id))
     
     conn.commit()
