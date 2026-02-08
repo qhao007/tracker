@@ -458,6 +458,7 @@ def get_coverpoints():
             'cover_point': row['cover_point'],
             'cover_point_details': row['cover_point_details'],
             'comments': row['comments'],
+            'priority': row['priority'],
             'created_at': row['created_at'],
             'coverage': coverage,
             'coverage_detail': f'{passed}/{total}'
