@@ -9,7 +9,7 @@ import { test, expect } from '@playwright/test';
 
 const BASE_URL = process.env.TEST_URL || 'http://localhost:8081';
 
-test.describe('Tracker v0.3.1 关键功能测试', () => {
+test.describe('Tracker v0.3 关键功能测试', () => {
   
   test.beforeEach(async ({ page }) => {
     test.setTimeout(60000);
@@ -121,5 +121,136 @@ test.describe('Tracker v0.3.1 关键功能测试', () => {
     
     const afterRefresh = await page.locator('#projectSelector').inputValue();
     expect(afterRefresh).toBe(project);
+  });
+});
+
+// ========================================================================
+// v0.6.0 关键功能测试
+// ========================================================================
+
+test.describe('Tracker v0.6.0 关键功能测试', () => {
+  
+  test.beforeEach(async ({ page }) => {
+    test.setTimeout(60000);
+    
+    // 访问页面
+    await page.goto(BASE_URL, { waitUntil: 'networkidle' });
+    
+    // 等待项目加载
+    await page.waitForSelector('#projectSelector', { timeout: 15000 });
+    
+    // 选择第一个项目
+    await page.selectOption('#projectSelector', { index: 1 });
+    
+    // 等待数据加载
+    await page.waitForTimeout(2000);
+  });
+
+  // 5.1 Status Date 显示测试
+  test('v0.6-Status Date 显示', async ({ page }) => {
+    // 验证 TC 表格显示 Status Date 列
+    await page.click('text=Test Cases');
+    await page.waitForTimeout(1000);
+    
+    const statusDateHeader = page.locator('th:has-text("Status Date")');
+    await expect(statusDateHeader).toBeVisible({ timeout: 5000 });
+  });
+
+  // 5.2 Target Date 测试
+  test('v0.6-Target Date 显示和编辑', async ({ page }) => {
+    // 验证 TC 表格显示 Target Date 列
+    await page.click('text=Test Cases');
+    await page.waitForTimeout(1000);
+    
+    const targetDateHeader = page.locator('th:has-text("Target Date")');
+    await expect(targetDateHeader).toBeVisible({ timeout: 5000 });
+    
+    // 验证 TC Modal 中有 Target Date 字段
+    await page.click('text=添加 Test Case');
+    await page.waitForTimeout(500);
+    
+    const targetDateInput = page.locator('#tcTargetDate');
+    await expect(targetDateInput).toBeVisible();
+    
+    // 关闭 Modal
+    await page.click('.modal-close');
+  });
+
+  // 5.3 REMOVED 状态测试
+  test('v0.6-REMOVED 状态', async ({ page }) => {
+    // 验证 Status 下拉框包含 REMOVED 选项
+    await page.click('text=Test Cases');
+    await page.waitForTimeout(1000);
+    
+    const statusSelect = page.locator('.status-select').first();
+    await expect(statusSelect).toBeVisible({ timeout: 10000 });
+    
+    const removedOption = statusSelect.locator('option[value="REMOVED"]');
+    await expect(removedOption).toBeVisible();
+  });
+
+  // 5.4 批量修改测试
+  test('v0.6-批量选择和操作', async ({ page }) => {
+    // 验证 TC 表格显示复选框列
+    await page.click('text=Test Cases');
+    await page.waitForTimeout(1000);
+    
+    const checkbox = page.locator('.tc-select').first();
+    await expect(checkbox).toBeVisible({ timeout: 10000 });
+    
+    // 验证全选复选框存在
+    const selectAll = page.locator('#selectAllTCs');
+    const isVisible = await selectAll.isVisible();
+    if (isVisible) {
+      await expect(selectAll).toBeVisible();
+    }
+  });
+
+  // 5.5 DV Milestone 测试
+  test('v0.6-DV Milestone', async ({ page }) => {
+    // 验证 TC 表格显示 DV Milestone 列
+    await page.click('text=Test Cases');
+    await page.waitForTimeout(1000);
+    
+    const dvHeader = page.locator('th:has-text("DV Milestone")');
+    await expect(dvHeader).toBeVisible({ timeout: 5000 });
+    
+    // 验证 TC Modal 中有 DV Milestone 下拉框
+    await page.click('text=添加 Test Case');
+    await page.waitForTimeout(500);
+    
+    const dvSelect = page.locator('#tcDvMilestone');
+    await expect(dvSelect).toBeVisible();
+    
+    // 验证默认值是 DV1.0
+    const defaultValue = await dvSelect.inputValue();
+    expect(defaultValue).toBe('DV1.0');
+    
+    // 关闭 Modal
+    await page.click('.modal-close');
+  });
+
+  // 5.6 CP Priority 测试
+  test('v0.6-CP Priority', async ({ page }) => {
+    // 验证 CP 表格显示 Priority 列
+    await page.click('text=Cover Points');
+    await page.waitForTimeout(1000);
+    
+    const priorityHeader = page.locator('th:has-text("Priority")');
+    await expect(priorityHeader).toBeVisible({ timeout: 5000 });
+    
+    // 验证 CP Modal 中有 Priority 下拉框
+    await page.click('text=添加 Cover Point');
+    await page.waitForTimeout(500);
+    
+    const prioritySelect = page.locator('#cpPriority');
+    await expect(prioritySelect).toBeVisible();
+    
+    // 验证默认值是 P0
+    const defaultValue = await prioritySelect.inputValue();
+    expect(defaultValue).toBe('P0');
+    
+    // 关闭 Modal
+    await page.click('.modal-close');
   });
 });

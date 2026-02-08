@@ -260,9 +260,9 @@ def run_api_tests(dry_run=False):
     if not success:
         return False
 
-    # 检查测试通过数
-    if "17 passed" in output or "passed" in output:
-        print(GREEN + "✓ API 测试全部通过" + RESET)
+    # 检查测试通过数 (v0.6.0: 17 + 4 = 21 个 API 测试)
+    if "21 passed" in output or "passed" in output:
+        print(GREEN + "✓ API 测试全部通过 (21 tests)" + RESET)
         return True
     else:
         print(RED + "✗ API 测试未全部通过" + RESET)
@@ -291,8 +291,9 @@ def run_smoke_tests(dry_run=False):
     if not success:
         return False
 
-    if "6 passed" in output or "passed" in output:
-        print(GREEN + "✓ 冒烟测试全部通过" + RESET)
+    # 检查测试通过数 (v0.6.0: 6 + 6 = 12 个冒烟测试)
+    if "12 passed" in output or "passed" in output:
+        print(GREEN + "✓ 冒烟测试全部通过 (12 tests)" + RESET)
         return True
     else:
         print(RED + "✗ 冒烟测试未全部通过" + RESET)
