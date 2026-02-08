@@ -199,11 +199,10 @@
                     <div class="form-row">
                         <div class="form-group"><label>DV Milestone</label>
                             <select class="form-control" id="tcDvMilestone">
-                                <option value="">-- 选择 --</option>
+                                <option value="DV1.0" selected>DV1.0</option>
                                 <option value="DV0.3">DV0.3</option>
                                 <option value="DV0.5">DV0.5</option>
                                 <option value="DV0.7">DV0.7</option>
-                                <option value="DV1.0">DV1.0</option>
                             </select>
                         </div>
                         <div class="form-group"><label>Target Date</label><input type="date" class="form-control" id="tcTargetDate"></div>
@@ -488,7 +487,7 @@
             document.getElementById('tcModalTitle').textContent = id ? '编辑 Test Case' : '添加 Test Case';
             document.getElementById('tcId').value = id || '';
             document.getElementById('cpCheckboxes').innerHTML = coverPoints.map(cp => `<div class="checkbox-item"><input type="checkbox" id="cp_${cp.id}" value="${cp.id}"><label for="cp_${cp.id}">${escapeHtml(cp.cover_point)}</label></div>`).join('') || '<p style="color: #999;">请先添加 Cover Points</p>';
-            if (id) { const tc = testCases.find(t => t.id === id); if (tc) { document.getElementById('tcDvMilestone').value = tc.dv_milestone || ''; document.getElementById('tcTargetDate').value = tc.target_date || ''; document.getElementById('tcTestbench').value = tc.testbench; document.getElementById('tcCategory').value = tc.category || ''; document.getElementById('tcOwner').value = tc.owner || ''; document.getElementById('tcTestName').value = tc.test_name; document.getElementById('tcScenario').value = tc.scenario_details || ''; document.getElementById('tcChecker').value = tc.checker_details || ''; document.getElementById('tcCoverage').value = tc.coverage_details || ''; document.getElementById('tcComments').value = tc.comments || ''; tc.connected_cps && tc.connected_cps.forEach(cpId => { const cb = document.getElementById(`cp_${cpId}`); if (cb) cb.checked = true; }); } }
+            if (id) { const tc = testCases.find(t => t.id === id); if (tc) { document.getElementById('tcDvMilestone').value = tc.dv_milestone || 'DV1.0'; document.getElementById('tcTargetDate').value = tc.target_date || ''; document.getElementById('tcTestbench').value = tc.testbench; document.getElementById('tcCategory').value = tc.category || ''; document.getElementById('tcOwner').value = tc.owner || ''; document.getElementById('tcTestName').value = tc.test_name; document.getElementById('tcScenario').value = tc.scenario_details || ''; document.getElementById('tcChecker').value = tc.checker_details || ''; document.getElementById('tcCoverage').value = tc.coverage_details || ''; document.getElementById('tcComments').value = tc.comments || ''; tc.connected_cps && tc.connected_cps.forEach(cpId => { const cb = document.getElementById(`cp_${cpId}`); if (cb) cb.checked = true; }); } }
             else { document.getElementById('tcForm').reset(); }
             document.getElementById('tcModal').classList.add('active');
         }
@@ -510,7 +509,27 @@
         
         async function deleteCP(id) { if (!currentProject) return; if (!confirm('确定删除?')) return; try { await fetch(`/api/cp/${id}?project_id=${currentProject.id}`, { method: 'DELETE' }); await loadCP(); } catch (e) { alert('删除失败'); } }
         async function deleteTC(id) { if (!currentProject) return; if (!confirm('确定删除?')) return; try { await fetch(`/api/tc/${id}?project_id=${currentProject.id}`, { method: 'DELETE' }); await Promise.all([loadTC(), loadStats()]); } catch (e) { alert('删除失败'); } }
-        async function updateTCStatus(id, newStatus) { if (!currentProject) return; try { await fetch(`/api/tc/${id}/status`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ project_id: currentProject.id, status: newStatus }) }); await Promise.all([loadTC(), loadStats()]); } catch (e) { alert('状态更新失败'); } }
+        async function updateTCStatus(id, newStatus) {
+            if (!currentProject) return;
+            
+            // PASS → 其他状态需要确认
+            const tc = testCases.find(t => t.id === id);
+            if (tc && tc.status === 'PASS' && newStatus !== 'PASS') {
+                const confirmed = confirm('确认状态变更\n\n将状态从 PASS 改为 ' + newStatus + '？\n完成日期会被重置。');
+                if (!confirmed) return;
+            }
+            
+            try {
+                await fetch(`/api/tc/${id}/status`, { 
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({ project_id: currentProject.id, status: newStatus }) 
+                });
+                await Promise.all([loadTC(), loadStats()]);
+            } catch (e) {
+                alert('状态更新失败');
+            }
+        }
         
         // ============ 批量操作 ============
         
