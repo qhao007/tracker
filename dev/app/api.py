@@ -182,6 +182,49 @@ def get_projects():
     
     return jsonify(result)
 
+@api.route('/api/projects/<int:project_id>', methods=['GET'])
+def get_project(project_id):
+    """获取项目详情"""
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    # 如果项目已归档，返回错误
+    if project.get('is_archived', False):
+        return jsonify({'error': '项目已归档'}), 404
+    
+    # 统计项目数据
+    try:
+        db = get_db(project['name'])
+        cursor = db.cursor()
+        cursor.execute('SELECT COUNT(*) FROM cover_point')
+        cp_count = cursor.fetchone()[0]
+        cursor.execute('SELECT COUNT(*) FROM test_case')
+        tc_count = cursor.fetchone()[0]
+        cursor.execute('SELECT COUNT(*) FROM test_case WHERE status = "PASS"')
+        pass_count = cursor.fetchone()[0]
+        cursor.execute('SELECT COUNT(*) FROM test_case WHERE status = "REMOVED"')
+        removed_count = cursor.fetchone()[0]
+    except:
+        cp_count = 0
+        tc_count = 0
+        pass_count = 0
+        removed_count = 0
+    
+    return jsonify({
+        'id': project['id'],
+        'name': project['name'],
+        'created_at': project.get('created_at', ''),
+        'is_archived': project.get('is_archived', False),
+        'version': project.get('version', 'stable'),
+        'cp_count': cp_count,
+        'tc_count': tc_count,
+        'pass_count': pass_count,
+        'removed_count': removed_count
+    })
+
 @api.route('/api/projects', methods=['POST'])
 def create_project():
     """创建新项目"""
