@@ -289,6 +289,29 @@
 
 ---
 
+### BUG-013: 测试数据库缺少 v0.6.0 新字段
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Critical |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-08 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-02-08 |
+| **修复人** | 小栗子 |
+
+**描述**: 添加 Cover Point 或 Test Case 时返回 500 错误。
+
+**原因**: 测试数据库 (test_data/) 中的表缺少 v0.6.0 新增字段。
+
+**修复方案**:
+- 创建修复脚本，遍历所有测试数据库
+- 添加缺失字段: `priority`, `dv_milestone`, `coded_date`, `fail_date`, `pass_date`, `removed_date`, `target_date`
+
+**验证**: 添加 CP/TC 功能恢复正常。
+
+---
+
 ## 2. 功能增强
 
 ### FEAT-001: CP 覆盖率计算
@@ -375,6 +398,7 @@ cd dev && npx playwright test tests/tracker.spec.ts --project=firefox
 |--------|------|----------|----------|
 | BUG-011 | update_status API 查询不存在的列 | v0.6.0 | 2026-02-08 |
 | BUG-012 | get_testcases 返回不存在的字段 | v0.6.0 | 2026-02-08 |
+| BUG-013 | 测试数据库缺少 v0.6.0 新字段 | v0.6.0 | 2026-02-08 |
 
 ---
 
@@ -395,3 +419,4 @@ cd dev && npx playwright test tests/tracker.spec.ts --project=firefox
 | v1.0 | 2026-02-07 | 初始 BugLog 文档 |
 | v1.1 | 2026-02-07 | 转换为 Markdown 格式 |
 | v1.2 | 2026-02-08 | 添加 v0.6.0 修复记录 (BUG-011, BUG-012) |
+| v1.3 | 2026-02-08 | 添加 BUG-013 测试数据库字段修复 |
