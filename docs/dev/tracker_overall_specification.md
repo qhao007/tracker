@@ -320,13 +320,15 @@ coverage = round(passed / total * 100, 1) if total > 0 else 0.0
 | 方法 | 路径 | 功能 |
 |------|------|------|
 | GET | `/api/cp` | 获取 CP 列表（**含覆盖率 + Priority**） |
+| **GET** | **`/api/cp/{id}`** | **获取 CP 详情（需 project_id）** |
 | POST | `/api/cp` | 创建 CP |
-| **PUT** | **`/api/cp/{id}`** | **更新 CP（需 project_id）** |
-| **DELETE** | **`/api/cp/{id}`** | **删除 CP（需 project_id）** |
+| PUT | `/api/cp/{id}` | 更新 CP（**需 project_id**） |
+| DELETE | `/api/cp/{id}` | 删除 CP（需 project_id） |
 | **POST** | **`/api/cp/batch/priority`** | **批量更新 Priority（需 project_id）** |
 
 **API 参数说明**:
 - **GET /api/cp**: 通过查询参数传递 `project_id`，例如: `/api/cp?project_id=1`
+- **GET /api/cp/{id}**: 通过查询参数传递 `project_id`，例如: `/api/cp/1?project_id=1`
 - **POST /api/cp**: 在请求体中传递 `project_id`
 - **PUT /api/cp/{id}**: 在请求体中必须包含 `project_id`
 - **DELETE /api/cp/{id}**: 通过查询参数传递 `project_id`，例如: `/api/cp/1?project_id=1`
