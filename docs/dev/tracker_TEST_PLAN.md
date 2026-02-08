@@ -881,7 +881,7 @@ python3 scripts/release.py --version v0.3.3 --force
 
 ### 9.1 覆盖功能列表
 
-根据规格书 `docs/dev/tracker_规格书_v0.3.md` 3.1 功能列表，以下关键功能需要 Playwright 自动化测试覆盖：
+根据规格书 `docs/dev/tracker_SPECIFICATION.md` 3.1 功能列表，以下关键功能需要 Playwright 自动化测试覆盖：
 
 | 编号 | 功能 | 描述 | 测试优先级 |
 |------|------|------|----------|
