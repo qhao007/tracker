@@ -17,7 +17,7 @@
 import { test, expect } from '@playwright/test';
 
 const BASE_URL = process.env.TEST_URL || 'http://localhost:8081';
-const PROJECT_NAME = 'Dup_1770201102';  // 测试项目
+const PROJECT_NAME = 'RegressionTest_1770514665';  // 回归测试专用项目（有数据）
 
 // 辅助函数：等待数据加载（替代 networkidle）
 async function waitForData(page) {
