@@ -1,6 +1,6 @@
 # Tracker BugLog
 
-> **版本**: v0.3 | **最后更新**: 2026-02-07 | **状态**: 已修复/验证
+> **版本**: v0.6.0 | **最后更新**: 2026-02-08 | **状态**: 开发中
 
 ---
 
@@ -243,6 +243,52 @@
 
 ---
 
+### BUG-011: update_status API 查询不存在的列
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-08 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-02-08 |
+| **修复人** | 小栗子 |
+
+**描述**: 调用 `/api/tc/{id}/status` 更新状态时返回 500 错误。
+
+**原因**: `update_status` 函数中查询了 `SELECT status, connected_cps FROM test_case`，但 `test_case` 表不存在 `connected_cps` 列（关联数据存储在单独的 `tc_cp_connections` 表中）。
+
+**修复方案**:
+- 移除 `connected_cps` 列查询
+- 分别查询 `status` 和关联的 CP
+
+**验证**: 状态更新 API 正常工作。
+
+---
+
+### BUG-012: get_testcases 返回不存在的字段
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-08 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-02-08 |
+| **修复人** | 小栗子 |
+
+**描述**: 获取 TC 列表时 API 返回 500 错误，IndexError。
+
+**原因**: `get_testcases` 函数引用了 `row['priority']` 和 `row['completed_date']` 字段，但 v0.6.0 数据库中这些字段已被移除。
+
+**修复方案**:
+- 移除 `priority` 和 `completed_date` 字段
+- 添加新的日期字段: `coded_date`, `fail_date`, `pass_date`, `removed_date`, `target_date`
+
+**验证**: TC 列表 API 正常工作。
+
+---
+
 ## 2. 功能增强
 
 ### FEAT-001: CP 覆盖率计算
@@ -323,6 +369,13 @@ cd dev && npx playwright test tests/tracker.spec.ts --project=firefox
 | BUG-009 | TC 状态无法更新 | v0.3 | 2026-02-04 |
 | BUG-010 | 删除功能失效 | v0.3 | 2026-02-04 |
 
+### v0.6.0 修复汇总
+
+| Bug ID | 描述 | 修复版本 | 修复日期 |
+|--------|------|----------|----------|
+| BUG-011 | update_status API 查询不存在的列 | v0.6.0 | 2026-02-08 |
+| BUG-012 | get_testcases 返回不存在的字段 | v0.6.0 | 2026-02-08 |
+
 ---
 
 ## 附录
@@ -341,3 +394,4 @@ cd dev && npx playwright test tests/tracker.spec.ts --project=firefox
 |------|------|------|
 | v1.0 | 2026-02-07 | 初始 BugLog 文档 |
 | v1.1 | 2026-02-07 | 转换为 Markdown 格式 |
+| v1.2 | 2026-02-08 | 添加 v0.6.0 修复记录 (BUG-011, BUG-012) |
