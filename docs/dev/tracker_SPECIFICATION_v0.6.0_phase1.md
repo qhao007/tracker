@@ -114,11 +114,24 @@ def update_status(tc_id, new_status):
     tc.save()
 ```
 
-### 3.3 PATCH /api/tc/{id} - 更新 TC
+### 3.3 PUT /api/tc/{id} - 更新 TC
 
 **支持更新字段**:
 - `target_date`
 - `dv_milestone`
+- `connections` - TC 关联的 CP ID 列表（覆盖原有关联）
+
+**请求体**:
+```json
+{
+  "project_id": 1,
+  "target_date": "2026-02-15",
+  "dv_milestone": "DV0.5",
+  "connections": [1, 2, 3]
+}
+```
+
+> **注意**: `connections` 字段会覆盖 TC 与 CP 的关联关系。
 
 ### 3.4 POST /api/tc/batch/status - 批量更新状态
 

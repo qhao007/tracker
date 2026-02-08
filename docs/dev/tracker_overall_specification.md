@@ -402,9 +402,11 @@ DELETE /api/cp/1?project_id=1
     "dv_milestone": "DV0.5",
     "checker_details": "",
     "coverage_details": "",
-    "comments": ""
+    "comments": "",
+    "connections": [1, 2, 3]
 }
 ```
+> **注意**: `connections` 字段用于设置 TC 关联的 CP ID 列表。调用时会覆盖原有的关联关系。
 
 **POST /api/tc/{id}/status 请求体**:
 ```json
