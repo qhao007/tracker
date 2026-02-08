@@ -1,6 +1,6 @@
-# 芯片验证 Tracker v0.3 规格书
+# 芯片验证 Tracker v0.6.0 总体规格书
 
-> **版本**: v0.3 | **更新日期**: 2026-02-04 | **状态**: 正式发布
+> **版本**: v0.6.0 | **更新日期**: 2026-02-08 | **状态**: 正式发布
 
 ---
 
@@ -48,14 +48,16 @@
 | 数据持久化到 SQLite 数据库 | |
 | systemd 正式版部署 | |
 
-### 1.4 v0.3 重大变更
+### 1.4 v0.6.0 重大变更
 
-**代码与数据完全隔离：**
+**v0.6.0 第一阶段功能增强：**
 
-- 测试版 (`dev/`) 和正式版 (`stable/`) 代码完全独立
-- 用户数据存储在 `shared/data/` 目录，独立于代码
-- 版本发布只替换代码，不覆盖用户数据
-- 数据库支持版本号管理和自动迁移
+- **Status 日期记录**: CODED/FAIL/PASS/REMOVED 状态变更时自动记录日期
+- **Target Date 字段**: 支持设置测试预期完成日期
+- **REMOVED 状态**: 新增已移除测试用例状态，统计时自动排除
+- **批量修改功能**: 支持批量更新状态、Target Date、DV Milestone
+- **DV Milestone 字段**: 跟踪测试用例所属的 DV 里程碑版本
+- **CP Priority 字段**: 支持 Cover Point 优先级标记 (P0/P1/P2)
 
 ---
 
@@ -185,6 +187,12 @@ python3 scripts/data_manager.py clean
 | F017 | **兼容性检查** | 启动时自动检查 | P1 |
 | F018 | **界面优化** | Excel 风格，紧凑显示 | P2 |
 | F019 | **systemd 部署** | 正式版 24/7 运行 | P1 |
+| **F020** | **Status 日期记录** | 状态变更时自动记录日期 | P0 |
+| **F021** | **Target Date 字段** | 设置测试预期完成日期 | P0 |
+| **F022** | **REMOVED 状态** | 已移除测试用例状态 | P0 |
+| **F023** | **批量修改功能** | 批量更新状态/日期/里程碑 | P0 |
+| **F024** | **DV Milestone 字段** | 跟踪 DV 里程碑版本 | P0 |
+| **F025** | **CP Priority 字段** | Cover Point 优先级标记 | P0 |
 
 ### 3.2 Cover Point 字段
 
@@ -194,6 +202,7 @@ python3 scripts/data_manager.py clean
 | Sub-Feature | 子功能模块 | ✅ |
 | Cover Point | 覆盖点名称 | ✅ **(首要)** |
 | Cover Point Details | 覆盖点详情 | ✅ |
+| **Priority** | 优先级 (P0/P1/P2) | ✅ |
 | Comments | 备注 | ❌ |
 
 ### 3.3 Test Case 字段
@@ -209,7 +218,13 @@ python3 scripts/data_manager.py clean
 | Coverage Details | 覆盖详情 | ❌ (可隐藏) |
 | Comments | 备注 | ❌ (可隐藏) |
 | Status | 状态 | 系统字段 |
-| Completed Date | 完成日期 | 系统字段 |
+| DV Milestone | DV 里程碑版本 | 系统字段 |
+| Target Date | 目标完成日期 | 系统字段 |
+| Status Date | 状态变更日期 | 系统字段 |
+| **coded_date** | CODED 状态日期 | 系统字段 |
+| **fail_date** | FAIL 状态日期 | 系统字段 |
+| **pass_date** | PASS 状态日期 | 系统字段 |
+| **removed_date** | REMOVED 状态日期 | 系统字段 |
 
 ### 3.3 Cover Point 覆盖率计算规则
 
@@ -263,12 +278,19 @@ coverage = round(passed / total * 100, 1) if total > 0 else 0.0
 
 ### 3.4 状态定义
 
-| 状态 | 说明 |
-|------|------|
-| OPEN | 待开发/待执行 |
-| CODED | 已开发完成 |
-| FAIL | 测试失败 |
-| PASS | 测试通过 |
+| 状态 | 说明 | 计入统计 |
+|------|------|----------|
+| OPEN | 待开发/待执行 | ✅ |
+| CODED | 已开发完成 | ✅ |
+| FAIL | 测试失败 | ✅ |
+| PASS | 测试通过 | ✅ |
+| REMOVED | 已移除/废弃 | ❌ |
+
+**REMOVED 状态特殊规则**:
+- 不计入 Total 统计
+- 不计入 Pass Rate 计算
+- 状态变更时自动清除与 CP 的关联
+- 可转移回 CODED 状态
 
 ---
 
@@ -295,10 +317,11 @@ coverage = round(passed / total * 100, 1) if total > 0 else 0.0
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
-| GET | `/api/cp` | 获取 CP 列表（**含覆盖率计算**） |
+| GET | `/api/cp` | 获取 CP 列表（**含覆盖率 + Priority**） |
 | POST | `/api/cp` | 创建 CP |
-| PUT | `/api/cp/{id}` | 更新 CP |
+| PUT | `/api/cp/{id}` | 更新 CP（**含 Priority**） |
 | DELETE | `/api/cp/{id}` | 删除 CP |
+| **POST** | **`/api/cp/batch/priority`** | **批量更新 Priority** |
 
 **GET /api/cp 返回字段：**
 
@@ -312,35 +335,50 @@ coverage = round(passed / total * 100, 1) if total > 0 else 0.0
 | cover_point_details | string | 详情 |
 | comments | string | 备注 |
 | created_at | string | 创建时间 |
+| **priority** | string | **优先级 (P0/P1/P2)** |
 | **coverage** | float | **覆盖率百分比 (0-100)** |
 | **coverage_detail** | string | **详情格式: "PASS/总数"** |
-
-**示例：**
-```json
-{
-  "id": 1,
-  "feature": "SRAM",
-  "cover_point": "read access",
-  "coverage": 100.0,
-  "coverage_detail": "3/3"
-}
-```
 
 ### 4.4 Test Cases
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
-| GET | `/api/tc` | 获取 TC 列表（含排序过滤） |
+| GET | `/api/tc` | 获取 TC 列表（**含日期/DV Milestone**） |
 | POST | `/api/tc` | 创建 TC |
-| PUT | `/api/tc/{id}` | 更新 TC |
+| PUT | `/api/tc/{id}` | 更新 TC（**含 Target Date/DV Milestone**） |
 | DELETE | `/api/tc/{id}` | 删除 TC |
-| POST | `/api/tc/{id}/status` | 更新状态 |
+| POST | `/api/tc/{id}/status` | 更新状态（**含日期记录/REMOVED**） |
+| **POST** | **`/api/tc/batch/status`** | **批量更新状态** |
+| **POST** | **`/api/tc/batch/target_date`** | **批量更新 Target Date** |
+| **POST** | **`/api/tc/batch/dv_milestone`** | **批量更新 DV Milestone** |
+
+**GET /api/tc 返回字段：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | int | TC ID |
+| project_id | int | 项目 ID |
+| dv_milestone | string | DV 里程碑 |
+| testbench | string | 测试台 |
+| category | string | 类别 |
+| owner | string | 负责人 |
+| test_name | string | 测试名称 |
+| status | string | 状态 |
+| **target_date** | string | **目标完成日期** |
+| **coded_date** | string | **CODED 日期** |
+| **fail_date** | string | **FAIL 日期** |
+| **pass_date** | string | **PASS 日期** |
+| **removed_date** | string | **REMOVED 日期** |
 
 ### 4.5 统计
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
-| GET | `/api/stats` | 获取统计数据 |
+| GET | `/api/stats` | 获取统计数据（**排除 REMOVED**） |
+
+**统计规则**：
+- REMOVED 状态的 TC 不计入 Total
+- REMOVED 状态的 TC 不计入 Pass Rate 计算
 
 ---
 
@@ -352,13 +390,13 @@ coverage = round(passed / total * 100, 1) if total > 0 else 0.0
 
 ```
 {项目名}.db
-├── cover_point           # Cover Points 表
-├── test_case            # Test Cases 表
+├── cover_point           # Cover Points 表 (v0.6.0+ 含 priority)
+├── test_case            # Test Cases 表 (v0.6.0+ 含新字段)
 ├── tc_cp_connections    # TC-CP 关联表
 └── tracker_version      # 版本表 (v0.3+)
 ```
 
-### 5.2 版本管理
+### 5.2 版本表
 
 **tracker_version 表：**
 
@@ -370,12 +408,47 @@ CREATE TABLE tracker_version (
 );
 ```
 
-**迁移机制：**
-- 启动时检查版本号
-- 版本不匹配时自动触发迁移
-- 迁移脚本自动备份原数据
+### 5.3 v0.6.0 字段变更
 
-### 5.3 v0.2 到 v0.3 迁移
+#### Test Case 表新增字段 (v0.6.0)
+
+```sql
+-- DV Milestone 字段
+ALTER TABLE test_case ADD COLUMN dv_milestone VARCHAR(10) DEFAULT NULL;
+
+-- Target Date 字段
+ALTER TABLE test_case ADD COLUMN target_date DATE DEFAULT NULL;
+
+-- Status 日期字段
+ALTER TABLE test_case ADD COLUMN coded_date DATE DEFAULT NULL;
+ALTER TABLE test_case ADD COLUMN fail_date DATE DEFAULT NULL;
+ALTER TABLE test_case ADD COLUMN pass_date DATE DEFAULT NULL;
+ALTER TABLE test_case ADD COLUMN removed_date DATE DEFAULT NULL;
+```
+
+#### Cover Point 表新增字段 (v0.6.0)
+
+```sql
+-- Priority 字段
+ALTER TABLE cover_point ADD COLUMN priority VARCHAR(3) DEFAULT 'P0';
+```
+
+#### 数据迁移 (v0.6.0)
+
+```sql
+-- 为已有数据填充日期
+UPDATE test_case SET pass_date = updated_at WHERE status = 'PASS';
+UPDATE test_case SET coded_date = updated_at WHERE status = 'CODED';
+UPDATE test_case SET fail_date = updated_at WHERE status = 'FAIL';
+
+-- DV Milestone 默认值
+UPDATE test_case SET dv_milestone = 'DV1.0' WHERE dv_milestone IS NULL;
+
+-- CP Priority 默认值
+UPDATE cover_point SET priority = 'P0' WHERE priority IS NULL;
+```
+
+### 5.4 v0.2 到 v0.3 迁移
 
 现有用户需要执行迁移：
 
@@ -881,8 +954,43 @@ journalctl -u tracker -f
 | v0.3 | 2026-02-04 | **架构重构**：代码隔离、数据共享、版本迁移 |
 | v0.3.1 | 2026-02-04 | **数据隔离**：user_data/test_data 分离，测试不碰用户数据 |
 | v0.4 | 2026-02-05 | **简化架构**：Git 只维护 dev/，发布到 /release/tracker/ |
+| v0.5.0 | 2026-02-06 | **功能增强**：界面优化、测试报告、发布准备脚本 |
+| v0.5.1 | 2026-02-07 | **Bug 修复**：API 和界面问题修复 |
+| **v0.6.0** | **2026-02-08** | **第一阶段功能增强**：Status 日期、Target Date、REMOVED、批量修改、DV Milestone、CP Priority |
 
-### v0.4 详细变更
+### v0.6.0 详细变更
+
+1. **Status 日期记录**：
+   - CODED/FAIL/PASS/REMOVED 状态变更时自动记录日期
+   - OPEN 状态不记录日期
+   - PASS → 其他状态有二次确认提示
+
+2. **Target Date 字段**：
+   - TC 表格显示 Target Date 列
+   - 支持单个和批量修改 Target Date
+
+3. **REMOVED 状态**：
+   - Status 下拉框新增 REMOVED 选项
+   - REMOVED 状态的 TC 显示删除线样式
+   - REMOVED 不计入 Total 和 Pass Rate 统计
+   - REMOVED 时自动清除与 CP 的关联
+
+4. **批量修改功能**：
+   - TC 表格显示复选框列
+   - 支持批量更新状态、Target Date、DV Milestone
+   - 支持全选/取消全选
+
+5. **DV Milestone 字段**：
+   - TC 表格显示 DV Milestone 列
+   - 支持选择 DV0.3/DV0.5/DV0.7/DV1.0
+   - 默认值 DV1.0
+
+6. **CP Priority 字段**：
+   - CP 表格显示 Priority 列
+   - 支持选择 P0/P1/P2
+   - 默认值 P0
+
+### v0.5.x 详细变更
 
 1. **Git 仓库简化**：
    - 只维护 `dev/` 代码，移除 `stable/` 追踪
