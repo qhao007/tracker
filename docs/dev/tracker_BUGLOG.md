@@ -391,6 +391,83 @@ if (tc && tc.status === 'PASS' && newStatus !== 'PASS') {
 
 ---
 
+### BUG-018: TC详情API返回非JSON
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Critical |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-08 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-02-08 |
+| **修复人** | 小栗子 |
+
+**描述**: 调用 `GET /api/tc/{id}` API 返回 HTML 404 页面而非 JSON 格式的 TC 详情。
+
+**原因**: API 端点不存在，`GET /api/tc/{id}` 未实现。
+
+**修复方案**:
+1. 添加 `GET /api/tc/<int:tc_id>` 端点实现
+2. 返回 TC 详情 JSON，包含所有字段和关联 CP 列表
+
+**验证**: TC 详情 API 返回正确的 JSON 格式数据。
+
+---
+
+### BUG-019: CP Priority 无法更新
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-08 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-02-08 |
+| **修复人** | 小栗子 |
+
+**描述**: 调用 `PUT /api/cp/{id}` 更新 Cover Point 的 priority 字段时，值始终为默认的 P0，无法改为其他值。
+
+**原因**: 更新逻辑中使用了 `data.get('priority', 'P0')`，如果请求体未包含 priority 字段，会被重置为默认值 P0。
+
+**修复方案**:
+```python
+# 修复前 - 错误
+new_priority = data.get('priority', 'P0')
+
+# 修复后 - 正确
+cursor.execute('SELECT priority FROM cover_point WHERE id=?', (cp_id,))
+current = cursor.fetchone()
+current_priority = current['priority'] if current else 'P0'
+new_priority = data.get('priority', current_priority)
+```
+
+**验证**: 更新 CP 其他字段时 priority 保持原值，指定 priority 时正确更新。
+
+---
+
+### BUG-020: CP详情查询API缺失
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-08 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-02-08 |
+| **修复人** | 小栗子 |
+
+**描述**: 调用 `GET /api/cp/{id}` API 返回 404 错误，无法查询单个 Cover Point 详情。
+
+**原因**: API 端点不存在。
+
+**修复方案**:
+1. 添加 `GET /api/cp/<int:cp_id>` 端点实现
+2. 返回 CP 详情 JSON，包含所有字段
+
+**验证**: CP 详情 API 返回正确的 JSON 格式数据。
+
+---
+
 ## 2. 功能增强
 
 ### FEAT-001: CP 覆盖率计算
@@ -482,6 +559,9 @@ cd dev && npx playwright test tests/tracker.spec.ts --project=firefox
 | BUG-015 | 批量修改功能缺失 | v0.6.0 | 2026-02-08 |
 | BUG-016 | PASS → 其他状态缺少二次确认 | v0.6.0 | 2026-02-08 |
 | BUG-017 | DV Milestone 默认值不正确 | v0.6.0 | 2026-02-08 |
+| BUG-018 | TC详情API返回非JSON | v0.6.0 | 2026-02-08 |
+| BUG-019 | CP Priority 无法更新 | v0.6.0 | 2026-02-08 |
+| BUG-020 | CP详情查询API缺失 | v0.6.0 | 2026-02-08 |
 
 ---
 
@@ -506,3 +586,4 @@ cd dev && npx playwright test tests/tracker.spec.ts --project=firefox
 | v1.4 | 2026-02-08 | 添加 BUG-014 前端界面同步修复 |
 | v1.5 | 2026-02-08 | 添加 BUG-015, BUG-016, BUG-017 |
 | v1.6 | 2026-02-08 | 修复 BUG-016, BUG-017 |
+| v1.7 | 2026-02-08 | 添加 BUG-018, BUG-019, BUG-020 |
