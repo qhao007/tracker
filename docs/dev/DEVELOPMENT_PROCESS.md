@@ -204,7 +204,7 @@ git push origin develop
 |------|------|
 | **开发版** | `dev/` 目录，端口 8081，test_data |
 | **测试数据** | `/projects/management/tracker/shared/data/test_data/` |
-| **启动命令** | `cd dev && python3 server_test.py` |
+| **启动命令** | `cd dev && bash start_server.sh` |
 
 ### 4.3 代码规范
 

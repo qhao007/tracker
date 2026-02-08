@@ -69,7 +69,8 @@
 /projects/management/tracker/              ← Git 仓库（只维护 dev/）
 ├── dev/                                  ← 开发版代码（Git 分支: develop）
 │   ├── server.py                        # 开发启动脚本 (:8081)
-│   ├── server_test.py                   # 测试启动脚本
+│   ├── server_test.py      # 旧启动脚本（已弃用）
+│   ├── start_server.sh     # 新启动脚本 (gunicorn)
 │   ├── app/                             # Flask 应用
 │   ├── index.html                       # 前端页面
 │   ├── data → ../shared/data/test_data  # 测试数据
@@ -158,7 +159,7 @@ python3 scripts/data_manager.py clean
 | 版本 | 端口 | 数据目录 | 启动命令 |
 |------|------|----------|----------|
 | 正式版 | 8080 | user_data | `cd stable && python3 server.py` |
-| 测试版 | 8081 | test_data | `cd dev && python3 server_test.py` |
+| 测试版 | 8081 | test_data | `cd dev && bash start_server.sh` |
 
 ---
 
@@ -994,7 +995,7 @@ python3 server.py
 
 ```bash
 cd /projects/management/tracker/dev
-python3 server_test.py
+bash start_server.sh
 # 访问 http://localhost:8081
 ```
 
@@ -1147,7 +1148,8 @@ journalctl -u tracker -f
 │
 ├── dev/                     # 测试版
 │   ├── server.py
-│   ├── server_test.py
+│   ├── server_test.py      # 原启动脚本（已弃用）
+│   ├── start_server.sh     # 新启动脚本 (gunicorn)
 │   ├── app/
 │   │   ├── __init__.py
 │   │   └── api.py

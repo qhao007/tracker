@@ -13,7 +13,6 @@
 |----------|------|------|------|------|--------|
 | API 测试 | XX | XX | X | X | **XX%** |
 | Playwright 冒烟测试 | XX | XX | X | X | **XX%** |
-| BugLog 回归测试 | XX | XX | X | X | **XX%** |
 | **综合统计** | **XXX** | **XXX** | **X** | **X** | **XX%** |
 
 ---
@@ -24,7 +23,6 @@
 |----------|----------|----------|----------|
 | API 测试 | HH:MM:SS | HH:MM:SS | XX min |
 | Playwright 冒烟测试 | HH:MM:SS | HH:MM:SS | XX min |
-| BugLog 回归测试 | HH:MM:SS | HH:MM:SS | XX min |
 | **整体测试** | **HH:MM:SS** | **HH:MM:SS** | **XX min** |
 
 ---
@@ -54,8 +52,11 @@
 ### 1.4 测试命令
 
 ```bash
-cd dev
-PYTHONPATH=. pytest tests/test_api.py -v
+# 启动服务
+cd dev && bash start_server.sh
+
+# API 测试
+cd dev && PYTHONPATH=. pytest tests/test_api.py -v
 ```
 
 ---
@@ -84,50 +85,12 @@ PYTHONPATH=. pytest tests/test_api.py -v
 ### 2.4 测试命令
 
 ```bash
-cd dev
-npx playwright test tests/test_smoke.spec.ts --project=firefox --timeout=60000
+cd dev && npx playwright test tests/test_smoke.spec.ts --project=firefox --timeout=60000
 ```
 
 ---
 
-## 3. BugLog 回归测试结果
-
-### 3.1 测试执行记录
-
-| 序号 | 测试项 | Bug ID | 状态 | 执行时间 | 备注 |
-|------|--------|--------|------|----------|------|
-| 1 | 切换项目后 TC 显示 | BUG-008 | ✅ PASS | XXs | - |
-| ... | ... | ... | ... | ... | ... |
-
-### 3.2 Bug 修复验证
-
-| Bug ID | 描述 | 修复状态 | 验证结果 |
-|--------|------|----------|----------|
-| BUG-008 | EX5 项目 TC 数据加载 | ✅ 已修复 | ✅ PASS |
-| ... | ... | ... | ... |
-
-### 3.3 失败测试
-
-| 序号 | 测试项 | 失败原因 | 类型 |
-|------|--------|----------|------|
-| - | 无 | - | - |
-
-### 3.4 超时测试
-
-| 序号 | 测试项 | 超时时间 | 类型 |
-|------|----------|----------|------|
-| - | 无 | - | - |
-
-### 3.5 测试命令
-
-```bash
-cd dev
-npx playwright test tests/tracker.spec.ts --project=firefox --timeout=60000
-```
-
----
-
-## 4. 测试环境
+## 3. 测试环境
 
 | 项目 | 值 |
 |------|-----|
@@ -143,51 +106,46 @@ npx playwright test tests/tracker.spec.ts --project=firefox --timeout=60000
 
 ---
 
-## 5. 结论与建议
+## 4. 结论与建议
 
-### 5.1 测试结论
+### 4.1 测试结论
 
 | 检查项 | 状态 | 说明 |
 |--------|------|------|
 | API 完整性 | ✅ 通过 | XX/XX 测试全部通过 |
 | Playwright 冒烟测试 | ✅ 通过 | XX/XX 测试全部通过 |
-| BugLog 回归测试 | ✅ 通过 | XX/XX 测试全部通过 |
 
-### 5.2 修复记录
+### 4.2 修复记录
 
 | Bug | 描述 | 修复方案 |
 |-----|------|----------|
 | - | 无 | - |
 
-### 5.3 发布建议
+### 4.3 发布建议
 
 **综合评估**: ✅ **建议发布**
 
 - API 测试优秀 (XX%)
 - Playwright 冒烟测试优秀 (XX%)
-- BugLog 回归测试优秀 (XX%)
 
 ---
 
-## 6. 执行命令记录
+## 5. 执行命令记录
 
 ```bash
 # 启动 dev 版本
-cd dev && python3 server_test.py &
+cd dev && bash start_server.sh
 
 # API 测试
 cd dev && PYTHONPATH=. python3 -m pytest tests/test_api.py -v
 
 # Playwright 冒烟测试
 cd dev && npx playwright test tests/test_smoke.spec.ts --project=firefox --timeout=60000
-
-# BugLog 回归测试
-cd dev && npx playwright test tests/tracker.spec.ts --project=firefox --timeout=60000
 ```
 
 ---
 
-## 7. 版本信息
+## 6. 版本信息
 
 | 项目 | 值 |
 |------|-----|
@@ -205,7 +163,6 @@ cd dev && npx playwright test tests/tracker.spec.ts --project=firefox --timeout=
 |------|------|------|------|------|--------|
 | API 测试 | XX | X | X | XX | XX% |
 | Playwright 冒烟测试 | XX | X | X | XX | XX% |
-| BugLog 回归测试 | XX | X | X | XX | XX% |
 | **总计** | **XXX** | **X** | **X** | **XXX** | **XX%** |
 
 ### B. 失败原因分类
