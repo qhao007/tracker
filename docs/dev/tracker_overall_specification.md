@@ -370,16 +370,18 @@ DELETE /api/cp/1?project_id=1
 | 方法 | 路径 | 功能 |
 |------|------|------|
 | GET | `/api/tc` | 获取 TC 列表（**含日期/DV Milestone**） |
+| **GET** | **`/api/tc/{id}`** | **获取 TC 详情（需 project_id）** |
 | POST | `/api/tc` | 创建 TC |
-| **PUT** | **`/api/tc/{id}`** | **更新 TC（需 project_id）** |
-| **DELETE** | **`/api/tc/{id}`** | **删除 TC（需 project_id）** |
-| **POST** | **`/api/tc/{id}/status`** | **更新状态（需 project_id）** |
-| **POST** | **`/api/tc/batch/status`** | **批量更新状态（需 project_id）** |
-| **POST** | **`/api/tc/batch/target_date`** | **批量更新 Target Date（需 project_id）** |
-| **POST** | **`/api/tc/batch/dv_milestone`** | **批量更新 DV Milestone（需 project_id）** |
+| PUT | `/api/tc/{id}` | 更新 TC（需 project_id） |
+| DELETE | `/api/tc/{id}` | 删除 TC（需 project_id） |
+| POST | `/api/tc/{id}/status` | 更新状态（需 project_id） |
+| POST | `/api/tc/batch/status` | 批量更新状态（需 project_id） |
+| POST | `/api/tc/batch/target_date` | 批量更新 Target Date（需 project_id） |
+| POST | `/api/tc/batch/dv_milestone` | 批量更新 DV Milestone（需 project_id） |
 
 **API 参数说明**:
 - **GET /api/tc**: 通过查询参数传递 `project_id`，例如: `/api/tc?project_id=1`
+- **GET /api/tc/{id}**: 通过查询参数传递 `project_id`，例如: `/api/tc/1?project_id=1`
 - **POST /api/tc**: 在请求体中传递 `project_id`
 - **PUT /api/tc/{id}**: 在请求体中必须包含 `project_id`
 - **DELETE /api/tc/{id}**: 通过查询参数传递 `project_id`，例如: `/api/tc/1?project_id=1`
