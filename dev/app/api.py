@@ -835,6 +835,176 @@ def update_status(tc_id):
         'need_confirm': need_confirm
     })
 
+# ============ 批量操作 ============
+
+@api.route('/api/tc/batch/status', methods=['POST'])
+def batch_update_tc_status():
+    """批量更新 TC 状态"""
+    data = request.json
+    project_id = data.get('project_id')
+    tc_ids = data.get('tc_ids', [])
+    new_status = data.get('status')
+    
+    if not project_id or not tc_ids or not new_status:
+        return jsonify({'error': '缺少必要参数'}), 400
+    
+    valid_statuses = ['OPEN', 'CODED', 'FAIL', 'PASS', 'REMOVED']
+    if new_status not in valid_statuses:
+        return jsonify({'error': '无效状态'}), 400
+    
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    conn = get_db(project['name'])
+    cursor = conn.cursor()
+    
+    # 状态日期映射
+    status_dates = {
+        'CODED': 'coded_date',
+        'FAIL': 'fail_date',
+        'PASS': 'pass_date',
+        'REMOVED': 'removed_date'
+    }
+    
+    today = datetime.now().strftime('%Y-%m-%d')
+    
+    success_count = 0
+    for tc_id in tc_ids:
+        # 检查 TC 是否存在
+        cursor.execute('SELECT status FROM test_case WHERE id=?', (tc_id,))
+        row = cursor.fetchone()
+        if not row:
+            continue
+        
+        # 清除所有状态日期
+        cursor.execute('''
+            UPDATE test_case SET 
+                coded_date=NULL, 
+                fail_date=NULL, 
+                pass_date=NULL, 
+                removed_date=NULL 
+            WHERE id=?
+        ''', (tc_id,))
+        
+        # 设置新状态对应的日期
+        if new_status in status_dates:
+            date_field = status_dates[new_status]
+            cursor.execute(f'UPDATE test_case SET {date_field}=? WHERE id=?', (today, tc_id))
+        
+        # 如果是 REMOVED，清除 CP 关联
+        if new_status == 'REMOVED':
+            cursor.execute('DELETE FROM tc_cp_connections WHERE tc_id=?', (tc_id,))
+        
+        # 更新状态
+        cursor.execute('UPDATE test_case SET status=? WHERE id=?', (new_status, tc_id))
+        success_count += 1
+    
+    conn.commit()
+    
+    return jsonify({
+        'success': success_count,
+        'failed': len(tc_ids) - success_count
+    })
+
+@api.route('/api/tc/batch/target_date', methods=['POST'])
+def batch_update_tc_target_date():
+    """批量更新 TC Target Date"""
+    data = request.json
+    project_id = data.get('project_id')
+    tc_ids = data.get('tc_ids', [])
+    target_date = data.get('target_date')
+    
+    if not project_id or not tc_ids:
+        return jsonify({'error': '缺少必要参数'}), 400
+    
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    conn = get_db(project['name'])
+    cursor = conn.cursor()
+    
+    success_count = 0
+    for tc_id in tc_ids:
+        cursor.execute('UPDATE test_case SET target_date=? WHERE id=?', (target_date, tc_id))
+        success_count += 1
+    
+    conn.commit()
+    
+    return jsonify({
+        'success': success_count,
+        'failed': len(tc_ids) - success_count
+    })
+
+@api.route('/api/tc/batch/dv_milestone', methods=['POST'])
+def batch_update_tc_dv_milestone():
+    """批量更新 TC DV Milestone"""
+    data = request.json
+    project_id = data.get('project_id')
+    tc_ids = data.get('tc_ids', [])
+    dv_milestone = data.get('dv_milestone')
+    
+    if not project_id or not tc_ids:
+        return jsonify({'error': '缺少必要参数'}), 400
+    
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    conn = get_db(project['name'])
+    cursor = conn.cursor()
+    
+    success_count = 0
+    for tc_id in tc_ids:
+        cursor.execute('UPDATE test_case SET dv_milestone=? WHERE id=?', (dv_milestone, tc_id))
+        success_count += 1
+    
+    conn.commit()
+    
+    return jsonify({
+        'success': success_count,
+        'failed': len(tc_ids) - success_count
+    })
+
+@api.route('/api/cp/batch/priority', methods=['POST'])
+def batch_update_cp_priority():
+    """批量更新 CP Priority"""
+    data = request.json
+    project_id = data.get('project_id')
+    cp_ids = data.get('cp_ids', [])
+    priority = data.get('priority')
+    
+    if not project_id or not cp_ids:
+        return jsonify({'error': '缺少必要参数'}), 400
+    
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    conn = get_db(project['name'])
+    cursor = conn.cursor()
+    
+    success_count = 0
+    for cp_id in cp_ids:
+        cursor.execute('UPDATE cover_point SET priority=? WHERE id=?', (priority, cp_id))
+        success_count += 1
+    
+    conn.commit()
+    
+    return jsonify({
+        'success': success_count,
+        'failed': len(cp_ids) - success_count
+    })
+
 # ============ 统计 ============
 
 @api.route('/api/stats', methods=['GET'])
