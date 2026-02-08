@@ -53,7 +53,7 @@
 
 ```bash
 # 启动服务
-cd dev && bash start_server.sh
+cd dev && bash start_server_test.sh
 
 # API 测试
 cd dev && PYTHONPATH=. pytest tests/test_api.py -v
@@ -134,7 +134,7 @@ cd dev && npx playwright test tests/test_smoke.spec.ts --project=firefox --timeo
 
 ```bash
 # 启动 dev 版本
-cd dev && bash start_server.sh
+cd dev && bash start_server_test.sh
 
 # API 测试
 cd dev && PYTHONPATH=. python3 -m pytest tests/test_api.py -v
