@@ -307,6 +307,7 @@ coverage = round(passed / total * 100, 1) if total > 0 else 0.0
 | 方法 | 路径 | 功能 |
 |------|------|------|
 | GET | `/api/projects` | 获取项目列表 |
+| **GET** | **`/api/projects/{id}`** | **获取项目详情** |
 | POST | `/api/projects` | 创建新项目 |
 | POST | `/api/projects/{id}/archive` | 备份项目 |
 | GET | `/api/projects/archive/list` | 获取归档列表 |
@@ -319,9 +320,33 @@ coverage = round(passed / total * 100, 1) if total > 0 else 0.0
 |------|------|------|
 | GET | `/api/cp` | 获取 CP 列表（**含覆盖率 + Priority**） |
 | POST | `/api/cp` | 创建 CP |
-| PUT | `/api/cp/{id}` | 更新 CP（**含 Priority**） |
-| DELETE | `/api/cp/{id}` | 删除 CP |
-| **POST** | **`/api/cp/batch/priority`** | **批量更新 Priority** |
+| **PUT** | **`/api/cp/{id}`** | **更新 CP（需 project_id）** |
+| **DELETE** | **`/api/cp/{id}`** | **删除 CP（需 project_id）** |
+| **POST** | **`/api/cp/batch/priority`** | **批量更新 Priority（需 project_id）** |
+
+**API 参数说明**:
+- **GET /api/cp**: 通过查询参数传递 `project_id`，例如: `/api/cp?project_id=1`
+- **POST /api/cp**: 在请求体中传递 `project_id`
+- **PUT /api/cp/{id}**: 在请求体中必须包含 `project_id`
+- **DELETE /api/cp/{id}**: 通过查询参数传递 `project_id`，例如: `/api/cp/1?project_id=1`
+
+**PUT /api/cp/{id} 请求体**:
+```json
+{
+    "project_id": 1,
+    "feature": "Feature A",
+    "sub_feature": "SubFeature A",
+    "cover_point": "CP_A",
+    "cover_point_details": "Details",
+    "priority": "P0",
+    "comments": ""
+}
+```
+
+**DELETE /api/cp/{id} 请求示例**:
+```
+DELETE /api/cp/1?project_id=1
+```
 
 **GET /api/cp 返回字段：**
 
@@ -345,12 +370,49 @@ coverage = round(passed / total * 100, 1) if total > 0 else 0.0
 |------|------|------|
 | GET | `/api/tc` | 获取 TC 列表（**含日期/DV Milestone**） |
 | POST | `/api/tc` | 创建 TC |
-| PUT | `/api/tc/{id}` | 更新 TC（**含 Target Date/DV Milestone**） |
-| DELETE | `/api/tc/{id}` | 删除 TC |
-| POST | `/api/tc/{id}/status` | 更新状态（**含日期记录/REMOVED**） |
-| **POST** | **`/api/tc/batch/status`** | **批量更新状态** |
-| **POST** | **`/api/tc/batch/target_date`** | **批量更新 Target Date** |
-| **POST** | **`/api/tc/batch/dv_milestone`** | **批量更新 DV Milestone** |
+| **PUT** | **`/api/tc/{id}`** | **更新 TC（需 project_id）** |
+| **DELETE** | **`/api/tc/{id}`** | **删除 TC（需 project_id）** |
+| **POST** | **`/api/tc/{id}/status`** | **更新状态（需 project_id）** |
+| **POST** | **`/api/tc/batch/status`** | **批量更新状态（需 project_id）** |
+| **POST** | **`/api/tc/batch/target_date`** | **批量更新 Target Date（需 project_id）** |
+| **POST** | **`/api/tc/batch/dv_milestone`** | **批量更新 DV Milestone（需 project_id）** |
+
+**API 参数说明**:
+- **GET /api/tc**: 通过查询参数传递 `project_id`，例如: `/api/tc?project_id=1`
+- **POST /api/tc**: 在请求体中传递 `project_id`
+- **PUT /api/tc/{id}**: 在请求体中必须包含 `project_id`
+- **DELETE /api/tc/{id}**: 通过查询参数传递 `project_id`，例如: `/api/tc/1?project_id=1`
+- **POST /api/tc/{id}/status**: 在请求体中必须包含 `project_id`
+
+**PUT /api/tc/{id} 请求体**:
+```json
+{
+    "project_id": 1,
+    "testbench": "TB_A",
+    "category": "Category",
+    "owner": "Owner",
+    "test_name": "TC_A",
+    "scenario_details": "Scenario",
+    "target_date": "2026-02-15",
+    "dv_milestone": "DV0.5",
+    "checker_details": "",
+    "coverage_details": "",
+    "comments": ""
+}
+```
+
+**POST /api/tc/{id}/status 请求体**:
+```json
+{
+    "project_id": 1,
+    "status": "PASS"
+}
+```
+
+**DELETE /api/tc/{id} 请求示例**:
+```
+DELETE /api/tc/1?project_id=1
+```
 
 **GET /api/tc 返回字段：**
 
@@ -379,6 +441,47 @@ coverage = round(passed / total * 100, 1) if total > 0 else 0.0
 **统计规则**：
 - REMOVED 状态的 TC 不计入 Total
 - REMOVED 状态的 TC 不计入 Pass Rate 计算
+
+---
+
+### 4.6 API 使用说明
+
+#### 4.6.1 为什么需要 project_id？
+
+Tracker 使用**独立数据库架构**，每个项目拥有独立的 `.db` 文件。因此，所有涉及项目数据的 API 操作都需要知道操作的是哪个项目的数据。
+
+**project_id 传递方式**:
+| API 类型 | 传递方式 | 示例 |
+|----------|----------|------|
+| GET (列表) | 查询参数 | `GET /api/tc?project_id=1` |
+| POST (创建) | 请求体 JSON | `{"project_id": 1, ...}` |
+| PUT (更新) | 请求体 JSON | `{"project_id": 1, ...}` |
+| DELETE | 查询参数 | `DELETE /api/tc/1?project_id=1` |
+
+#### 4.6.2 错误处理
+
+| 状态码 | 含义 | 常见原因 |
+|--------|------|----------|
+| 200 | 成功 | - |
+| 400 | 请求参数错误 | 缺少 project_id、参数格式错误 |
+| 404 | 资源不存在 | 项目不存在、CP/TC ID 不存在 |
+| 500 | 服务器错误 | 数据库错误 |
+
+**常见错误响应**:
+```json
+// 缺少 project_id
+{"error": "需要指定项目"}
+
+// 项目不存在
+{"error": "项目不存在"}
+
+// CP/TC 不存在
+{"error": "Cover Point 不存在"}
+
+/**
+ * Test Case 不存在
+{"error": "Test Case 不存在"}
+```
 
 ---
 
