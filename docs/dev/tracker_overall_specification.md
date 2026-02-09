@@ -1,6 +1,6 @@
-# 芯片验证 Tracker v0.6.0 总体规格书
+# 芯片验证 Tracker v0.6.1 总体规格书
 
-> **版本**: v0.6.0 | **更新日期**: 2026-02-08 | **状态**: 正式发布
+> **版本**: v0.6.1 | **更新日期**: 2026-02-09 | **状态**: 开发中
 
 ---
 
@@ -58,6 +58,14 @@
 - **批量修改功能**: 支持批量更新状态、Target Date、DV Milestone
 - **DV Milestone 字段**: 跟踪测试用例所属的 DV 里程碑版本
 - **CP Priority 字段**: 支持 Cover Point 优先级标记 (P0/P1/P2)
+
+### 1.5 v0.6.1 重大变更
+
+**v0.6.1 第二阶段功能增强：**
+
+- **Status 颜色粗体显示**: Test Case Status 颜色改为粗体显示，更醒目
+- **CP 过滤功能**: 支持按 Feature 和 Priority 过滤 Cover Points
+- **备份恢复自定义路径**: 支持上传本地备份文件恢复项目
 
 ---
 
@@ -194,6 +202,9 @@ python3 scripts/data_manager.py clean
 | **F023** | **批量修改功能** | 批量更新状态/日期/里程碑 | P0 |
 | **F024** | **DV Milestone 字段** | 跟踪 DV 里程碑版本 | P0 |
 | **F025** | **CP Priority 字段** | Cover Point 优先级标记 | P0 |
+| **F026** | **Status 粗体显示** | Test Case Status 颜色改为粗体 | P2 |
+| **F027** | **CP 过滤功能** | 按 Feature/Priority 过滤 CP | P0 |
+| **F028** | **备份路径自定义** | 支持上传本地备份文件恢复 | P1 |
 
 ### 3.2 Cover Point 字段
 
@@ -1188,8 +1199,10 @@ journalctl -u tracker -f
 | v0.5.0 | 2026-02-06 | **功能增强**：界面优化、测试报告、发布准备脚本 |
 | v0.5.1 | 2026-02-07 | **Bug 修复**：API 和界面问题修复 |
 | **v0.6.0** | **2026-02-08** | **第一阶段功能增强**：Status 日期、Target Date、REMOVED、批量修改、DV Milestone、CP Priority |
+| **v0.6.1** | **2026-02-09** | **第二阶段功能增强**：Status 粗体、CP 过滤、备份路径自定义、ESLint 检查 |
+| **v0.6.1** | **2026-02-09** | **第二阶段功能增强**：Status 粗体、CP 过滤、备份路径自定义 |
 
-### v0.6.0 详细变更
+### v0.6.1 详细变更
 
 1. **Status 日期记录**：
    - CODED/FAIL/PASS/REMOVED 状态变更时自动记录日期
@@ -1220,6 +1233,31 @@ journalctl -u tracker -f
    - CP 表格显示 Priority 列
    - 支持选择 P0/P1/P2
    - 默认值 P0
+
+### v0.6.1 详细变更
+
+1. **Status 颜色粗体显示**：
+   - OPEN 状态：灰色粗体 (#6b7280)
+   - CODED 状态：蓝色粗体 (#3b82f6)
+   - FAIL 状态：红色粗体 (#ef4444)
+   - PASS 状态：绿色粗体 (#22c55e)
+   - REMOVED 状态：灰色粗体删除线 (#9ca3af)
+
+2. **CP 过滤功能**：
+   - Feature 下拉过滤：自动填充当前项目的 Feature 选项
+   - Priority 下拉过滤：支持 P0/P1/P2
+   - 组合过滤：支持同时按 Feature 和 Priority 过滤
+   - API 支持 `feature` 和 `priority` 查询参数
+
+3. **备份恢复自定义路径**：
+   - 新增 POST /api/projects/restore/upload API
+   - 支持 multipart/form-data 上传备份文件
+   - 保留原有的按文件名恢复方式
+
+4. **前端代码质量改进**：
+   - 添加 ESLint 检查配置
+   - 添加 Playwright 冒烟测试（控制台错误检测）
+   - 添加 check_frontent.sh 快速检查脚本
 
 ### v0.5.x 详细变更
 
