@@ -132,6 +132,8 @@
                 <div class="toolbar-left">
                     <button class="btn btn-primary" onclick="openCPModal()">+ 添加 CP</button>
                     <input type="text" class="search-input" placeholder="搜索..." onkeyup="filterCP(this.value)">
+                    <select id="cpFeatureFilter" onchange="filterCPByFeature()"><option value="">全部 Feature</option></select>
+                    <select id="cpPriorityFilter" onchange="filterCPByPriority()"><option value="">全部 Priority</option><option value="P0">P0</option><option value="P1">P1</option><option value="P2">P2</option></select>
                 </div>
                 <div class="toolbar-right"><span style="color: #666; font-size: 12px;">共 <span id="cpCount">0</span> 条</span></div>
             </div>
@@ -407,6 +409,13 @@
                 const res = await fetch(`${API_BASE}/cp?project_id=${currentProject.id}`);
                 coverPoints = await res.json();
                 renderCP();
+                // 填充 Feature 过滤下拉框
+                const features = [...new Set(coverPoints.map(cp => cp.feature).filter(f => f))];
+                const featureSelect = document.getElementById('cpFeatureFilter');
+                if (featureSelect) {
+                    featureSelect.innerHTML = '<option value="">全部 Feature</option>' + 
+                        features.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('');
+                }
             } catch (e) { console.error('加载 CP 失败:', e); }
         }
         
@@ -434,14 +443,27 @@
         
         function renderCP(filter = '') {
             let filtered = coverPoints;
+            
+            // 文本搜索过滤
             if (filter) { filter = filter.toLowerCase(); filtered = filtered.filter(cp => cp.feature.toLowerCase().includes(filter) || (cp.sub_feature && cp.sub_feature.toLowerCase().includes(filter)) || cp.cover_point.toLowerCase().includes(filter)); }
+            
+            // Feature 下拉过滤
+            const featureFilter = document.getElementById('cpFeatureFilter')?.value;
+            if (featureFilter) { filtered = filtered.filter(cp => cp.feature === featureFilter); }
+            
+            // Priority 下拉过滤
+            const priorityFilter = document.getElementById('cpPriorityFilter')?.value;
+            if (priorityFilter) { filtered = filtered.filter(cp => cp.priority === priorityFilter); }
+            
             document.getElementById('cpCount').textContent = filtered.length;
             const tbody = document.getElementById('cpList');
-            if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #999; padding: 30px;">暂无数据</td></tr>'; return; }
+            if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #999; padding: 30px;">暂无数据</td></tr>'; return; }
             tbody.innerHTML = filtered.map(cp => `<tr><td><input type="checkbox" class="cp-select" value="${cp.id}" onchange="getSelectedCPs()"></td><td>${escapeHtml(cp.feature)}</td><td>${escapeHtml(cp.sub_feature || '')}</td><td><strong>${escapeHtml(cp.cover_point)}</strong></td><td>${escapeHtml(cp.cover_point_details || '')}</td><td><span class="priority-badge">${cp.priority || 'P0'}</span></td><td><span class="coverage-badge ${cp.coverage === 100 ? 'bg-green' : cp.coverage > 0 ? 'bg-yellow' : 'bg-red'}">${cp.coverage}%</span><small class="coverage-detail">${cp.coverage_detail}</small></td><td><div class="action-btns"><button class="action-btn edit" onclick="editCP(${cp.id})">编辑</button><button class="action-btn delete" onclick="deleteCP(${cp.id})">删除</button></div></td></tr>`).join('');
         }
         
-        function renderTC(filter = '', statusFilter = '', sortBy = 'id') {
+        function filterCP(value) { renderCP(value); }
+        function filterCPByFeature() { renderCP(); }
+        function filterCPByPriority() { renderCP(); }
             let filtered = testCases;
             if (filter) { filter = filter.toLowerCase(); filtered = filtered.filter(tc => (tc.test_name && tc.test_name.toLowerCase().includes(filter)) || (tc.testbench && tc.testbench.toLowerCase().includes(filter)) || (tc.owner && tc.owner.toLowerCase().includes(filter))); }
             if (statusFilter) filtered = filtered.filter(tc => tc.status === statusFilter);

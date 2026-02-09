@@ -418,8 +418,10 @@ def delete_project(project_id):
 
 @api.route('/api/cp', methods=['GET'])
 def get_coverpoints():
-    """获取 CP 列表（含覆盖率计算）"""
+    """获取 CP 列表（含覆盖率计算和过滤）"""
     project_id = request.args.get('project_id', type=int)
+    feature_filter = request.args.get('feature')
+    priority_filter = request.args.get('priority')
     
     if not project_id:
         return jsonify([])
@@ -432,7 +434,25 @@ def get_coverpoints():
     
     conn = get_db(project['name'])
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM cover_point ORDER BY id')
+    
+    # 构建过滤查询
+    query = 'SELECT * FROM cover_point WHERE 1=1'
+    params = []
+    
+    if feature_filter:
+        features = [f.strip() for f in feature_filter.split(',')]
+        placeholders = ','.join(['?'] * len(features))
+        query += f' AND feature IN ({placeholders})'
+        params.extend(features)
+    
+    if priority_filter:
+        priorities = [p.strip() for p in priority_filter.split(',')]
+        placeholders = ','.join(['?'] * len(priorities))
+        query += f' AND priority IN ({placeholders})'
+        params.extend(priorities)
+    
+    query += ' ORDER BY id'
+    cursor.execute(query, params)
     
     cps = []
     for row in cursor.fetchall():
