@@ -312,6 +312,7 @@ def list_archives():
                     data = json.load(file)
                     archives.append({
                         'id': len(archives) + 1,
+                        'filename': f,
                         'project_name': data.get('name', f),
                         'backup_date': data.get('backup_date', '')
                     })

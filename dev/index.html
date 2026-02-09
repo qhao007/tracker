@@ -777,17 +777,17 @@
                 const res = await fetch('/api/projects/archive/list');
                 archives = await res.json();
                 const list = document.getElementById('archiveList');
-                list.innerHTML = archives.map(a => `<div class="project-item"><div class="project-info"><span class="project-name">${a.project_name}</span><span class="project-meta">${a.backup_date}</span></div><button class="btn btn-primary" onclick="restoreArchive(${a.id})">恢复</button></div>`).join('') || '<p style="color: #999;">暂无备份</p>';
+                list.innerHTML = archives.map(a => `<div class="project-item"><div class="project-info"><span class="project-name">${a.project_name}</span><span class="project-meta">${a.backup_date}</span></div><button class="btn btn-primary" onclick="restoreArchive('${escapeHtml(a.filename)}')">恢复</button></div>`).join('') || '<p style="color: #999;">暂无备份</p>';
             } catch (err) { console.error('加载归档失败:', err); }
         }
         
-        async function restoreArchive(id) {
+        async function restoreArchive(filename) {
             if (!confirm('确定要从备份恢复吗？注意：不能恢复与现有项目同名的备份。')) return;
             try {
                 const res = await fetch('/api/projects/restore', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({archive_id: id})
+                    body: JSON.stringify({filename: filename})
                 });
                 const result = await res.json();
                 if (result.success) { closeModal('archiveModal'); await loadProjects(); selectProject(result.project.id); alert('恢复成功！'); }
