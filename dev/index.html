@@ -240,7 +240,15 @@
             <div class="modal-header"><span>备份与恢复</span><button class="modal-close" onclick="closeModal('archiveModal')">&times;</button></div>
             <div class="modal-body">
                 <div class="form-group"><label>备份当前项目</label><button class="btn btn-primary" onclick="archiveCurrentProject()">💾 导出备份</button></div>
-                <div class="form-group"><label>从备份恢复</label><div class="project-list" id="archiveList"></div></div>
+                <div class="form-group">
+                    <label>从备份恢复</label>
+                    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                        <input type="file" id="restoreFile" accept=".json" style="flex: 1;">
+                        <button class="btn" onclick="uploadAndRestore()">上传恢复</button>
+                    </div>
+                    <div id="uploadStatus" style="margin-bottom: 10px;"></div>
+                </div>
+                <div class="form-group"><label>或从默认目录选择</label><div class="project-list" id="archiveList"></div></div>
             </div>
         </div>
     </div>
@@ -770,6 +778,47 @@
                 if (result.success) { closeModal('archiveModal'); await loadProjects(); selectProject(result.project.id); alert('恢复成功！'); }
                 else { alert(result.error || '恢复失败'); }
             } catch (err) { alert('恢复失败: ' + err); }
+        }
+        
+        async function uploadAndRestore() {
+            const fileInput = document.getElementById('restoreFile');
+            const statusDiv = document.getElementById('uploadStatus');
+            
+            if (!fileInput.files[0]) {
+                statusDiv.innerHTML = '<span style="color: #ef4444;">请选择备份文件</span>';
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            if (!file.name.endsWith('.json')) {
+                statusDiv.innerHTML = '<span style="color: #ef4444;">只支持 JSON 格式</span>';
+                return;
+            }
+            
+            statusDiv.innerHTML = '<span style="color: #666;">正在上传...</span>';
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                const res = await fetch('/api/projects/restore/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await res.json();
+                
+                if (result.success) {
+                    statusDiv.innerHTML = '<span style="color: #22c55e;">恢复成功！</span>';
+                    closeModal('archiveModal');
+                    await loadProjects();
+                    selectProject(result.project.id);
+                    setTimeout(() => { statusDiv.innerHTML = ''; }, 2000);
+                } else {
+                    statusDiv.innerHTML = `<span style="color: #ef4444;">${result.error || '恢复失败'}</span>`;
+                }
+            } catch (err) {
+                statusDiv.innerHTML = '<span style="color: #ef4444;">上传失败: ' + err + '</span>';
+            }
         }
         
         function showArchiveModal() {
