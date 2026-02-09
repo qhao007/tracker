@@ -448,9 +448,69 @@ DELETE /api/tc/1?project_id=1
 |------|------|------|
 | GET | `/api/stats` | 获取统计数据（**排除 REMOVED**） |
 
-**统计规则**：
-- REMOVED 状态的 TC 不计入 Total
-- REMOVED 状态的 TC 不计入 Pass Rate 计算
+#### 4.5.1 请求示例
+
+```
+GET /api/stats?project_id=1
+```
+
+#### 4.5.2 返回示例
+
+```json
+{
+  "total_cp": 10,
+  "total_tc": 50,
+  "open_tc": 15,
+  "coded_tc": 20,
+  "fail_tc": 5,
+  "pass_tc": 10,
+  "pass_rate": "20.0%",
+  "coverage": "45.5%"
+}
+```
+
+#### 4.5.3 返回字段说明
+
+| 字段 | 类型 | 含义 | 计算方式 |
+|------|------|------|----------|
+| `total_cp` | int | Cover Points 总数 | CP 表记录数 |
+| `total_tc` | int | Test Cases 总数 | 排除 REMOVED 状态的所有 TC |
+| `open_tc` | int | 待开发/待执行 | status='OPEN' |
+| `coded_tc` | int | 已开发完成 | status='CODED' |
+| `fail_tc` | int | 测试失败 | status='FAIL' |
+| `pass_tc` | int | 测试通过 | status='PASS' |
+| `pass_rate` | string | TC 通过率 | `pass_tc / total_tc × 100%` |
+| `coverage` | string | CP 覆盖率 | 所有 CP 关联 TC PASS 比例的**平均值** |
+
+#### 4.5.4 Coverage 计算规则（重点）
+
+Coverage 是**所有 Cover Point 覆盖率**的平均值：
+
+```
+coverage = (CP1覆盖率 + CP2覆盖率 + ... + CPn覆盖率) / n
+```
+
+**每个 CP 的覆盖率计算**：
+
+| 关联 TC 状态 | 覆盖率 |
+|-------------|--------|
+| 全部 PASS | **100%** |
+| 部分 PASS | **PASS 数量 / 关联总数 × 100%** |
+| 无关联 TC | **0%** |
+
+**示例计算**：
+- CP1: 关联 4 个 TC，3 个 PASS → 75%
+- CP2: 关联 2 个 TC，2 个 PASS → 100%
+- CP3: 关联 0 个 TC → 0%
+- **Coverage = (75% + 100% + 0%) / 3 = 58.3%**
+
+#### 4.5.5 统计规则
+
+| 规则 | 说明 |
+|------|------|
+| REMOVED 不计入 Total | `total_tc` 排除 REMOVED 状态的 TC |
+| REMOVED 不参与计算 | PASS Rate 和 Coverage 计算均排除 REMOVED |
+| 无关联 CP | Coverage 按 0% 计算 |
 
 ---
 

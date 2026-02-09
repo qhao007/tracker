@@ -285,7 +285,9 @@ def archive_project(project_id):
     
     # 生成备份文件
     filename = f"{project['name']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-    filepath = f"archives/{filename}"
+    archives_dir = 'archives'
+    os.makedirs(archives_dir, exist_ok=True)  # 确保 archives 目录存在
+    filepath = os.path.join(archives_dir, filename)
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(project_data, f, ensure_ascii=False, indent=2)
     

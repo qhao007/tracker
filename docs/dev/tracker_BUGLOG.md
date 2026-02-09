@@ -468,6 +468,38 @@ new_priority = data.get('priority', current_priority)
 
 ---
 
+### BUG-021: 开发版备份功能点击后显示失败
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-08 |
+| **报告人** | 用户 |
+| **修复日期** | 2026-02-08 |
+| **修复人** | 小栗子 |
+| **影响版本** | dev |
+
+**描述**: 在开发版中点击"💾 导出备份"按钮后，提示备份失败。
+
+**原因分析**:
+- API `POST /api/projects/{id}/archive` 将备份文件写入 `archives/{filename}`
+- dev 版本启动时 `archives/` 目录不存在
+- Flask 无法创建子目录，导致文件写入失败
+
+**修复方案**:
+在 `api.py` 的 `archive_project` 函数中，写入文件前检查并创建 `archives/` 目录：
+
+```python
+archives_dir = 'archives'
+os.makedirs(archives_dir, exist_ok=True)  # 确保 archives 目录存在
+filepath = os.path.join(archives_dir, filename)
+```
+
+**验证**: 备份功能现在可以正常工作，archives 目录会自动创建。
+
+---
+
 ## 2. 功能增强
 
 ### FEAT-001: CP 覆盖率计算
@@ -496,6 +528,36 @@ new_priority = data.get('priority', current_priority)
 - ⚪ 灰色 0%
 
 **验证**: 覆盖率计算正确，UI 显示正确。
+
+---
+
+### BUG-022: CP 列表界面显示批量操作按钮
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-09 |
+| **报告人** | 用户 |
+| **修复日期** | 2026-02-09 |
+| **修复人** | 小栗子 |
+
+**描述**: 在 Cover Points 列表界面，批量更新状态、批量修改 Target Date、批量修改 DV Milestone 三个按钮仍然显示。这些按钮是针对 Test Cases 的批量操作，不应在 CP 列表界面显示。
+
+**复现步骤**:
+1. 进入任意项目
+2. 切换到 Cover Points 列表（默认展示 CP）
+3. 工具栏显示三个不应存在的批量操作按钮
+
+**修复方案**:
+从 `index.html` 的 `cpPanel` 工具栏中移除以下三个按钮：
+- 批量更新状态
+- 批量修改 Target Date
+- 批量修改 DV Milestone
+
+这三个按钮保留在 `tcPanel` 工具栏中。
+
+**验证**: CP 列表界面不再显示批量操作按钮。
 
 ---
 
@@ -565,6 +627,33 @@ cd dev && npx playwright test tests/tracker.spec.ts --project=firefox
 
 ---
 
+## 2. 功能增强
+
+### FEAT-002: 备份恢复自定义路径
+
+| 属性 | 值 |
+|------|-----|
+| **状态** | 待开发 |
+| **优先级** | Medium |
+| **目标版本** | v0.6.1 |
+| **提出日期** | 2026-02-08 |
+| **提出人** | 用户 |
+
+**描述**: 当前备份恢复功能只能搜索默认 `archives/` 目录，用户无法选择其他位置的备份文件。
+
+**建议方案**:
+- 恢复时提供"选择备份文件"按钮，弹出文件选择对话框
+- 支持选择本地 JSON 备份文件
+- API 新增 `POST /api/projects/restore/upload` 支持文件上传
+- 保留现有 `POST /api/projects/restore` 按文件名恢复的功能
+
+**影响范围**:
+- 前端：备份恢复弹窗增加文件上传功能
+- 后端：新增文件上传 API 端点
+- 用例：用户可以恢复任意位置的备份文件
+
+---
+
 ## 附录
 
 ### 相关文件
@@ -587,3 +676,5 @@ cd dev && npx playwright test tests/tracker.spec.ts --project=firefox
 | v1.5 | 2026-02-08 | 添加 BUG-015, BUG-016, BUG-017 |
 | v1.6 | 2026-02-08 | 修复 BUG-016, BUG-017 |
 | v1.7 | 2026-02-08 | 添加 BUG-018, BUG-019, BUG-020 |
+| v1.8 | 2026-02-08 | 修复 BUG-021 备份功能失败；添加 FEAT-002 备份恢复自定义路径 |
+| v1.9 | 2026-02-09 | 修复 BUG-022 CP列表显示批量操作按钮 |
