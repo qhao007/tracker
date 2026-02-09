@@ -42,15 +42,20 @@
         .data-table tr:nth-child(even) { background: #f9f9f9; }
         .data-table tr:hover { background: #e8f4fc; }
         .cp-table th:nth-child(1) { width: 13%; } .cp-table th:nth-child(2) { width: 10%; } .cp-table th:nth-child(3) { width: 15%; } .cp-table th:nth-child(4) { width: 30%; } .cp-table th:nth-child(5) { width: 12%; } .cp-table th:nth-child(6) { width: 10%; }
-        .tc-table th:nth-child(1) { width: 5%; } .tc-table th:nth-child(2) { width: 7%; } .tc-table th:nth-child(3) { width: 6%; } .tc-table th:nth-child(4) { width: 15%; } .tc-table th:nth-child(5) { width: 17%; } .tc-table th:nth-child(6) { width: 17%; } .tc-table th:nth-child(7) { width: 7%; } .tc-table th:nth-child(8) { width: 8%; } .tc-table th:nth-child(9) { width: 8%; }
+        .tc-table th:nth-child(1) { width: 4%; } .tc-table th:nth-child(2) { width: 7%; } .tc-table th:nth-child(3) { width: 6%; } .tc-table th:nth-child(4) { width: 6%; } .tc-table th:nth-child(5) { width: 6%; } .tc-table th:nth-child(6) { width: 15%; } .tc-table th:nth-child(7) { width: 8%; } .tc-table th:nth-child(8) { width: 6%; } .tc-table th:nth-child(9) { width: 8%; } .tc-table th:nth-child(10) { width: 6%; }
         .status-badge { padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: bold; }
         .coverage-badge { padding: 3px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; min-width: 45px; text-align: center; display: inline-block; }
         .coverage-detail { display: block; font-size: 10px; color: #666; margin-top: 2px; }
+        .priority-badge { padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: bold; min-width: 35px; text-align: center; display: inline-block; }
+        .priority-P0 { background: #f44336; color: white; }
+        .priority-P1 { background: #ff9800; color: white; }
+        .priority-P2 { background: #4caf50; color: white; }
         .bg-green { background: #4caf50; color: white; }
         .bg-yellow { background: #ff9800; color: white; }
         .bg-gray { background: #9e9e9e; color: white; }
         .bg-red { background: #f44336; color: white; }
-        .status-OPEN { background: #e3f2fd; color: #1976d2; } .status-CODED { background: #fff3e0; color: #f57c00; } .status-FAIL { background: #ffebee; color: #d32f2f; } .status-PASS { background: #e8f5e9; color: #388e3c; }
+        .status-OPEN { background: #e3f2fd; color: #1976d2; }
+.status-REMOVED { background: #f5f5f5; color: #9e9e9e; text-decoration: line-through; } .status-CODED { background: #fff3e0; color: #f57c00; } .status-FAIL { background: #ffebee; color: #d32f2f; } .status-PASS { background: #e8f5e9; color: #388e3c; }
         .details-toggle { color: #2170bb; cursor: pointer; font-size: 11px; text-decoration: underline; }
         .details-content { display: none; margin-top: 5px; padding: 8px; background: #f5f5f5; border-radius: 3px; font-size: 11px; }
         .details-content.show { display: block; }
@@ -63,6 +68,7 @@
         .action-btn.edit { color: #2170bb; } .action-btn.delete { color: #d32f2f; } .action-btn.toggle { color: #388e3c; }
         .status-select { padding: 2px 5px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; background: white; cursor: pointer; }
         .status-select option { background: white; color: #333; }
+        .cp-select, .tc-select { width: 16px; height: 16px; cursor: pointer; }
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
         .modal.active { display: flex; }
         .modal-content { background: white; border-radius: 5px; width: 600px; max-height: 80vh; overflow-y: auto; }
@@ -127,22 +133,25 @@
                 <div class="toolbar-right"><span style="color: #666; font-size: 12px;">共 <span id="cpCount">0</span> 条</span></div>
             </div>
             <table class="data-table cp-table" id="cpTable">
-                <thead><tr><th>Feature</th><th>Sub-Feature</th><th>Cover Point</th><th>Details</th><th>覆盖率</th><th>操作</th></tr></thead>
+                <thead><tr><th style="width: 30px;"><input type="checkbox" onchange="document.querySelectorAll('.cp-select').forEach(cb => cb.checked = this.checked); getSelectedCPs()"></th><th>Feature</th><th>Sub-Feature</th><th>Cover Point</th><th>Details</th><th>Priority</th><th>覆盖率</th><th>操作</th></tr></thead>
                 <tbody id="cpList"></tbody>
             </table>
         </div>
         <div id="tcPanel" style="display: none;">
             <div class="toolbar">
                 <div class="toolbar-left">
+            <button class="btn" onclick="showBatchStatusModal()">📋 批量更新状态</button>
+            <button class="btn" onclick="showBatchTargetDateModal()">📅 批量修改 Target Date</button>
+            <button class="btn" onclick="showBatchDvMilestoneModal()">🏷️ 批量修改 DV Milestone</button>
                     <button class="btn btn-primary" onclick="openTCModal()">+ 添加 TC</button>
                     <input type="text" class="search-input" placeholder="搜索..." onkeyup="filterTC(this.value)">
-                    <select onchange="filterTCStatus(this.value)"><option value="">全部状态</option><option value="OPEN">OPEN</option><option value="CODED">CODED</option><option value="FAIL">FAIL</option><option value="PASS">PASS</option></select>
+                    <select onchange="filterTCStatus(this.value)"><option value="">全部状态</option><option value="OPEN">OPEN</option><option value="CODED">CODED</option><option value="FAIL">FAIL</option><option value="PASS">PASS</option><option value="REMOVED">REMOVED</option></select>
                     <select onchange="sortTC(this.value)"><option value="id">按ID排序</option><option value="testbench">按TestBench</option><option value="owner">按Owner</option><option value="status">按状态</option></select>
                 </div>
                 <div class="toolbar-right"><span style="color: #666; font-size: 12px;">共 <span id="tcCount">0</span> 条</span></div>
             </div>
             <table class="data-table tc-table" id="tcTable">
-                <thead><tr><th>ID</th><th>TestBench</th><th>Category</th><th>Owner</th><th>Test Name</th><th>Scenario</th><th>Status</th><th>Completed</th><th>操作</th></tr></thead>
+                <thead><tr><th style="width: 30px;"><input type="checkbox" onchange="document.querySelectorAll('.tc-select').forEach(cb => cb.checked = this.checked); getSelectedTCs()"></th><th>ID</th><th>DV Milestone</th><th>TestBench</th><th>Category</th><th>Owner</th><th>Test Name</th><th>Target Date</th><th>Status</th><th>Status Date</th><th>操作</th></tr></thead>
                 <tbody id="tcList"></tbody>
             </table>
         </div>
@@ -155,9 +164,20 @@
             <div class="modal-body">
                 <form id="cpForm" onsubmit="saveCP(event)">
                     <input type="hidden" id="cpId">
-                    <div class="form-group"><label>Feature *</label><input type="text" class="form-control" id="cpFeature" required></div>
-                    <div class="form-group"><label>Sub-Feature</label><input type="text" class="form-control" id="cpSubFeature"></div>
-                    <div class="form-group"><label>Cover Point *（首要）</label><input type="text" class="form-control" id="cpCoverPoint" required></div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Feature *</label><input type="text" class="form-control" id="cpFeature" required></div>
+                        <div class="form-group"><label>Sub-Feature</label><input type="text" class="form-control" id="cpSubFeature"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Cover Point *（首要）</label><input type="text" class="form-control" id="cpCoverPoint" required></div>
+                        <div class="form-group"><label>Priority</label>
+                            <select class="form-control" id="cpPriority">
+                                <option value="P0">P0</option>
+                                <option value="P1">P1</option>
+                                <option value="P2">P2</option>
+                            </select>
+                        </div>
+                    </div>
                     <div class="form-group"><label>Cover Point Details *</label><textarea class="form-control" id="cpDetails" required></textarea></div>
                     <div class="form-group"><label>Comments</label><textarea class="form-control" id="cpComments"></textarea></div>
                     <div class="form-actions"><button type="submit" class="btn btn-primary">保存</button><button type="button" class="btn" onclick="closeModal('cpModal')">取消</button></div>
@@ -173,6 +193,17 @@
             <div class="modal-body">
                 <form id="tcForm" onsubmit="saveTC(event)">
                     <input type="hidden" id="tcId">
+                    <div class="form-row">
+                        <div class="form-group"><label>DV Milestone</label>
+                            <select class="form-control" id="tcDvMilestone">
+                                <option value="DV1.0" selected>DV1.0</option>
+                                <option value="DV0.3">DV0.3</option>
+                                <option value="DV0.5">DV0.5</option>
+                                <option value="DV0.7">DV0.7</option>
+                            </select>
+                        </div>
+                        <div class="form-group"><label>Target Date</label><input type="date" class="form-control" id="tcTargetDate"></div>
+                    </div>
                     <div class="form-row"><div class="form-group"><label>TestBench *</label><input type="text" class="form-control" id="tcTestbench" required></div><div class="form-group"><label>Category</label><input type="text" class="form-control" id="tcCategory"></div></div>
                     <div class="form-group"><label>Owner</label><input type="text" class="form-control" id="tcOwner"></div>
                     <div class="form-group"><label>Test Name *（首要）</label><input type="text" class="form-control" id="tcTestName" required></div>
@@ -205,6 +236,95 @@
             <div class="modal-body">
                 <div class="form-group"><label>备份当前项目</label><button class="btn btn-primary" onclick="archiveCurrentProject()">💾 导出备份</button></div>
                 <div class="form-group"><label>从备份恢复</label><div class="project-list" id="archiveList"></div></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Batch Status Modal -->
+    <div class="modal" id="batchStatusModal">
+        <div class="modal-content" style="width: 400px;">
+            <div class="modal-header"><span>批量更新状态</span><button class="modal-close" onclick="closeModal('batchStatusModal')">&times;</button></div>
+            <div class="modal-body">
+                <p style="margin-bottom: 15px;">将选中的 Test Cases 状态更新为：</p>
+                <div class="form-group">
+                    <label>新状态</label>
+                    <select class="form-control" id="batchStatusValue">
+                        <option value="OPEN">OPEN</option>
+                        <option value="CODED">CODED</option>
+                        <option value="FAIL">FAIL</option>
+                        <option value="PASS">PASS</option>
+                        <option value="REMOVED">REMOVED</option>
+                    </select>
+                </div>
+                <p style="color: #666; font-size: 12px; margin-bottom: 15px;">⚠️ REMOVED 状态的 TC 将清除与 Cover Points 的关联</p>
+                <div class="form-actions">
+                    <button class="btn" onclick="closeModal('batchStatusModal')">取消</button>
+                    <button class="btn btn-primary" onclick="executeBatchStatus()">确认更新</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Batch Target Date Modal -->
+    <div class="modal" id="batchTargetDateModal">
+        <div class="modal-content" style="width: 400px;">
+            <div class="modal-header"><span>批量修改 Target Date</span><button class="modal-close" onclick="closeModal('batchTargetDateModal')">&times;</button></div>
+            <div class="modal-body">
+                <p style="margin-bottom: 15px;">为选中的 Test Cases 设置 Target Date：</p>
+                <div class="form-group">
+                    <label>Target Date</label>
+                    <input type="date" class="form-control" id="batchTargetDateValue">
+                </div>
+                <div class="form-actions">
+                    <button class="btn" onclick="closeModal('batchTargetDateModal')">取消</button>
+                    <button class="btn btn-primary" onclick="executeBatchTargetDate()">确认更新</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Batch DV Milestone Modal -->
+    <div class="modal" id="batchDvMilestoneModal">
+        <div class="modal-content" style="width: 400px;">
+            <div class="modal-header"><span>批量修改 DV Milestone</span><button class="modal-close" onclick="closeModal('batchDvMilestoneModal')">&times;</button></div>
+            <div class="modal-body">
+                <p style="margin-bottom: 15px;">为选中的 Test Cases 设置 DV Milestone：</p>
+                <div class="form-group">
+                    <label>DV Milestone</label>
+                    <select class="form-control" id="batchDvMilestoneValue">
+                        <option value="">-- 选择 --</option>
+                        <option value="DV0.3">DV0.3</option>
+                        <option value="DV0.5">DV0.5</option>
+                        <option value="DV0.7">DV0.7</option>
+                        <option value="DV1.0">DV1.0</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button class="btn" onclick="closeModal('batchDvMilestoneModal')">取消</button>
+                    <button class="btn btn-primary" onclick="executeBatchDvMilestone()">确认更新</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Batch CP Priority Modal -->
+    <div class="modal" id="batchPriorityModal">
+        <div class="modal-content" style="width: 400px;">
+            <div class="modal-header"><span>批量修改 Priority</span><button class="modal-close" onclick="closeModal('batchPriorityModal')">&times;</button></div>
+            <div class="modal-body">
+                <p style="margin-bottom: 15px;">为选中的 Cover Points 设置 Priority：</p>
+                <div class="form-group">
+                    <label>Priority</label>
+                    <select class="form-control" id="batchPriorityValue">
+                        <option value="P0">P0</option>
+                        <option value="P1">P1</option>
+                        <option value="P2">P2</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button class="btn" onclick="closeModal('batchPriorityModal')">取消</button>
+                    <button class="btn btn-primary" onclick="executeBatchPriority()">确认更新</button>
+                </div>
             </div>
         </div>
     </div>
@@ -314,8 +434,8 @@
             if (filter) { filter = filter.toLowerCase(); filtered = filtered.filter(cp => cp.feature.toLowerCase().includes(filter) || (cp.sub_feature && cp.sub_feature.toLowerCase().includes(filter)) || cp.cover_point.toLowerCase().includes(filter)); }
             document.getElementById('cpCount').textContent = filtered.length;
             const tbody = document.getElementById('cpList');
-            if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #999; padding: 30px;">暂无数据</td></tr>'; return; }
-            tbody.innerHTML = filtered.map(cp => `<tr><td>${escapeHtml(cp.feature)}</td><td>${escapeHtml(cp.sub_feature || '')}</td><td><strong>${escapeHtml(cp.cover_point)}</strong></td><td>${escapeHtml(cp.cover_point_details || '')}</td><td><span class="coverage-badge ${cp.coverage === 100 ? 'bg-green' : cp.coverage > 0 ? 'bg-yellow' : 'bg-red'}">${cp.coverage}%</span><small class="coverage-detail">${cp.coverage_detail}</small></td><td><div class="action-btns"><button class="action-btn edit" onclick="editCP(${cp.id})">编辑</button><button class="action-btn delete" onclick="deleteCP(${cp.id})">删除</button></div></td></tr>`).join('');
+            if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #999; padding: 30px;">暂无数据</td></tr>'; return; }
+            tbody.innerHTML = filtered.map(cp => `<tr><td><input type="checkbox" class="cp-select" value="${cp.id}" onchange="getSelectedCPs()"></td><td>${escapeHtml(cp.feature)}</td><td>${escapeHtml(cp.sub_feature || '')}</td><td><strong>${escapeHtml(cp.cover_point)}</strong></td><td>${escapeHtml(cp.cover_point_details || '')}</td><td><span class="priority-badge">${cp.priority || 'P0'}</span></td><td><span class="coverage-badge ${cp.coverage === 100 ? 'bg-green' : cp.coverage > 0 ? 'bg-yellow' : 'bg-red'}">${cp.coverage}%</span><small class="coverage-detail">${cp.coverage_detail}</small></td><td><div class="action-btns"><button class="action-btn edit" onclick="editCP(${cp.id})">编辑</button><button class="action-btn delete" onclick="deleteCP(${cp.id})">删除</button></div></td></tr>`).join('');
         }
         
         function renderTC(filter = '', statusFilter = '', sortBy = 'id') {
@@ -326,7 +446,7 @@
                 if (sortBy === 'id') return a.id - b.id;
                 if (sortBy === 'testbench') return (a.testbench || '').localeCompare(b.testbench || '');
                 if (sortBy === 'owner') return (a.owner || '').localeCompare(b.owner || '');
-                if (sortBy === 'status') { const order = {'OPEN':0, 'CODED':1, 'FAIL':2, 'PASS':3}; return (order[a.status]||0) - (order[b.status]||0); }
+                if (sortBy === 'status') { const order = {'OPEN':0, 'CODED':1, 'FAIL':2, 'PASS':3, 'REMOVED':4}; return (order[a.status]||0) - (order[b.status]||0); }
                 return 0;
             });
             document.getElementById('tcCount').textContent = filtered.length;
@@ -335,8 +455,12 @@
             tbody.innerHTML = filtered.map(tc => {
                 const hasDetails = tc.checker_details || tc.coverage_details || tc.comments;
                 const detailsId = `tc-details-${tc.id}`;
-                const completedDate = tc.status === 'PASS' ? (tc.completed_date || '-') : '-';
-                return `<tr><td>${tc.id}</td><td>${escapeHtml(tc.testbench)}</td><td>${escapeHtml(tc.category || '')}</td><td>${escapeHtml(tc.owner || '')}</td><td><strong>${escapeHtml(tc.test_name)}</strong></td><td>${escapeHtml(tc.scenario_details || '')}</td><td><select class="status-select" onchange="updateTCStatus(${tc.id}, this.value)"><option value="OPEN" ${tc.status === 'OPEN' ? 'selected' : ''}>OPEN</option><option value="CODED" ${tc.status === 'CODED' ? 'selected' : ''}>CODED</option><option value="FAIL" ${tc.status === 'FAIL' ? 'selected' : ''}>FAIL</option><option value="PASS" ${tc.status === 'PASS' ? 'selected' : ''}>PASS</option></select></td><td>${completedDate}</td><td><div class="action-btns"><button class="action-btn edit" onclick="editTC(${tc.id})">编辑</button><button class="action-btn delete" onclick="deleteTC(${tc.id})">删除</button></div>${hasDetails ? `<div class="details-toggle" onclick="toggleDetails('${detailsId}')">[详情▼]</div>` : ''}</td></tr>${hasDetails ? `<tr><td colspan="9" style="padding: 0;"><div class="details-content" id="${detailsId}">${tc.checker_details ? `<div class="detail-row"><span class="detail-label">Checker:</span><span class="detail-value">${escapeHtml(tc.checker_details)}</span></div>` : ''}${tc.coverage_details ? `<div class="detail-row"><span class="detail-label">Coverage:</span><span class="detail-value">${escapeHtml(tc.coverage_details)}</span></div>` : ''}${tc.comments ? `<div class="detail-row"><span class="detail-label">Comments:</span><span class="detail-value">${escapeHtml(tc.comments)}</span></div>` : ''}</div></td></tr>` : ''}`;
+                // 获取状态日期
+                const statusDateMap = { 'CODED': tc.coded_date, 'FAIL': tc.fail_date, 'PASS': tc.pass_date, 'REMOVED': tc.removed_date };
+                const statusDate = statusDateMap[tc.status] || '';
+                // 状态日期显示逻辑
+                const statusDateDisplay = statusDate ? statusDate : '-';
+                return `<tr><td><input type="checkbox" class="tc-select" value="${tc.id}" onchange="getSelectedTCs()"></td><td>${tc.id}</td><td>${tc.dv_milestone || '-'}</td><td>${escapeHtml(tc.testbench)}</td><td>${escapeHtml(tc.category || '')}</td><td>${escapeHtml(tc.owner || '')}</td><td><strong>${escapeHtml(tc.test_name)}</strong></td><td>${tc.target_date || '-'}</td><td><select class="status-select status-${tc.status}" onchange="updateTCStatus(${tc.id}, this.value)"><option value="OPEN" ${tc.status === 'OPEN' ? 'selected' : ''}>OPEN</option><option value="CODED" ${tc.status === 'CODED' ? 'selected' : ''}>CODED</option><option value="FAIL" ${tc.status === 'FAIL' ? 'selected' : ''}>FAIL</option><option value="PASS" ${tc.status === 'PASS' ? 'selected' : ''}>PASS</option><option value="REMOVED" ${tc.status === 'REMOVED' ? 'selected' : ''}>REMOVED</option></select></td><td>${statusDateDisplay}</td><td><div class="action-btns"><button class="action-btn edit" onclick="editTC(${tc.id})">编辑</button><button class="action-btn delete" onclick="deleteTC(${tc.id})">删除</button></div>${hasDetails ? `<div class="details-toggle" onclick="toggleDetails('${detailsId}')">[详情▼]</div>` : ''}</td></tr>${hasDetails ? `<tr><td colspan="11" style="padding: 0;"><div class="details-content" id="${detailsId}">${tc.checker_details ? `<div class="detail-row"><span class="detail-label">Checker:</span><span class="detail-value">${escapeHtml(tc.checker_details)}</span></div>` : ''}${tc.coverage_details ? `<div class="detail-row"><span class="detail-label">Coverage:</span><span class="detail-value">${escapeHtml(tc.coverage_details)}</span></div>` : ''}${tc.comments ? `<div class="detail-row"><span class="detail-label">Comments:</span><span class="detail-value">${escapeHtml(tc.comments)}</span></div>` : ''}</div></td></tr>` : ''}`;
             }).join('');
         }
         
@@ -351,7 +475,7 @@
         function openCPModal(id = null) {
             document.getElementById('cpModalTitle').textContent = id ? '编辑 Cover Point' : '添加 Cover Point';
             document.getElementById('cpId').value = id || '';
-            if (id) { const cp = coverPoints.find(c => c.id === id); if (cp) { document.getElementById('cpFeature').value = cp.feature; document.getElementById('cpSubFeature').value = cp.sub_feature || ''; document.getElementById('cpCoverPoint').value = cp.cover_point; document.getElementById('cpDetails').value = cp.cover_point_details || ''; document.getElementById('cpComments').value = cp.comments || ''; } }
+            if (id) { const cp = coverPoints.find(c => c.id === id); if (cp) { document.getElementById('cpPriority').value = cp.priority || 'P0'; document.getElementById('cpFeature').value = cp.feature; document.getElementById('cpSubFeature').value = cp.sub_feature || ''; document.getElementById('cpCoverPoint').value = cp.cover_point; document.getElementById('cpDetails').value = cp.cover_point_details || ''; document.getElementById('cpComments').value = cp.comments || ''; } }
             else { document.getElementById('cpForm').reset(); }
             document.getElementById('cpModal').classList.add('active');
         }
@@ -360,7 +484,7 @@
             document.getElementById('tcModalTitle').textContent = id ? '编辑 Test Case' : '添加 Test Case';
             document.getElementById('tcId').value = id || '';
             document.getElementById('cpCheckboxes').innerHTML = coverPoints.map(cp => `<div class="checkbox-item"><input type="checkbox" id="cp_${cp.id}" value="${cp.id}"><label for="cp_${cp.id}">${escapeHtml(cp.cover_point)}</label></div>`).join('') || '<p style="color: #999;">请先添加 Cover Points</p>';
-            if (id) { const tc = testCases.find(t => t.id === id); if (tc) { document.getElementById('tcTestbench').value = tc.testbench; document.getElementById('tcCategory').value = tc.category || ''; document.getElementById('tcOwner').value = tc.owner || ''; document.getElementById('tcTestName').value = tc.test_name; document.getElementById('tcScenario').value = tc.scenario_details || ''; document.getElementById('tcChecker').value = tc.checker_details || ''; document.getElementById('tcCoverage').value = tc.coverage_details || ''; document.getElementById('tcComments').value = tc.comments || ''; tc.connected_cps && tc.connected_cps.forEach(cpId => { const cb = document.getElementById(`cp_${cpId}`); if (cb) cb.checked = true; }); } }
+            if (id) { const tc = testCases.find(t => t.id === id); if (tc) { document.getElementById('tcDvMilestone').value = tc.dv_milestone || 'DV1.0'; document.getElementById('tcTargetDate').value = tc.target_date || ''; document.getElementById('tcTestbench').value = tc.testbench; document.getElementById('tcCategory').value = tc.category || ''; document.getElementById('tcOwner').value = tc.owner || ''; document.getElementById('tcTestName').value = tc.test_name; document.getElementById('tcScenario').value = tc.scenario_details || ''; document.getElementById('tcChecker').value = tc.checker_details || ''; document.getElementById('tcCoverage').value = tc.coverage_details || ''; document.getElementById('tcComments').value = tc.comments || ''; tc.connected_cps && tc.connected_cps.forEach(cpId => { const cb = document.getElementById(`cp_${cpId}`); if (cb) cb.checked = true; }); } }
             else { document.getElementById('tcForm').reset(); }
             document.getElementById('tcModal').classList.add('active');
         }
@@ -368,21 +492,195 @@
         async function saveCP(e) {
             e.preventDefault();
             const id = document.getElementById('cpId').value;
-            const data = { project_id: currentProject.id, feature: document.getElementById('cpFeature').value, sub_feature: document.getElementById('cpSubFeature').value, cover_point: document.getElementById('cpCoverPoint').value, cover_point_details: document.getElementById('cpDetails').value, comments: document.getElementById('cpComments').value };
-            try { const res = await fetch(`/api/cp${id ? '/'+id : ''}`, { method: id ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }); const result = await res.json(); if (result.success) { closeModal('cpModal'); await loadCP(); } else { alert(result.error || '保存失败'); } } catch (err) { alert('保存失败: ' + err); }
+            const data = { project_id: currentProject.id, priority: document.getElementById('cpPriority').value, feature: document.getElementById('cpFeature').value, sub_feature: document.getElementById('cpSubFeature').value, cover_point: document.getElementById('cpCoverPoint').value, cover_point_details: document.getElementById('cpDetails').value, comments: document.getElementById('cpComments').value };
+            try { const res = await fetch(`/api/cp${id ? '/'+id : ''}`, { method: id ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }); const result = await res.json(); if (result.success) { closeModal('cpModal'); await Promise.all([loadCP(), loadStats()]); } else { alert(result.error || '保存失败'); } } catch (err) { alert('保存失败: ' + err); }
         }
         
         async function saveTC(e) {
             e.preventDefault();
             const id = document.getElementById('tcId').value;
             const connections = []; document.querySelectorAll('#cpCheckboxes input:checked').forEach(cb => connections.push(parseInt(cb.value)));
-            const data = { project_id: currentProject.id, testbench: document.getElementById('tcTestbench').value, category: document.getElementById('tcCategory').value, owner: document.getElementById('tcOwner').value, test_name: document.getElementById('tcTestName').value, scenario_details: document.getElementById('tcScenario').value, checker_details: document.getElementById('tcChecker').value, coverage_details: document.getElementById('tcCoverage').value, comments: document.getElementById('tcComments').value, connections };
+            const data = { project_id: currentProject.id, dv_milestone: document.getElementById('tcDvMilestone').value, target_date: document.getElementById('tcTargetDate').value, testbench: document.getElementById('tcTestbench').value, category: document.getElementById('tcCategory').value, owner: document.getElementById('tcOwner').value, test_name: document.getElementById('tcTestName').value, scenario_details: document.getElementById('tcScenario').value, checker_details: document.getElementById('tcChecker').value, coverage_details: document.getElementById('tcCoverage').value, comments: document.getElementById('tcComments').value, connections };
             try { const res = await fetch(`/api/tc${id ? '/'+id : ''}`, { method: id ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }); const result = await res.json(); if (result.success) { closeModal('tcModal'); await Promise.all([loadTC(), loadStats()]); } else { alert(result.error || '保存失败'); } } catch (err) { alert('保存失败: ' + err); }
         }
         
         async function deleteCP(id) { if (!currentProject) return; if (!confirm('确定删除?')) return; try { await fetch(`/api/cp/${id}?project_id=${currentProject.id}`, { method: 'DELETE' }); await loadCP(); } catch (e) { alert('删除失败'); } }
         async function deleteTC(id) { if (!currentProject) return; if (!confirm('确定删除?')) return; try { await fetch(`/api/tc/${id}?project_id=${currentProject.id}`, { method: 'DELETE' }); await Promise.all([loadTC(), loadStats()]); } catch (e) { alert('删除失败'); } }
-        async function updateTCStatus(id, newStatus) { if (!currentProject) return; try { await fetch(`/api/tc/${id}/status`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ project_id: currentProject.id, status: newStatus }) }); await Promise.all([loadTC(), loadStats()]); } catch (e) { alert('状态更新失败'); } }
+        async function updateTCStatus(id, newStatus) {
+            if (!currentProject) return;
+            
+            // PASS → 其他状态需要确认
+            const tc = testCases.find(t => t.id === id);
+            if (tc && tc.status === 'PASS' && newStatus !== 'PASS') {
+                const confirmed = confirm('确认状态变更\n\n将状态从 PASS 改为 ' + newStatus + '？\n完成日期会被重置。');
+                if (!confirmed) return;
+            }
+            
+            try {
+                await fetch(`/api/tc/${id}/status`, { 
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({ project_id: currentProject.id, status: newStatus }) 
+                });
+                await Promise.all([loadTC(), loadStats()]);
+            } catch (e) {
+                alert('状态更新失败');
+            }
+        }
+        
+        // ============ 批量操作 ============
+        
+        let selectedTCs = [];
+        let selectedCPs = [];
+        
+        function getSelectedTCs() {
+            selectedTCs = [];
+            document.querySelectorAll('#tcList input[type="checkbox"]:checked').forEach(cb => {
+                selectedTCs.push(parseInt(cb.value));
+            });
+            return selectedTCs;
+        }
+        
+        function getSelectedCPs() {
+            selectedCPs = [];
+            document.querySelectorAll('#cpList input[type="checkbox"]:checked').forEach(cb => {
+                selectedCPs.push(parseInt(cb.value));
+            });
+            return selectedCPs;
+        }
+        
+        function showBatchStatusModal() {
+            if (!currentProject) { alert('请先选择项目'); return; }
+            getSelectedTCs();
+            if (selectedTCs.length === 0) { alert('请先选择要更新的 Test Cases'); return; }
+            document.getElementById('batchStatusModal').classList.add('active');
+        }
+        
+        function showBatchTargetDateModal() {
+            if (!currentProject) { alert('请先选择项目'); return; }
+            getSelectedTCs();
+            if (selectedTCs.length === 0) { alert('请先选择要更新的 Test Cases'); return; }
+            document.getElementById('batchTargetDateModal').classList.add('active');
+        }
+        
+        function showBatchDvMilestoneModal() {
+            if (!currentProject) { alert('请先选择项目'); return; }
+            getSelectedTCs();
+            if (selectedTCs.length === 0) { alert('请先选择要更新的 Test Cases'); return; }
+            document.getElementById('batchDvMilestoneModal').classList.add('active');
+        }
+        
+        function showBatchPriorityModal() {
+            if (!currentProject) { alert('请先选择项目'); return; }
+            getSelectedCPs();
+            if (selectedCPs.length === 0) { alert('请先选择要更新的 Cover Points'); return; }
+            document.getElementById('batchPriorityModal').classList.add('active');
+        }
+        
+        async function executeBatchStatus() {
+            const newStatus = document.getElementById('batchStatusValue').value;
+            if (!newStatus) { alert('请选择新状态'); return; }
+            
+            try {
+                const res = await fetch('/api/tc/batch/status', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        project_id: currentProject.id,
+                        tc_ids: selectedTCs,
+                        status: newStatus
+                    })
+                });
+                const result = await res.json();
+                if (result.success !== undefined) {
+                    closeModal('batchStatusModal');
+                    await Promise.all([loadTC(), loadStats()]);
+                    alert(`批量更新完成: 成功 ${result.success} 个, 失败 ${result.failed} 个`);
+                } else {
+                    alert(result.error || '批量更新失败');
+                }
+            } catch (e) {
+                alert('批量更新失败: ' + e);
+            }
+        }
+        
+        async function executeBatchTargetDate() {
+            const targetDate = document.getElementById('batchTargetDateValue').value;
+            
+            try {
+                const res = await fetch('/api/tc/batch/target_date', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        project_id: currentProject.id,
+                        tc_ids: selectedTCs,
+                        target_date: targetDate
+                    })
+                });
+                const result = await res.json();
+                if (result.success !== undefined) {
+                    closeModal('batchTargetDateModal');
+                    await Promise.all([loadTC(), loadStats()]);
+                    alert(`批量更新完成: 成功 ${result.success} 个, 失败 ${result.failed} 个`);
+                } else {
+                    alert(result.error || '批量更新失败');
+                }
+            } catch (e) {
+                alert('批量更新失败: ' + e);
+            }
+        }
+        
+        async function executeBatchDvMilestone() {
+            const dvMilestone = document.getElementById('batchDvMilestoneValue').value;
+            
+            try {
+                const res = await fetch('/api/tc/batch/dv_milestone', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        project_id: currentProject.id,
+                        tc_ids: selectedTCs,
+                        dv_milestone: dvMilestone
+                    })
+                });
+                const result = await res.json();
+                if (result.success !== undefined) {
+                    closeModal('batchDvMilestoneModal');
+                    await Promise.all([loadTC(), loadStats()]);
+                    alert(`批量更新完成: 成功 ${result.success} 个, 失败 ${result.failed} 个`);
+                } else {
+                    alert(result.error || '批量更新失败');
+                }
+            } catch (e) {
+                alert('批量更新失败: ' + e);
+            }
+        }
+        
+        async function executeBatchPriority() {
+            const priority = document.getElementById('batchPriorityValue').value;
+            
+            try {
+                const res = await fetch('/api/cp/batch/priority', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        project_id: currentProject.id,
+                        cp_ids: selectedCPs,
+                        priority: priority
+                    })
+                });
+                const result = await res.json();
+                if (result.success !== undefined) {
+                    closeModal('batchPriorityModal');
+                    await loadCP();
+                    alert(`批量更新完成: 成功 ${result.success} 个, 失败 ${result.failed} 个`);
+                } else {
+                    alert(result.error || '批量更新失败');
+                }
+            } catch (e) {
+                alert('批量更新失败: ' + e);
+            }
+        }
         
         function editCP(id) { openCPModal(id); }
         function editTC(id) { openTCModal(id); }

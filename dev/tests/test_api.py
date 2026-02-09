@@ -296,6 +296,149 @@ class TestTestCasesAPI:
         assert response.status_code == 200
 
 
+# ============ v0.6.0 批量操作 API 测试 ============
+
+class TestTCBatchStatusAPI:
+    """TC 批量状态更新 API 测试 (v0.6.0)"""
+    
+    def test_batch_update_status(self, client, test_project):
+        """POST /api/tc/batch/status - 批量更新状态"""
+        # 先创建多个 TC
+        tc_ids = []
+        for i in range(2):
+            create_resp = client.post('/api/tc',
+                data=json.dumps({
+                    'project_id': test_project["id"],
+                    'testbench': f'TB_Batch_{i}_{int(time.time())}',
+                    'category': 'Sanity',
+                    'owner': 'Tester',
+                    'test_name': f'TC_Batch_{i}_{int(time.time())}',
+                    'scenario_details': 'Test batch status'
+                }),
+                content_type='application/json')
+            if create_resp.status_code == 200:
+                tc_ids.append(json.loads(create_resp.data)['item']['id'])
+        
+        # 批量更新状态
+        response = client.post('/api/tc/batch/status',
+            data=json.dumps({
+                'project_id': test_project["id"],
+                'tc_ids': tc_ids,
+                'status': 'CODED'
+            }),
+            content_type='application/json')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['failed'] == 0
+        assert data['success'] == len(tc_ids)
+    
+    def test_batch_update_status_empty_list(self, client, test_project):
+        """POST /api/tc/batch/status - 空列表返回错误"""
+        response = client.post('/api/tc/batch/status',
+            data=json.dumps({
+                'project_id': test_project["id"],
+                'tc_ids': [],
+                'status': 'CODED'
+            }),
+            content_type='application/json')
+        # 空列表返回 400 Bad Request
+        assert response.status_code == 400
+
+
+class TestTCBatchTargetDateAPI:
+    """TC 批量 Target Date API 测试 (v0.6.0)"""
+    
+    def test_batch_update_target_date(self, client, test_project):
+        """POST /api/tc/batch/target_date - 批量更新 Target Date"""
+        # 先创建 TC
+        create_resp = client.post('/api/tc',
+            data=json.dumps({
+                'project_id': test_project["id"],
+                'testbench': f'TB_Target_{int(time.time())}',
+                'category': 'Sanity',
+                'owner': 'Tester',
+                'test_name': f'TC_Target_{int(time.time())}',
+                'scenario_details': 'Test target date'
+            }),
+            content_type='application/json')
+        if create_resp.status_code == 200:
+            tc_id = json.loads(create_resp.data)['item']['id']
+            
+            # 批量更新
+            response = client.post('/api/tc/batch/target_date',
+                data=json.dumps({
+                    'project_id': test_project["id"],
+                    'tc_ids': [tc_id],
+                    'target_date': '2026-03-01'
+                }),
+                content_type='application/json')
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert data['success'] == 1
+
+
+class TestTCBatchDvMilestoneAPI:
+    """TC 批量 DV Milestone API 测试 (v0.6.0)"""
+    
+    def test_batch_update_dv_milestone(self, client, test_project):
+        """POST /api/tc/batch/dv_milestone - 批量更新 DV Milestone"""
+        # 先创建 TC
+        create_resp = client.post('/api/tc',
+            data=json.dumps({
+                'project_id': test_project["id"],
+                'testbench': f'TB_DV_{int(time.time())}',
+                'category': 'Sanity',
+                'owner': 'Tester',
+                'test_name': f'TC_DV_{int(time.time())}',
+                'scenario_details': 'Test dv milestone'
+            }),
+            content_type='application/json')
+        if create_resp.status_code == 200:
+            tc_id = json.loads(create_resp.data)['item']['id']
+            
+            # 批量更新
+            response = client.post('/api/tc/batch/dv_milestone',
+                data=json.dumps({
+                    'project_id': test_project["id"],
+                    'tc_ids': [tc_id],
+                    'dv_milestone': 'DV1.0'
+                }),
+                content_type='application/json')
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert data['success'] == 1
+
+
+class TestCPBatchPriorityAPI:
+    """CP 批量 Priority API 测试 (v0.6.0)"""
+    
+    def test_batch_update_priority(self, client, test_project):
+        """POST /api/cp/batch/priority - 批量更新 Priority"""
+        # 先创建 CP
+        create_resp = client.post('/api/cp',
+            data=json.dumps({
+                'project_id': test_project["id"],
+                'feature': f'Feature_Prio_{int(time.time())}',
+                'cover_point': f'CP_Prio_{int(time.time())}',
+                'cover_point_details': 'Test priority'
+            }),
+            content_type='application/json')
+        if create_resp.status_code == 200:
+            cp_id = json.loads(create_resp.data)['item']['id']
+            
+            # 批量更新
+            response = client.post('/api/cp/batch/priority',
+                data=json.dumps({
+                    'project_id': test_project["id"],
+                    'cp_ids': [cp_id],
+                    'priority': 'P1'
+                }),
+                content_type='application/json')
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert data['success'] == 1
+
+
 # ============ 统计 API 测试 ============
 
 class TestStatsAPI:

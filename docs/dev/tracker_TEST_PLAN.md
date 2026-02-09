@@ -14,7 +14,8 @@
 /projects/management/tracker/              ← Git 仓库（只维护 dev/）
 ├── dev/                                  ← 开发版代码（Git 分支: develop）
 │   ├── server.py                        # 开发启动脚本 (:8081)
-│   ├── server_test.py                   # 测试启动脚本
+│   ├── server_test.py                   # 旧启动脚本（已弃用）
+│   ├── start_server_test.sh                 # 新启动脚本 (gunicorn)
 │   ├── app/                             # Flask 应用
 │   ├── index.html                       # 前端页面
 │   ├── data → ../shared/data/test_data  # 测试数据
@@ -120,8 +121,8 @@ python3 scripts/data_manager.py clean
 ```
 /projects/management/tracker/              ← Git 仓库（只维护 dev/）
 ├── dev/                                    ← 测试版 (端口 8081)
-│   ├── server_test.py
-│   ├── app/
+│   ├── server_test.py          # 旧启动脚本（已弃用）
+│   ├── start_server_test.sh        # 新启动脚本 (gunicorn)
 │   ├── index.html
 │   └── data → ../shared/data/test_data
 │
@@ -149,7 +150,7 @@ python3 scripts/data_manager.py clean
 | T001 | 发布目录符号链接 | `ls -la /release/tracker/current/data` | 指向 /projects/management/tracker/shared/data/user_data |
 | T002 | dev/data 符号链接 | `ls -la dev/data` | 指向 ../shared/data/test_data |
 | T003 | shared/data 目录结构 | 检查目录 | user_data/ 和 test_data/ 分离 |
-| T004 | dev/ 启动 | `cd dev && python3 server_test.py` | 访问 http://localhost:8081 |
+| T004 | dev/ 启动 | `cd dev && bash start_server_test.sh` | 访问 http://localhost:8081 |
 | T005 | stable/ 启动 | `/release/tracker/current/server.py` | 访问 http://localhost:8080 |
 
 ### 2.3 数据隔离测试
@@ -625,7 +626,7 @@ playwright screenshot --diff
 | ID | 测试项 | 测试步骤 | 预期结果 | 执行方式 |
 |----|--------|----------|----------|----------|
 | C001 | 正式版启动 | `cd stable && python3 server.py` | 正常启动 | 脚本 |
-| C002 | 测试版启动 | `cd dev && python3 server_test.py` | 正常启动 | 脚本 |
+| C002 | 测试版启动 | `cd dev && bash start_server_test.sh` | 正常启动 | 脚本 |
 | C003 | 端口占用 | 检查 8080/8081 端口 | 互不冲突 | 脚本 |
 | C004 | 数据迁移 | 从 v0.2 迁移 | 数据完整 | 脚本 |
 
@@ -881,7 +882,7 @@ python3 scripts/release.py --version v0.3.3 --force
 
 ### 9.1 覆盖功能列表
 
-根据规格书 `docs/dev/tracker_规格书_v0.3.md` 3.1 功能列表，以下关键功能需要 Playwright 自动化测试覆盖：
+根据规格书 `docs/dev/tracker_SPECIFICATION.md` 3.1 功能列表，以下关键功能需要 Playwright 自动化测试覆盖：
 
 | 编号 | 功能 | 描述 | 测试优先级 |
 |------|------|------|----------|
@@ -1038,7 +1039,7 @@ sudo systemctl start tracker
 # 访问 http://localhost:8080
 
 # 启动测试版 (dev)
-cd dev && python3 server_test.py &
+cd dev && bash start_server_test.sh
 # 访问 http://localhost:8081
 ```
 

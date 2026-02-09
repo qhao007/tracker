@@ -1,6 +1,6 @@
-# 芯片验证 Tracker v0.3 规格书
+# 芯片验证 Tracker v0.6.0 总体规格书
 
-> **版本**: v0.3 | **更新日期**: 2026-02-04 | **状态**: 正式发布
+> **版本**: v0.6.0 | **更新日期**: 2026-02-08 | **状态**: 正式发布
 
 ---
 
@@ -48,14 +48,16 @@
 | 数据持久化到 SQLite 数据库 | |
 | systemd 正式版部署 | |
 
-### 1.4 v0.3 重大变更
+### 1.4 v0.6.0 重大变更
 
-**代码与数据完全隔离：**
+**v0.6.0 第一阶段功能增强：**
 
-- 测试版 (`dev/`) 和正式版 (`stable/`) 代码完全独立
-- 用户数据存储在 `shared/data/` 目录，独立于代码
-- 版本发布只替换代码，不覆盖用户数据
-- 数据库支持版本号管理和自动迁移
+- **Status 日期记录**: CODED/FAIL/PASS/REMOVED 状态变更时自动记录日期
+- **Target Date 字段**: 支持设置测试预期完成日期
+- **REMOVED 状态**: 新增已移除测试用例状态，统计时自动排除
+- **批量修改功能**: 支持批量更新状态、Target Date、DV Milestone
+- **DV Milestone 字段**: 跟踪测试用例所属的 DV 里程碑版本
+- **CP Priority 字段**: 支持 Cover Point 优先级标记 (P0/P1/P2)
 
 ---
 
@@ -67,7 +69,8 @@
 /projects/management/tracker/              ← Git 仓库（只维护 dev/）
 ├── dev/                                  ← 开发版代码（Git 分支: develop）
 │   ├── server.py                        # 开发启动脚本 (:8081)
-│   ├── server_test.py                   # 测试启动脚本
+│   ├── server_test.py      # 旧启动脚本（已弃用）
+│   ├── start_server_test.sh     # 新启动脚本 (gunicorn)
 │   ├── app/                             # Flask 应用
 │   ├── index.html                       # 前端页面
 │   ├── data → ../shared/data/test_data  # 测试数据
@@ -156,7 +159,7 @@ python3 scripts/data_manager.py clean
 | 版本 | 端口 | 数据目录 | 启动命令 |
 |------|------|----------|----------|
 | 正式版 | 8080 | user_data | `cd stable && python3 server.py` |
-| 测试版 | 8081 | test_data | `cd dev && python3 server_test.py` |
+| 测试版 | 8081 | test_data | `cd dev && bash start_server_test.sh` |
 
 ---
 
@@ -185,6 +188,12 @@ python3 scripts/data_manager.py clean
 | F017 | **兼容性检查** | 启动时自动检查 | P1 |
 | F018 | **界面优化** | Excel 风格，紧凑显示 | P2 |
 | F019 | **systemd 部署** | 正式版 24/7 运行 | P1 |
+| **F020** | **Status 日期记录** | 状态变更时自动记录日期 | P0 |
+| **F021** | **Target Date 字段** | 设置测试预期完成日期 | P0 |
+| **F022** | **REMOVED 状态** | 已移除测试用例状态 | P0 |
+| **F023** | **批量修改功能** | 批量更新状态/日期/里程碑 | P0 |
+| **F024** | **DV Milestone 字段** | 跟踪 DV 里程碑版本 | P0 |
+| **F025** | **CP Priority 字段** | Cover Point 优先级标记 | P0 |
 
 ### 3.2 Cover Point 字段
 
@@ -194,6 +203,7 @@ python3 scripts/data_manager.py clean
 | Sub-Feature | 子功能模块 | ✅ |
 | Cover Point | 覆盖点名称 | ✅ **(首要)** |
 | Cover Point Details | 覆盖点详情 | ✅ |
+| **Priority** | 优先级 (P0/P1/P2) | ✅ |
 | Comments | 备注 | ❌ |
 
 ### 3.3 Test Case 字段
@@ -209,7 +219,13 @@ python3 scripts/data_manager.py clean
 | Coverage Details | 覆盖详情 | ❌ (可隐藏) |
 | Comments | 备注 | ❌ (可隐藏) |
 | Status | 状态 | 系统字段 |
-| Completed Date | 完成日期 | 系统字段 |
+| DV Milestone | DV 里程碑版本 | 系统字段 |
+| Target Date | 目标完成日期 | 系统字段 |
+| Status Date | 状态变更日期 | 系统字段 |
+| **coded_date** | CODED 状态日期 | 系统字段 |
+| **fail_date** | FAIL 状态日期 | 系统字段 |
+| **pass_date** | PASS 状态日期 | 系统字段 |
+| **removed_date** | REMOVED 状态日期 | 系统字段 |
 
 ### 3.3 Cover Point 覆盖率计算规则
 
@@ -263,12 +279,19 @@ coverage = round(passed / total * 100, 1) if total > 0 else 0.0
 
 ### 3.4 状态定义
 
-| 状态 | 说明 |
-|------|------|
-| OPEN | 待开发/待执行 |
-| CODED | 已开发完成 |
-| FAIL | 测试失败 |
-| PASS | 测试通过 |
+| 状态 | 说明 | 计入统计 |
+|------|------|----------|
+| OPEN | 待开发/待执行 | ✅ |
+| CODED | 已开发完成 | ✅ |
+| FAIL | 测试失败 | ✅ |
+| PASS | 测试通过 | ✅ |
+| REMOVED | 已移除/废弃 | ❌ |
+
+**REMOVED 状态特殊规则**:
+- 不计入 Total 统计
+- 不计入 Pass Rate 计算
+- 状态变更时自动清除与 CP 的关联
+- 可转移回 CODED 状态
 
 ---
 
@@ -285,6 +308,7 @@ coverage = round(passed / total * 100, 1) if total > 0 else 0.0
 | 方法 | 路径 | 功能 |
 |------|------|------|
 | GET | `/api/projects` | 获取项目列表 |
+| **GET** | **`/api/projects/{id}`** | **获取项目详情** |
 | POST | `/api/projects` | 创建新项目 |
 | POST | `/api/projects/{id}/archive` | 备份项目 |
 | GET | `/api/projects/archive/list` | 获取归档列表 |
@@ -295,10 +319,37 @@ coverage = round(passed / total * 100, 1) if total > 0 else 0.0
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
-| GET | `/api/cp` | 获取 CP 列表（**含覆盖率计算**） |
+| GET | `/api/cp` | 获取 CP 列表（**含覆盖率 + Priority**） |
+| **GET** | **`/api/cp/{id}`** | **获取 CP 详情（需 project_id）** |
 | POST | `/api/cp` | 创建 CP |
-| PUT | `/api/cp/{id}` | 更新 CP |
-| DELETE | `/api/cp/{id}` | 删除 CP |
+| PUT | `/api/cp/{id}` | 更新 CP（**需 project_id**） |
+| DELETE | `/api/cp/{id}` | 删除 CP（需 project_id） |
+| **POST** | **`/api/cp/batch/priority`** | **批量更新 Priority（需 project_id）** |
+
+**API 参数说明**:
+- **GET /api/cp**: 通过查询参数传递 `project_id`，例如: `/api/cp?project_id=1`
+- **GET /api/cp/{id}**: 通过查询参数传递 `project_id`，例如: `/api/cp/1?project_id=1`
+- **POST /api/cp**: 在请求体中传递 `project_id`
+- **PUT /api/cp/{id}**: 在请求体中必须包含 `project_id`
+- **DELETE /api/cp/{id}**: 通过查询参数传递 `project_id`，例如: `/api/cp/1?project_id=1`
+
+**PUT /api/cp/{id} 请求体**:
+```json
+{
+    "project_id": 1,
+    "feature": "Feature A",
+    "sub_feature": "SubFeature A",
+    "cover_point": "CP_A",
+    "cover_point_details": "Details",
+    "priority": "P0",
+    "comments": ""
+}
+```
+
+**DELETE /api/cp/{id} 请求示例**:
+```
+DELETE /api/cp/1?project_id=1
+```
 
 **GET /api/cp 返回字段：**
 
@@ -312,35 +363,195 @@ coverage = round(passed / total * 100, 1) if total > 0 else 0.0
 | cover_point_details | string | 详情 |
 | comments | string | 备注 |
 | created_at | string | 创建时间 |
+| **priority** | string | **优先级 (P0/P1/P2)** |
 | **coverage** | float | **覆盖率百分比 (0-100)** |
 | **coverage_detail** | string | **详情格式: "PASS/总数"** |
-
-**示例：**
-```json
-{
-  "id": 1,
-  "feature": "SRAM",
-  "cover_point": "read access",
-  "coverage": 100.0,
-  "coverage_detail": "3/3"
-}
-```
 
 ### 4.4 Test Cases
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
-| GET | `/api/tc` | 获取 TC 列表（含排序过滤） |
+| GET | `/api/tc` | 获取 TC 列表（**含日期/DV Milestone**） |
+| **GET** | **`/api/tc/{id}`** | **获取 TC 详情（需 project_id）** |
 | POST | `/api/tc` | 创建 TC |
-| PUT | `/api/tc/{id}` | 更新 TC |
-| DELETE | `/api/tc/{id}` | 删除 TC |
-| POST | `/api/tc/{id}/status` | 更新状态 |
+| PUT | `/api/tc/{id}` | 更新 TC 信息（**不含状态**，需 project_id） |
+| DELETE | `/api/tc/{id}` | 删除 TC（需 project_id） |
+| POST | `/api/tc/{id}/status` | 更新状态（**含日期自动记录**，需 project_id） |
+| POST | `/api/tc/batch/status` | 批量更新状态（需 project_id） |
+| POST | `/api/tc/batch/target_date` | 批量更新 Target Date（需 project_id） |
+| POST | `/api/tc/batch/dv_milestone` | 批量更新 DV Milestone（需 project_id） |
+
+**API 参数说明**:
+- **GET /api/tc**: 通过查询参数传递 `project_id`，例如: `/api/tc?project_id=1`
+- **GET /api/tc/{id}**: 通过查询参数传递 `project_id`，例如: `/api/tc/1?project_id=1`
+- **POST /api/tc**: 在请求体中传递 `project_id`
+- **PUT /api/tc/{id}**: 在请求体中必须包含 `project_id`，**不能用于更新状态**
+- **DELETE /api/tc/{id}**: 通过查询参数传递 `project_id`，例如: `/api/tc/1?project_id=1`
+- **POST /api/tc/{id}/status**: 在请求体中必须包含 `project_id` 和 `status`
+
+**PUT /api/tc/{id} 请求体**:
+```json
+{
+    "project_id": 1,
+    "testbench": "TB_A",
+    "category": "Category",
+    "owner": "Owner",
+    "test_name": "TC_A",
+    "scenario_details": "Scenario",
+    "target_date": "2026-02-15",
+    "dv_milestone": "DV0.5",
+    "checker_details": "",
+    "coverage_details": "",
+    "comments": "",
+    "connections": [1, 2, 3]
+}
+```
+> **注意**: `connections` 字段用于设置 TC 关联的 CP ID 列表。调用时会覆盖原有的关联关系。
+
+**POST /api/tc/{id}/status 请求体**:
+```json
+{
+    "project_id": 1,
+    "status": "PASS"
+}
+```
+
+**DELETE /api/tc/{id} 请求示例**:
+```
+DELETE /api/tc/1?project_id=1
+```
+
+**GET /api/tc 返回字段：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | int | TC ID |
+| project_id | int | 项目 ID |
+| dv_milestone | string | DV 里程碑 |
+| testbench | string | 测试台 |
+| category | string | 类别 |
+| owner | string | 负责人 |
+| test_name | string | 测试名称 |
+| status | string | 状态 |
+| **target_date** | string | **目标完成日期** |
+| **coded_date** | string | **CODED 日期** |
+| **fail_date** | string | **FAIL 日期** |
+| **pass_date** | string | **PASS 日期** |
+| **removed_date** | string | **REMOVED 日期** |
+| **connected_cps** | array | **关联的 CP ID 列表** |
+
+> **说明**: `connected_cps` 是 TC 详情 API (`GET /api/tc/{id}`) 的返回字段，表示该 Test Case 关联的 Cover Points。
 
 ### 4.5 统计
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
-| GET | `/api/stats` | 获取统计数据 |
+| GET | `/api/stats` | 获取统计数据（**排除 REMOVED**） |
+
+#### 4.5.1 请求示例
+
+```
+GET /api/stats?project_id=1
+```
+
+#### 4.5.2 返回示例
+
+```json
+{
+  "total_cp": 10,
+  "total_tc": 50,
+  "open_tc": 15,
+  "coded_tc": 20,
+  "fail_tc": 5,
+  "pass_tc": 10,
+  "pass_rate": "20.0%",
+  "coverage": "45.5%"
+}
+```
+
+#### 4.5.3 返回字段说明
+
+| 字段 | 类型 | 含义 | 计算方式 |
+|------|------|------|----------|
+| `total_cp` | int | Cover Points 总数 | CP 表记录数 |
+| `total_tc` | int | Test Cases 总数 | 排除 REMOVED 状态的所有 TC |
+| `open_tc` | int | 待开发/待执行 | status='OPEN' |
+| `coded_tc` | int | 已开发完成 | status='CODED' |
+| `fail_tc` | int | 测试失败 | status='FAIL' |
+| `pass_tc` | int | 测试通过 | status='PASS' |
+| `pass_rate` | string | TC 通过率 | `pass_tc / total_tc × 100%` |
+| `coverage` | string | CP 覆盖率 | 所有 CP 关联 TC PASS 比例的**平均值** |
+
+#### 4.5.4 Coverage 计算规则（重点）
+
+Coverage 是**所有 Cover Point 覆盖率**的平均值：
+
+```
+coverage = (CP1覆盖率 + CP2覆盖率 + ... + CPn覆盖率) / n
+```
+
+**每个 CP 的覆盖率计算**：
+
+| 关联 TC 状态 | 覆盖率 |
+|-------------|--------|
+| 全部 PASS | **100%** |
+| 部分 PASS | **PASS 数量 / 关联总数 × 100%** |
+| 无关联 TC | **0%** |
+
+**示例计算**：
+- CP1: 关联 4 个 TC，3 个 PASS → 75%
+- CP2: 关联 2 个 TC，2 个 PASS → 100%
+- CP3: 关联 0 个 TC → 0%
+- **Coverage = (75% + 100% + 0%) / 3 = 58.3%**
+
+#### 4.5.5 统计规则
+
+| 规则 | 说明 |
+|------|------|
+| REMOVED 不计入 Total | `total_tc` 排除 REMOVED 状态的 TC |
+| REMOVED 不参与计算 | PASS Rate 和 Coverage 计算均排除 REMOVED |
+| 无关联 CP | Coverage 按 0% 计算 |
+
+---
+
+### 4.6 API 使用说明
+
+#### 4.6.1 为什么需要 project_id？
+
+Tracker 使用**独立数据库架构**，每个项目拥有独立的 `.db` 文件。因此，所有涉及项目数据的 API 操作都需要知道操作的是哪个项目的数据。
+
+**project_id 传递方式**:
+| API 类型 | 传递方式 | 示例 |
+|----------|----------|------|
+| GET (列表) | 查询参数 | `GET /api/tc?project_id=1` |
+| POST (创建) | 请求体 JSON | `{"project_id": 1, ...}` |
+| PUT (更新) | 请求体 JSON | `{"project_id": 1, ...}` |
+| DELETE | 查询参数 | `DELETE /api/tc/1?project_id=1` |
+
+#### 4.6.2 错误处理
+
+| 状态码 | 含义 | 常见原因 |
+|--------|------|----------|
+| 200 | 成功 | - |
+| 400 | 请求参数错误 | 缺少 project_id、参数格式错误 |
+| 404 | 资源不存在 | 项目不存在、CP/TC ID 不存在 |
+| 500 | 服务器错误 | 数据库错误 |
+
+**常见错误响应**:
+```json
+// 缺少 project_id
+{"error": "需要指定项目"}
+
+// 项目不存在
+{"error": "项目不存在"}
+
+// CP/TC 不存在
+{"error": "Cover Point 不存在"}
+
+/**
+ * Test Case 不存在
+{"error": "Test Case 不存在"}
+```
 
 ---
 
@@ -352,13 +563,13 @@ coverage = round(passed / total * 100, 1) if total > 0 else 0.0
 
 ```
 {项目名}.db
-├── cover_point           # Cover Points 表
-├── test_case            # Test Cases 表
+├── cover_point           # Cover Points 表 (v0.6.0+ 含 priority)
+├── test_case            # Test Cases 表 (v0.6.0+ 含新字段)
 ├── tc_cp_connections    # TC-CP 关联表
 └── tracker_version      # 版本表 (v0.3+)
 ```
 
-### 5.2 版本管理
+### 5.2 版本表
 
 **tracker_version 表：**
 
@@ -370,12 +581,47 @@ CREATE TABLE tracker_version (
 );
 ```
 
-**迁移机制：**
-- 启动时检查版本号
-- 版本不匹配时自动触发迁移
-- 迁移脚本自动备份原数据
+### 5.3 v0.6.0 字段变更
 
-### 5.3 v0.2 到 v0.3 迁移
+#### Test Case 表新增字段 (v0.6.0)
+
+```sql
+-- DV Milestone 字段
+ALTER TABLE test_case ADD COLUMN dv_milestone VARCHAR(10) DEFAULT NULL;
+
+-- Target Date 字段
+ALTER TABLE test_case ADD COLUMN target_date DATE DEFAULT NULL;
+
+-- Status 日期字段
+ALTER TABLE test_case ADD COLUMN coded_date DATE DEFAULT NULL;
+ALTER TABLE test_case ADD COLUMN fail_date DATE DEFAULT NULL;
+ALTER TABLE test_case ADD COLUMN pass_date DATE DEFAULT NULL;
+ALTER TABLE test_case ADD COLUMN removed_date DATE DEFAULT NULL;
+```
+
+#### Cover Point 表新增字段 (v0.6.0)
+
+```sql
+-- Priority 字段
+ALTER TABLE cover_point ADD COLUMN priority VARCHAR(3) DEFAULT 'P0';
+```
+
+#### 数据迁移 (v0.6.0)
+
+```sql
+-- 为已有数据填充日期
+UPDATE test_case SET pass_date = updated_at WHERE status = 'PASS';
+UPDATE test_case SET coded_date = updated_at WHERE status = 'CODED';
+UPDATE test_case SET fail_date = updated_at WHERE status = 'FAIL';
+
+-- DV Milestone 默认值
+UPDATE test_case SET dv_milestone = 'DV1.0' WHERE dv_milestone IS NULL;
+
+-- CP Priority 默认值
+UPDATE cover_point SET priority = 'P0' WHERE priority IS NULL;
+```
+
+### 5.4 v0.2 到 v0.3 迁移
 
 现有用户需要执行迁移：
 
@@ -818,7 +1064,7 @@ python3 server.py
 
 ```bash
 cd /projects/management/tracker/dev
-python3 server_test.py
+bash start_server_test.sh
 # 访问 http://localhost:8081
 ```
 
@@ -881,8 +1127,43 @@ journalctl -u tracker -f
 | v0.3 | 2026-02-04 | **架构重构**：代码隔离、数据共享、版本迁移 |
 | v0.3.1 | 2026-02-04 | **数据隔离**：user_data/test_data 分离，测试不碰用户数据 |
 | v0.4 | 2026-02-05 | **简化架构**：Git 只维护 dev/，发布到 /release/tracker/ |
+| v0.5.0 | 2026-02-06 | **功能增强**：界面优化、测试报告、发布准备脚本 |
+| v0.5.1 | 2026-02-07 | **Bug 修复**：API 和界面问题修复 |
+| **v0.6.0** | **2026-02-08** | **第一阶段功能增强**：Status 日期、Target Date、REMOVED、批量修改、DV Milestone、CP Priority |
 
-### v0.4 详细变更
+### v0.6.0 详细变更
+
+1. **Status 日期记录**：
+   - CODED/FAIL/PASS/REMOVED 状态变更时自动记录日期
+   - OPEN 状态不记录日期
+   - PASS → 其他状态有二次确认提示
+
+2. **Target Date 字段**：
+   - TC 表格显示 Target Date 列
+   - 支持单个和批量修改 Target Date
+
+3. **REMOVED 状态**：
+   - Status 下拉框新增 REMOVED 选项
+   - REMOVED 状态的 TC 显示删除线样式
+   - REMOVED 不计入 Total 和 Pass Rate 统计
+   - REMOVED 时自动清除与 CP 的关联
+
+4. **批量修改功能**：
+   - TC 表格显示复选框列
+   - 支持批量更新状态、Target Date、DV Milestone
+   - 支持全选/取消全选
+
+5. **DV Milestone 字段**：
+   - TC 表格显示 DV Milestone 列
+   - 支持选择 DV0.3/DV0.5/DV0.7/DV1.0
+   - 默认值 DV1.0
+
+6. **CP Priority 字段**：
+   - CP 表格显示 Priority 列
+   - 支持选择 P0/P1/P2
+   - 默认值 P0
+
+### v0.5.x 详细变更
 
 1. **Git 仓库简化**：
    - 只维护 `dev/` 代码，移除 `stable/` 追踪
@@ -936,7 +1217,8 @@ journalctl -u tracker -f
 │
 ├── dev/                     # 测试版
 │   ├── server.py
-│   ├── server_test.py
+│   ├── server_test.py      # 原启动脚本（已弃用）
+│   ├── start_server_test.sh     # 新启动脚本 (gunicorn)
 │   ├── app/
 │   │   ├── __init__.py
 │   │   └── api.py

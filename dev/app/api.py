@@ -68,6 +68,7 @@ def init_project_db(project_name):
             cover_point TEXT,
             cover_point_details TEXT,
             comments TEXT,
+            priority TEXT DEFAULT 'P0',
             created_at TEXT
         )
     ''')
@@ -78,7 +79,6 @@ def init_project_db(project_name):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             project_id INTEGER,
             dv_milestone TEXT,
-            priority TEXT,
             testbench TEXT,
             category TEXT,
             owner TEXT,
@@ -88,8 +88,12 @@ def init_project_db(project_name):
             coverage_details TEXT,
             comments TEXT,
             status TEXT DEFAULT 'OPEN',
-            completed_date TEXT,
-            created_at TEXT
+            created_at TEXT,
+            coded_date TEXT,
+            fail_date TEXT,
+            pass_date TEXT,
+            removed_date TEXT,
+            target_date TEXT
         )
     ''')
     
@@ -178,6 +182,49 @@ def get_projects():
     
     return jsonify(result)
 
+@api.route('/api/projects/<int:project_id>', methods=['GET'])
+def get_project(project_id):
+    """获取项目详情"""
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    # 如果项目已归档，返回错误
+    if project.get('is_archived', False):
+        return jsonify({'error': '项目已归档'}), 404
+    
+    # 统计项目数据
+    try:
+        db = get_db(project['name'])
+        cursor = db.cursor()
+        cursor.execute('SELECT COUNT(*) FROM cover_point')
+        cp_count = cursor.fetchone()[0]
+        cursor.execute('SELECT COUNT(*) FROM test_case')
+        tc_count = cursor.fetchone()[0]
+        cursor.execute('SELECT COUNT(*) FROM test_case WHERE status = "PASS"')
+        pass_count = cursor.fetchone()[0]
+        cursor.execute('SELECT COUNT(*) FROM test_case WHERE status = "REMOVED"')
+        removed_count = cursor.fetchone()[0]
+    except:
+        cp_count = 0
+        tc_count = 0
+        pass_count = 0
+        removed_count = 0
+    
+    return jsonify({
+        'id': project['id'],
+        'name': project['name'],
+        'created_at': project.get('created_at', ''),
+        'is_archived': project.get('is_archived', False),
+        'version': project.get('version', 'stable'),
+        'cp_count': cp_count,
+        'tc_count': tc_count,
+        'pass_count': pass_count,
+        'removed_count': removed_count
+    })
+
 @api.route('/api/projects', methods=['POST'])
 def create_project():
     """创建新项目"""
@@ -238,7 +285,9 @@ def archive_project(project_id):
     
     # 生成备份文件
     filename = f"{project['name']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-    filepath = f"archives/{filename}"
+    archives_dir = 'archives'
+    os.makedirs(archives_dir, exist_ok=True)  # 确保 archives 目录存在
+    filepath = os.path.join(archives_dir, filename)
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(project_data, f, ensure_ascii=False, indent=2)
     
@@ -411,6 +460,7 @@ def get_coverpoints():
             'cover_point': row['cover_point'],
             'cover_point_details': row['cover_point_details'],
             'comments': row['comments'],
+            'priority': row['priority'],
             'created_at': row['created_at'],
             'coverage': coverage,
             'coverage_detail': f'{passed}/{total}'
@@ -437,14 +487,15 @@ def create_coverpoint():
     cursor = conn.cursor()
     
     cursor.execute('''
-        INSERT INTO cover_point (project_id, feature, sub_feature, cover_point, cover_point_details, comments, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO cover_point (project_id, feature, sub_feature, cover_point, cover_point_details, comments, priority, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ''', (project_id,
           data.get('feature', ''),
           data.get('sub_feature', ''),
           data.get('cover_point', ''),
           data.get('cover_point_details', ''),
           data.get('comments', ''),
+          data.get('priority', 'P0'),
           datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
     
     conn.commit()
@@ -460,8 +511,44 @@ def create_coverpoint():
             'cover_point': data.get('cover_point', ''),
             'cover_point_details': data.get('cover_point_details', ''),
             'comments': data.get('comments', ''),
+            'priority': data.get('priority', 'P0'),
             'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
+    })
+
+@api.route('/api/cp/<int:cp_id>', methods=['GET'])
+def get_coverpoint(cp_id):
+    """获取 CP 详情"""
+    project_id = request.args.get('project_id', type=int)
+    
+    if not project_id:
+        return jsonify({'error': '需要指定项目'}), 400
+    
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    conn = get_db(project['name'])
+    cursor = conn.cursor()
+    
+    cursor.execute('SELECT * FROM cover_point WHERE id = ?', (cp_id,))
+    cp = cursor.fetchone()
+    
+    if not cp:
+        return jsonify({'error': 'Cover Point 不存在'}), 404
+    
+    return jsonify({
+        'id': cp['id'],
+        'project_id': cp['project_id'],
+        'feature': cp['feature'],
+        'sub_feature': cp['sub_feature'],
+        'cover_point': cp['cover_point'],
+        'cover_point_details': cp['cover_point_details'],
+        'comments': cp['comments'],
+        'priority': cp['priority'],
+        'created_at': cp['created_at']
     })
 
 @api.route('/api/cp/<int:cp_id>', methods=['PUT'])
@@ -482,14 +569,23 @@ def update_coverpoint(cp_id):
     conn = get_db(project['name'])
     cursor = conn.cursor()
     
+    # 获取当前 CP 的 priority 值（如果请求体中没有提供）
+    cursor.execute('SELECT priority FROM cover_point WHERE id=?', (cp_id,))
+    current = cursor.fetchone()
+    current_priority = current['priority'] if current else 'P0'
+    
+    # 如果请求体中没有 priority，保留当前值
+    new_priority = data.get('priority', current_priority)
+    
     cursor.execute('''
-        UPDATE cover_point SET feature=?, sub_feature=?, cover_point=?, cover_point_details=?, comments=?
+        UPDATE cover_point SET feature=?, sub_feature=?, cover_point=?, cover_point_details=?, comments=?, priority=?
         WHERE id=?
     ''', (data.get('feature', ''),
           data.get('sub_feature', ''),
           data.get('cover_point', ''),
           data.get('cover_point_details', ''),
           data.get('comments', ''),
+          new_priority,
           cp_id))
     
     conn.commit()
@@ -577,7 +673,6 @@ def get_testcases():
             'id': row['id'],
             'project_id': row['project_id'],
             'dv_milestone': row['dv_milestone'],
-            'priority': row['priority'],
             'testbench': row['testbench'],
             'category': row['category'],
             'owner': row['owner'],
@@ -587,12 +682,69 @@ def get_testcases():
             'coverage_details': row['coverage_details'],
             'comments': row['comments'],
             'status': row['status'],
-            'completed_date': row['completed_date'],
             'created_at': row['created_at'],
+            'coded_date': row['coded_date'],
+            'fail_date': row['fail_date'],
+            'pass_date': row['pass_date'],
+            'removed_date': row['removed_date'],
+            'target_date': row['target_date'],
             'connected_cps': connected_cps
         })
     
     return jsonify(tcs)
+
+@api.route('/api/tc/<int:tc_id>', methods=['GET'])
+def get_testcase(tc_id):
+    """获取 TC 详情"""
+    project_id = request.args.get('project_id', type=int)
+    
+    if not project_id:
+        return jsonify({'error': '需要指定项目'}), 400
+    
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    conn = get_db(project['name'])
+    cursor = conn.cursor()
+    
+    cursor.execute('SELECT * FROM test_case WHERE id = ?', (tc_id,))
+    tc = cursor.fetchone()
+    
+    if not tc:
+        return jsonify({'error': 'Test Case 不存在'}), 404
+    
+    # 获取关联的 CP
+    cursor.execute('''
+        SELECT cp.id, cp.cover_point FROM cover_point cp
+        INNER JOIN tc_cp_connections tcc ON cp.id = tcc.cp_id
+        WHERE tcc.tc_id = ?
+    ''', (tc_id,))
+    connected_cps = [row['id'] for row in cursor.fetchall()]
+    
+    return jsonify({
+        'id': tc['id'],
+        'project_id': tc['project_id'],
+        'dv_milestone': tc['dv_milestone'],
+        'testbench': tc['testbench'],
+        'category': tc['category'],
+        'owner': tc['owner'],
+        'test_name': tc['test_name'],
+        'scenario_details': tc['scenario_details'],
+        'checker_details': tc['checker_details'],
+        'coverage_details': tc['coverage_details'],
+        'comments': tc['comments'],
+        'status': tc['status'],
+        'created_at': tc['created_at'],
+        'coded_date': tc['coded_date'],
+        'fail_date': tc['fail_date'],
+        'pass_date': tc['pass_date'],
+        'removed_date': tc['removed_date'],
+        'target_date': tc['target_date'],
+        'connected_cps': connected_cps
+    })
 
 @api.route('/api/tc', methods=['POST'])
 def create_testcase():
@@ -612,12 +764,17 @@ def create_testcase():
     conn = get_db(project['name'])
     cursor = conn.cursor()
     
+    today = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
     cursor.execute('''
-        INSERT INTO test_case (project_id, dv_milestone, priority, testbench, category, owner, test_name, scenario_details, checker_details, coverage_details, comments, status, completed_date, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, ?)
+        INSERT INTO test_case (
+            project_id, dv_milestone, testbench, category, owner, test_name, 
+            scenario_details, checker_details, coverage_details, comments, 
+            status, created_at, coded_date, fail_date, pass_date, removed_date, target_date
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, NULL, NULL, NULL, NULL, ?)
     ''', (project_id,
           data.get('dv_milestone', ''),
-          data.get('priority', ''),
           data.get('testbench', ''),
           data.get('category', ''),
           data.get('owner', ''),
@@ -626,8 +783,8 @@ def create_testcase():
           data.get('checker_details', ''),
           data.get('coverage_details', ''),
           data.get('comments', ''),
-          '',
-          datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+          today,
+          data.get('target_date', '')))
     
     tc_id = cursor.lastrowid
     
@@ -647,7 +804,6 @@ def create_testcase():
             'id': tc_id,
             'project_id': project_id,
             'dv_milestone': data.get('dv_milestone', ''),
-            'priority': data.get('priority', ''),
             'testbench': data.get('testbench', ''),
             'category': data.get('category', ''),
             'owner': data.get('owner', ''),
@@ -657,8 +813,12 @@ def create_testcase():
             'coverage_details': data.get('coverage_details', ''),
             'comments': data.get('comments', ''),
             'status': 'OPEN',
-            'completed_date': '',
-            'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'created_at': today,
+            'coded_date': None,
+            'fail_date': None,
+            'pass_date': None,
+            'removed_date': None,
+            'target_date': data.get('target_date', ''),
             'connected_cps': data.get('connections', [])
         }
     })
@@ -682,10 +842,19 @@ def update_testcase(tc_id):
     cursor = conn.cursor()
     
     cursor.execute('''
-        UPDATE test_case SET dv_milestone=?, priority=?, testbench=?, category=?, owner=?, test_name=?, scenario_details=?, checker_details=?, coverage_details=?, comments=?
+        UPDATE test_case SET 
+            dv_milestone=?, 
+            testbench=?, 
+            category=?, 
+            owner=?, 
+            test_name=?, 
+            scenario_details=?, 
+            checker_details=?, 
+            coverage_details=?, 
+            comments=?,
+            target_date=?
         WHERE id=?
     ''', (data.get('dv_milestone', ''),
-          data.get('priority', ''),
           data.get('testbench', ''),
           data.get('category', ''),
           data.get('owner', ''),
@@ -694,6 +863,7 @@ def update_testcase(tc_id):
           data.get('checker_details', ''),
           data.get('coverage_details', ''),
           data.get('comments', ''),
+          data.get('target_date', ''),
           tc_id))
     
     # 更新关联
@@ -743,7 +913,8 @@ def update_status(tc_id):
     if not project_id:
         return jsonify({'error': '需要指定项目'}), 400
     
-    if new_status not in ['OPEN', 'CODED', 'FAIL', 'PASS']:
+    valid_statuses = ['OPEN', 'CODED', 'FAIL', 'PASS', 'REMOVED']
+    if new_status not in valid_statuses:
         return jsonify({'error': '无效状态'}), 400
     
     projects = load_projects()
@@ -755,16 +926,226 @@ def update_status(tc_id):
     conn = get_db(project['name'])
     cursor = conn.cursor()
     
-    completed_date = ''
-    if new_status == 'PASS':
-        completed_date = datetime.now().strftime('%Y-%m-%d')
+    # 获取当前 TC 信息
+    cursor.execute('SELECT status FROM test_case WHERE id=?', (tc_id,))
+    row = cursor.fetchone()
+    if not row:
+        return jsonify({'error': 'TC 不存在'}), 404
     
-    cursor.execute('UPDATE test_case SET status=?, completed_date=? WHERE id=?', 
-                   (new_status, completed_date, tc_id))
+    old_status = row['status']
+    
+    # 状态日期映射
+    status_dates = {
+        'CODED': 'coded_date',
+        'FAIL': 'fail_date',
+        'PASS': 'pass_date',
+        'REMOVED': 'removed_date'
+    }
+    
+    today = datetime.now().strftime('%Y-%m-%d')
+    
+    # 清除所有状态日期
+    cursor.execute('''
+        UPDATE test_case SET 
+            coded_date=NULL, 
+            fail_date=NULL, 
+            pass_date=NULL, 
+            removed_date=NULL 
+        WHERE id=?
+    ''', (tc_id,))
+    
+    # 设置新状态对应的日期
+    if new_status in status_dates:
+        date_field = status_dates[new_status]
+        cursor.execute(f'UPDATE test_case SET {date_field}=? WHERE id=?', (today, tc_id))
+    
+    # 如果是 REMOVED，清除 CP 关联
+    if new_status == 'REMOVED':
+        cursor.execute('DELETE FROM tc_cp_connections WHERE tc_id=?', (tc_id,))
+    
+    # 更新状态
+    cursor.execute('UPDATE test_case SET status=? WHERE id=?', (new_status, tc_id))
     
     conn.commit()
     
-    return jsonify({'success': True, 'status': new_status, 'completed_date': completed_date})
+    # 检查是否需要确认（从 PASS 改为其他状态）
+    need_confirm = (old_status == 'PASS' and new_status != 'PASS')
+    
+    return jsonify({
+        'success': True, 
+        'status': new_status,
+        'need_confirm': need_confirm
+    })
+
+# ============ 批量操作 ============
+
+@api.route('/api/tc/batch/status', methods=['POST'])
+def batch_update_tc_status():
+    """批量更新 TC 状态"""
+    data = request.json
+    project_id = data.get('project_id')
+    tc_ids = data.get('tc_ids', [])
+    new_status = data.get('status')
+    
+    if not project_id or not tc_ids or not new_status:
+        return jsonify({'error': '缺少必要参数'}), 400
+    
+    valid_statuses = ['OPEN', 'CODED', 'FAIL', 'PASS', 'REMOVED']
+    if new_status not in valid_statuses:
+        return jsonify({'error': '无效状态'}), 400
+    
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    conn = get_db(project['name'])
+    cursor = conn.cursor()
+    
+    # 状态日期映射
+    status_dates = {
+        'CODED': 'coded_date',
+        'FAIL': 'fail_date',
+        'PASS': 'pass_date',
+        'REMOVED': 'removed_date'
+    }
+    
+    today = datetime.now().strftime('%Y-%m-%d')
+    
+    success_count = 0
+    for tc_id in tc_ids:
+        # 检查 TC 是否存在
+        cursor.execute('SELECT status FROM test_case WHERE id=?', (tc_id,))
+        row = cursor.fetchone()
+        if not row:
+            continue
+        
+        # 清除所有状态日期
+        cursor.execute('''
+            UPDATE test_case SET 
+                coded_date=NULL, 
+                fail_date=NULL, 
+                pass_date=NULL, 
+                removed_date=NULL 
+            WHERE id=?
+        ''', (tc_id,))
+        
+        # 设置新状态对应的日期
+        if new_status in status_dates:
+            date_field = status_dates[new_status]
+            cursor.execute(f'UPDATE test_case SET {date_field}=? WHERE id=?', (today, tc_id))
+        
+        # 如果是 REMOVED，清除 CP 关联
+        if new_status == 'REMOVED':
+            cursor.execute('DELETE FROM tc_cp_connections WHERE tc_id=?', (tc_id,))
+        
+        # 更新状态
+        cursor.execute('UPDATE test_case SET status=? WHERE id=?', (new_status, tc_id))
+        success_count += 1
+    
+    conn.commit()
+    
+    return jsonify({
+        'success': success_count,
+        'failed': len(tc_ids) - success_count
+    })
+
+@api.route('/api/tc/batch/target_date', methods=['POST'])
+def batch_update_tc_target_date():
+    """批量更新 TC Target Date"""
+    data = request.json
+    project_id = data.get('project_id')
+    tc_ids = data.get('tc_ids', [])
+    target_date = data.get('target_date')
+    
+    if not project_id or not tc_ids:
+        return jsonify({'error': '缺少必要参数'}), 400
+    
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    conn = get_db(project['name'])
+    cursor = conn.cursor()
+    
+    success_count = 0
+    for tc_id in tc_ids:
+        cursor.execute('UPDATE test_case SET target_date=? WHERE id=?', (target_date, tc_id))
+        success_count += 1
+    
+    conn.commit()
+    
+    return jsonify({
+        'success': success_count,
+        'failed': len(tc_ids) - success_count
+    })
+
+@api.route('/api/tc/batch/dv_milestone', methods=['POST'])
+def batch_update_tc_dv_milestone():
+    """批量更新 TC DV Milestone"""
+    data = request.json
+    project_id = data.get('project_id')
+    tc_ids = data.get('tc_ids', [])
+    dv_milestone = data.get('dv_milestone')
+    
+    if not project_id or not tc_ids:
+        return jsonify({'error': '缺少必要参数'}), 400
+    
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    conn = get_db(project['name'])
+    cursor = conn.cursor()
+    
+    success_count = 0
+    for tc_id in tc_ids:
+        cursor.execute('UPDATE test_case SET dv_milestone=? WHERE id=?', (dv_milestone, tc_id))
+        success_count += 1
+    
+    conn.commit()
+    
+    return jsonify({
+        'success': success_count,
+        'failed': len(tc_ids) - success_count
+    })
+
+@api.route('/api/cp/batch/priority', methods=['POST'])
+def batch_update_cp_priority():
+    """批量更新 CP Priority"""
+    data = request.json
+    project_id = data.get('project_id')
+    cp_ids = data.get('cp_ids', [])
+    priority = data.get('priority')
+    
+    if not project_id or not cp_ids:
+        return jsonify({'error': '缺少必要参数'}), 400
+    
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    conn = get_db(project['name'])
+    cursor = conn.cursor()
+    
+    success_count = 0
+    for cp_id in cp_ids:
+        cursor.execute('UPDATE cover_point SET priority=? WHERE id=?', (priority, cp_id))
+        success_count += 1
+    
+    conn.commit()
+    
+    return jsonify({
+        'success': success_count,
+        'failed': len(cp_ids) - success_count
+    })
 
 # ============ 统计 ============
 
@@ -797,23 +1178,28 @@ def get_stats():
     cursor.execute('SELECT COUNT(*) FROM cover_point')
     total_cp = cursor.fetchone()[0]
     
-    # TC 统计
-    cursor.execute('SELECT COUNT(*) FROM test_case')
+    # TC 统计（REMOVED 不计入 Total）
+    cursor.execute('SELECT COUNT(*) FROM test_case WHERE status != "REMOVED"')
     total_tc = cursor.fetchone()[0]
     
-    cursor.execute("SELECT COUNT(*) FROM test_case WHERE status='OPEN'")
+    cursor.execute('SELECT COUNT(*) FROM test_case WHERE status="OPEN" AND status != "REMOVED"')
     open_tc = cursor.fetchone()[0]
     
-    cursor.execute("SELECT COUNT(*) FROM test_case WHERE status='CODED'")
+    cursor.execute('SELECT COUNT(*) FROM test_case WHERE status="CODED"')
     coded_tc = cursor.fetchone()[0]
     
-    cursor.execute("SELECT COUNT(*) FROM test_case WHERE status='FAIL'")
+    cursor.execute('SELECT COUNT(*) FROM test_case WHERE status="FAIL"')
     fail_tc = cursor.fetchone()[0]
     
-    cursor.execute("SELECT COUNT(*) FROM test_case WHERE status='PASS'")
+    cursor.execute('SELECT COUNT(*) FROM test_case WHERE status="PASS"')
     pass_tc = cursor.fetchone()[0]
     
-    # 计算覆盖率
+    # Pass Rate 计算: PASS / Total * 100%
+    pass_rate = 0
+    if total_tc > 0:
+        pass_rate = round(pass_tc / total_tc * 100, 1)
+    
+    # 计算覆盖率（只统计非 REMOVED 的 TC）
     coverage = 0
     if total_cp > 0:
         cursor.execute('SELECT id FROM cover_point')
@@ -839,6 +1225,7 @@ def get_stats():
         'coded_tc': coded_tc,
         'fail_tc': fail_tc,
         'pass_tc': pass_tc,
+        'pass_rate': f'{pass_rate}%',
         'coverage': f'{coverage}%'
     })
 
