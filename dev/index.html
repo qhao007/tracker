@@ -472,6 +472,8 @@
         function filterCP(value) { renderCP(value); }
         function filterCPByFeature() { renderCP(); }
         function filterCPByPriority() { renderCP(); }
+        
+        function renderTC(filter = '', statusFilter = '', sortBy = 'id') {
             let filtered = testCases;
             if (filter) { filter = filter.toLowerCase(); filtered = filtered.filter(tc => (tc.test_name && tc.test_name.toLowerCase().includes(filter)) || (tc.testbench && tc.testbench.toLowerCase().includes(filter)) || (tc.owner && tc.owner.toLowerCase().includes(filter))); }
             if (statusFilter) filtered = filtered.filter(tc => tc.status === statusFilter);
@@ -484,7 +486,7 @@
             });
             document.getElementById('tcCount').textContent = filtered.length;
             const tbody = document.getElementById('tcList');
-            if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: #999; padding: 30px;">暂无数据</td></tr>'; return; }
+            if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="11" style="text-align: center; color: #999; padding: 30px;">暂无数据</td></tr>'; return; }
             tbody.innerHTML = filtered.map(tc => {
                 const hasDetails = tc.checker_details || tc.coverage_details || tc.comments;
                 const detailsId = `tc-details-${tc.id}`;
