@@ -312,14 +312,48 @@ coverage = round(passed / total * 100, 1) if total > 0 else 0.0
 | POST | `/api/projects` | 创建新项目 |
 | POST | `/api/projects/{id}/archive` | 备份项目 |
 | GET | `/api/projects/archive/list` | 获取归档列表 |
-| POST | `/api/projects/restore` | 从归档恢复 |
+| POST | `/api/projects/restore` | 从归档恢复（按文件名） |
+| **POST** | **`/api/projects/restore/upload`** | **从上传文件恢复（v0.6.1）** |
 | DELETE | `/api/projects/{id}` | 删除项目 |
+
+**POST /api/projects/restore/upload 请求示例**（v0.6.1 新增）:
+
+```
+POST /api/projects/restore/upload
+Content-Type: multipart/form-data
+
+Body: file=@backup.json
+```
+
+**请求参数**:
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `file` | file | JSON 格式的备份文件 |
+
+**成功响应**:
+```json
+{
+  "success": true,
+  "project": {
+    "id": 10,
+    "name": "Restored_Project",
+    "created_at": "2026-02-09 12:00:00"
+  }
+}
+```
+
+**错误响应**:
+```json
+{
+  "error": "项目 \"xxx\" 已存在，无法恢复"
+}
+```
 
 ### 4.3 Cover Points
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
-| GET | `/api/cp` | 获取 CP 列表（**含覆盖率 + Priority**） |
+| GET | `/api/cp` | 获取 CP 列表（**含覆盖率 + Priority + 过滤**） |
 | **GET** | **`/api/cp/{id}`** | **获取 CP 详情（需 project_id）** |
 | POST | `/api/cp` | 创建 CP |
 | PUT | `/api/cp/{id}` | 更新 CP（**需 project_id**） |
@@ -332,6 +366,30 @@ coverage = round(passed / total * 100, 1) if total > 0 else 0.0
 - **POST /api/cp**: 在请求体中传递 `project_id`
 - **PUT /api/cp/{id}**: 在请求体中必须包含 `project_id`
 - **DELETE /api/cp/{id}**: 通过查询参数传递 `project_id`，例如: `/api/cp/1?project_id=1`
+
+**GET /api/cp 过滤参数**（v0.6.1 新增）:
+
+| 参数 | 类型 | 说明 | 示例 |
+|------|------|------|------|
+| `project_id` | int | 项目 ID（必填） | `?project_id=1` |
+| `feature` | string | Feature 过滤（支持多值，逗号分隔） | `?feature=FeatureA,FeatureB` |
+| `priority` | string | Priority 过滤（支持多值，逗号分隔） | `?priority=P0,P1` |
+
+**GET /api/cp 请求示例**:
+
+```
+# 获取所有 CP
+GET /api/cp?project_id=1
+
+# 按 Feature 过滤
+GET /api/cp?project_id=1&feature=FeatureA
+
+# 按 Priority 过滤
+GET /api/cp?project_id=1&priority=P0
+
+# 组合过滤
+GET /api/cp?project_id=1&feature=FeatureA,FeatureB&priority=P0,P1
+```
 
 **PUT /api/cp/{id} 请求体**:
 ```json

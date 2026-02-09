@@ -1,6 +1,16 @@
 # Tracker v0.6.1 第二阶段规格书
 
-> **版本**: v0.6.1 | **创建日期**: 2026-02-09 | **状态**: 待开发
+> **版本**: v0.6.1 | **创建日期**: 2026-02-09 | **状态**: 开发中
+
+---
+
+## 目录
+
+1. [需求概述](#1-需求概述)
+2. [需求详情](#2-需求详情)
+3. [API 接口](#3-api-接口)
+4. [界面设计](#4-界面设计)
+5. [验收标准](#5-验收标准)
 
 ---
 
@@ -18,26 +28,24 @@ v0.6.0 发布后，根据用户反馈，需要增强以下功能：
 | 版本 | 功能 | 状态 |
 |------|------|------|
 | v0.6.0 | 批量修改、DV Milestone、CP Priority 等 | ✅ 已发布 |
-| **v0.6.1** | **Status 粗体、CP 过滤、备份路径** | **待开发** |
+| **v0.6.1** | **Status 粗体、CP 过滤、备份路径** | **开发中** |
 | v0.6.2 | CP 详情下拉、TC 过滤 | 计划中 |
 
----
-
-## 2. 需求清单
+### 1.3 需求清单
 
 | # | 功能 | 优先级 | 预估时间 | 状态 |
 |---|------|--------|----------|------|
-| #1 | Status 颜色粗体显示 | P0 | 1h | 待开发 |
-| #9 | CP 过滤功能 | P0 | 6h | 待开发 |
-| FEAT-002 | 备份恢复自定义路径 | P1 | 4h | 待开发 |
+| #1 | Status 颜色粗体显示 | P0 | 1h | ✅ 完成 |
+| #9 | CP 过滤功能 | P0 | 6h | ✅ 完成 |
+| FEAT-002 | 备份恢复自定义路径 | P1 | 4h | ✅ 完成 |
 
 ---
 
-## 3. 需求详情
+## 2. 需求详情
 
-### 需求 1: Status 颜色粗体显示
+### 2.1 需求 1: Status 颜色粗体显示
 
-#### 3.1 功能概述
+#### 2.1.1 功能概述
 
 **功能名称**: Test Case Status 颜色加粗
 
@@ -45,39 +53,32 @@ v0.6.0 发布后，根据用户反馈，需要增强以下功能：
 - v0.6.0 已实现 Status 颜色显示
 - 用户反馈颜色不够醒目，需要加粗显示
 
-#### 3.2 实现方案
+#### 2.1.2 实现方案
 
 修改 `index.html` 中的 CSS 样式：
 
 ```css
-/* 当前样式 */
-.status-open { color: #6b7280; }
-.status-coded { color: #3b82f6; }
-.status-fail { color: #ef4444; }
-.status-pass { color: #22c55e; }
-.status-removed { color: #9ca3af; text-decoration: line-through; }
-
 /* v0.6.1 样式 - 加粗 */
-.status-open { color: #6b7280; font-weight: 600; }
-.status-coded { color: #3b82f6; font-weight: 600; }
-.status-fail { color: #ef4444; font-weight: 600; }
-.status-pass { color: #22c55e; font-weight: 600; }
-.status-removed { color: #9ca3af; font-weight: 600; text-decoration: line-through; }
+.status-OPEN { background: #e3f2fd; color: #1976d2; font-weight: 600; }
+.status-CODED { background: #fff3e0; color: #f57c00; font-weight: 600; }
+.status-FAIL { background: #ffebee; color: #d32f2f; font-weight: 600; }
+.status-PASS { background: #e8f5e9; color: #388e3c; font-weight: 600; }
+.status-REMOVED { background: #f5f5f5; color: #9e9e9e; font-weight: 600; text-decoration: line-through; }
 ```
 
-#### 3.3 验收标准
+#### 2.1.3 验收标准
 
-- [ ] OPEN 状态显示灰色粗体
-- [ ] CODED 状态显示蓝色粗体
-- [ ] FAIL 状态显示红色粗体
-- [ ] PASS 状态显示绿色粗体
-- [ ] REMOVED 状态显示灰色粗体删除线
+- [x] OPEN 状态显示灰色粗体
+- [x] CODED 状态显示蓝色粗体
+- [x] FAIL 状态显示红色粗体
+- [x] PASS 状态显示绿色粗体
+- [x] REMOVED 状态显示灰色粗体删除线
 
 ---
 
-### 需求 9: CP 过滤功能
+### 2.2 需求 9: CP 过滤功能
 
-#### 3.4 功能概述
+#### 2.2.1 功能概述
 
 **功能名称**: Cover Point 过滤功能
 
@@ -85,36 +86,47 @@ v0.6.0 发布后，根据用户反馈，需要增强以下功能：
 - 当前 CP 页面过滤功能有限
 - 需要支持 Feature 和 Priority 过滤
 
-#### 3.5 功能详情
+#### 2.2.2 功能详情
 
-##### 3.5.1 支持过滤的字段
+##### 2.2.2.1 支持过滤的字段
 
 | 字段 | 过滤类型 |
 |------|----------|
 | Feature | 下拉多选 |
 | Priority | 下拉多选 |
 
-##### 3.5.2 界面描述
+##### 2.2.2.2 界面描述
 
 **过滤器面板**:
 ```
 过滤条件:
-[Feature ▼]    [Priority ▼]
+[全部 Feature ▼]    [全部 Priority ▼]
 
 [应用过滤] [重置]
 ```
 
-##### 3.5.3 API 修改
+##### 2.2.2.3 API 修改
 
 `GET /api/cp` 增加过滤参数：
 
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `feature` | string | Feature 名称（支持多值，逗号分隔） |
-| `priority` | string | Priority (P0/P1/P2，支持多值） |
+| 参数 | 类型 | 说明 | 示例 |
+|------|------|------|------|
+| `project_id` | int | 项目 ID（必填） | `?project_id=1` |
+| `feature` | string | Feature 过滤（支持多值，逗号分隔） | `?feature=FeatureA,FeatureB` |
+| `priority` | string | Priority 过滤（支持多值） | `?priority=P0,P1` |
 
 **请求示例**:
 ```
+# 获取所有 CP
+GET /api/cp?project_id=1
+
+# 按 Feature 过滤
+GET /api/cp?project_id=1&feature=FeatureA
+
+# 按 Priority 过滤
+GET /api/cp?project_id=1&priority=P0
+
+# 组合过滤
 GET /api/cp?project_id=1&feature=FeatureA,FeatureB&priority=P0,P1
 ```
 
@@ -124,28 +136,31 @@ query = 'SELECT * FROM cover_point WHERE 1=1'
 params = []
 
 if feature_filter:
+    features = [f.strip() for f in feature_filter.split(',')]
     placeholders = ','.join(['?'] * len(features))
     query += f' AND feature IN ({placeholders})'
     params.extend(features)
 
 if priority_filter:
+    priorities = [p.strip() for p in priority_filter.split(',')]
     placeholders = ','.join(['?'] * len(priorities))
     query += f' AND priority IN ({placeholders})'
     params.extend(priorities)
 ```
 
-#### 3.6 验收标准
+#### 2.2.3 验收标准
 
-- [ ] 支持按 Feature 过滤
-- [ ] 支持按 Priority 过滤
-- [ ] 支持组合过滤
-- [ ] 支持重置过滤条件
+- [x] 支持按 Feature 过滤
+- [x] 支持按 Priority 过滤
+- [x] 支持组合过滤
+- [x] 支持重置过滤条件
+- [x] Feature 下拉框自动填充当前项目的 Feature 选项
 
 ---
 
-### FEAT-002: 备份恢复自定义路径
+### 2.3 FEAT-002: 备份恢复自定义路径
 
-#### 3.7 功能概述
+#### 2.3.1 功能概述
 
 **功能名称**: 备份恢复自定义文件路径
 
@@ -153,102 +168,148 @@ if priority_filter:
 - 当前备份恢复功能只能搜索默认 `archives/` 目录
 - 用户无法选择其他位置的备份文件
 
-#### 3.8 功能详情
+#### 2.3.2 功能详情
 
-##### 3.8.1 界面修改
+##### 2.3.2.1 界面修改
 
 **恢复弹窗增加**:
-- "选择文件" 按钮
-- 文件选择对话框（JSON 文件）
+- "选择文件" 按钮（`<input type="file">`）
+- 文件选择对话框（只接受 JSON 文件）
+- "上传恢复" 按钮
 
-##### 3.8.2 新增 API
+##### 2.3.2.2 新增 API
 
 `POST /api/projects/restore/upload` - 上传备份文件恢复
 
 **请求**: `multipart/form-data`
 ```
-file: [JSON 文件]
+POST /api/projects/restore/upload
+Content-Type: multipart/form-data
+
+Body: file=@backup.json
 ```
 
-**响应**:
+**请求参数**:
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `file` | file | JSON 格式的备份文件 |
+
+**成功响应**:
 ```json
 {
   "success": true,
   "project": {
-    "id": 1,
-    "name": "Restored_Project"
+    "id": 10,
+    "name": "Restored_Project",
+    "created_at": "2026-02-09 12:00:00"
   }
 }
 ```
 
-##### 3.8.3 保留功能
+**错误响应**:
+```json
+{
+  "error": "项目 \"xxx\" 已存在，无法恢复"
+}
+```
 
-保留现有 `POST /api/projects/restore` 按文件名恢复的功能
+##### 2.3.2.3 保留功能
 
-#### 3.9 验收标准
+保留现有 `POST /api/projects/restore` 按文件名恢复的功能。
 
-- [ ] 恢复弹窗显示"选择文件"按钮
-- [ ] 支持本地 JSON 文件选择
-- [ ] 上传后自动恢复项目
-- [ ] 保留按文件名恢复的方式
+#### 2.3.3 验收标准
+
+- [x] 恢复弹窗显示"选择文件"按钮
+- [x] 支持本地 JSON 文件选择
+- [x] 上传后自动恢复项目
+- [x] 保留按文件名恢复的方式
 
 ---
 
-## 4. API 接口
+## 3. API 接口
 
-### 4.1 CP 过滤 API
+### 3.1 Cover Points API
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
 | GET | `/api/cp?project_id=1&feature=...&priority=...` | 获取 CP 列表（支持过滤） |
+| GET | `/api/cp/{id}` | 获取 CP 详情（需 project_id） |
+| POST | `/api/cp` | 创建 CP |
+| PUT | `/api/cp/{id}` | 更新 CP（需 project_id） |
+| DELETE | `/api/cp/{id}` | 删除 CP（需 project_id） |
+| POST | `/api/cp/batch/priority` | 批量更新 Priority（需 project_id） |
 
-### 4.2 备份恢复 API
+### 3.2 备份恢复 API
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
+| POST | `/api/projects/{id}/archive` | 备份项目 |
+| GET | `/api/projects/archive/list` | 获取归档列表 |
 | POST | `/api/projects/restore` | 按文件名恢复 |
-| POST | `/api/projects/restore/upload` | 上传文件恢复 |
+| **POST** | **`/api/projects/restore/upload`** | **上传文件恢复（v0.6.1）** |
+| DELETE | `/api/projects/{id}` | 删除项目 |
+
+---
+
+## 4. 界面设计
+
+### 4.1 CP 过滤下拉框
+
+```html
+<!-- Feature 过滤下拉框 -->
+<select id="cpFeatureFilter" onchange="filterCPByFeature()">
+  <option value="">全部 Feature</option>
+  <!-- 自动填充 -->
+</select>
+
+<!-- Priority 过滤下拉框 -->
+<select id="cpPriorityFilter" onchange="filterCPByPriority()">
+  <option value="">全部 Priority</option>
+  <option value="P0">P0</option>
+  <option value="P1">P1</option>
+  <option value="P2">P2</option>
+</select>
+```
+
+### 4.2 备份恢复弹窗
+
+```html
+<div class="form-group">
+  <label>从备份恢复</label>
+  <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+    <input type="file" id="restoreFile" accept=".json" style="flex: 1;">
+    <button class="btn" onclick="uploadAndRestore()">上传恢复</button>
+  </div>
+  <div id="uploadStatus"></div>
+</div>
+```
 
 ---
 
 ## 5. 验收标准清单
 
 ### 需求 1: Status 粗体
-- [ ] OPEN 灰色粗体
-- [ ] CODED 蓝色粗体
-- [ ] FAIL 红色粗体
-- [ ] PASS 绿色粗体
-- [ ] REMOVED 灰色粗体删除线
+- [x] OPEN 状态显示灰色粗体
+- [x] CODED 状态显示蓝色粗体
+- [x] FAIL 状态显示红色粗体
+- [x] PASS 状态显示绿色粗体
+- [x] REMOVED 状态显示灰色粗体删除线
 
 ### 需求 9: CP 过滤
-- [ ] Feature 过滤
-- [ ] Priority 过滤
-- [ ] 组合过滤
-- [ ] 重置功能
+- [x] Feature 过滤
+- [x] Priority 过滤
+- [x] 组合过滤
+- [x] 重置功能
+- [x] Feature 下拉框自动填充
 
 ### FEAT-002: 备份路径
-- [ ] 选择文件按钮
-- [ ] 文件上传恢复
-- [ ] 保留文件名恢复
+- [x] 选择文件按钮
+- [x] 文件上传恢复
+- [x] 保留文件名恢复
 
 ---
 
-## 6. 预估工作量
-
-| 需求 | 任务 | 时间 |
-|------|------|------|
-| #1 | CSS 样式修改 | 1h |
-| #9 | 后端过滤 API | 2h |
-| #9 | 前端过滤 UI | 3h |
-| #9 | 测试验证 | 1h |
-| FEAT-002 | 上传 API | 2h |
-| FEAT-002 | 前端上传 UI | 1.5h |
-| FEAT-002 | 测试验证 | 0.5h |
-| **总计** | | **11h** |
-
----
-
-## 7. 版本历史
+## 6. 版本历史
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
