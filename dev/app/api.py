@@ -133,12 +133,16 @@ def get_version():
             with open(version_file, 'r') as f:
                 lines = f.readlines()
                 for line in lines:
+                    line = line.strip()
                     if '=' in line:
-                        key, value = line.strip().split('=', 1)
+                        key, value = line.split('=', 1)
                         if key == 'VERSION':
                             version = value
                         elif key == 'RELEASE_DATE':
                             release_date = value
+                    elif line:
+                        # 兼容只有版本号的格式，如 "v0.6.1"
+                        version = line
         except:
             pass
     return jsonify({
