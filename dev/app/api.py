@@ -87,6 +87,7 @@ def init_project_db(project_name):
             checker_details TEXT,
             coverage_details TEXT,
             comments TEXT,
+            priority TEXT DEFAULT 'P0',
             status TEXT DEFAULT 'OPEN',
             created_at TEXT,
             coded_date TEXT,
@@ -901,6 +902,7 @@ def get_testcases():
             'checker_details': row['checker_details'],
             'coverage_details': row['coverage_details'],
             'comments': row['comments'],
+            'priority': row['priority'],
             'status': row['status'],
             'created_at': row['created_at'],
             'coded_date': row['coded_date'],
@@ -989,10 +991,10 @@ def create_testcase():
     cursor.execute('''
         INSERT INTO test_case (
             project_id, dv_milestone, testbench, category, owner, test_name, 
-            scenario_details, checker_details, coverage_details, comments, 
+            scenario_details, checker_details, coverage_details, comments, priority,
             status, created_at, coded_date, fail_date, pass_date, removed_date, target_date
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, NULL, NULL, NULL, NULL, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, NULL, NULL, NULL, NULL, ?)
     ''', (project_id,
           data.get('dv_milestone', ''),
           data.get('testbench', ''),
@@ -1003,6 +1005,7 @@ def create_testcase():
           data.get('checker_details', ''),
           data.get('coverage_details', ''),
           data.get('comments', ''),
+          data.get('priority', 'P0'),
           today,
           data.get('target_date', '')))
     
@@ -1032,6 +1035,7 @@ def create_testcase():
             'checker_details': data.get('checker_details', ''),
             'coverage_details': data.get('coverage_details', ''),
             'comments': data.get('comments', ''),
+            'priority': data.get('priority', 'P0'),
             'status': 'OPEN',
             'created_at': today,
             'coded_date': None,

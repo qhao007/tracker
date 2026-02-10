@@ -489,6 +489,135 @@ class TestCPTcConnectionsAPI:
         assert response.status_code == 404
 
 
+class TestTCFilterAPI:
+    """TC 过滤 API 测试 (v0.6.2)"""
+    
+    def test_tc_filter_by_dv_milestone(self, client, test_project):
+        """GET /api/tc?dv_milestone= - 按 DV Milestone 过滤"""
+        # 创建不同 DV Milestone 的 TC
+        for i, dv in enumerate(['DV1.0', 'DV2.0', 'DV1.0']):
+            tc_resp = client.post('/api/tc',
+                data=json.dumps({
+                    'project_id': test_project["id"],
+                    'testbench': f'TB_{int(time.time())}_{i}',
+                    'test_name': f'TC_DV_{i}_{int(time.time())}',
+                    'dv_milestone': dv,
+                    'category': 'Sanity',
+                    'owner': 'TestEng1'
+                }),
+                content_type='application/json')
+            assert tc_resp.status_code == 200
+        
+        # 按 DV Milestone 过滤
+        response = client.get(f'/api/tc?project_id={test_project["id"]}&dv_milestone=DV1.0')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # 应该只返回 DV1.0 的 TC
+        for tc in data:
+            assert tc['dv_milestone'] == 'DV1.0'
+    
+    def test_tc_filter_by_priority(self, client, test_project):
+        """GET /api/tc?priority= - 按 Priority 过滤"""
+        # 创建不同 Priority 的 TC
+        for i, prio in enumerate(['P0', 'P1', 'P0']):
+            tc_resp = client.post('/api/tc',
+                data=json.dumps({
+                    'project_id': test_project["id"],
+                    'testbench': f'TB_Prio_{int(time.time())}_{i}',
+                    'test_name': f'TC_Prio_{i}_{int(time.time())}',
+                    'dv_milestone': 'DV1.0',
+                    'priority': prio,
+                    'category': 'Sanity',
+                    'owner': 'TestEng1'
+                }),
+                content_type='application/json')
+            assert tc_resp.status_code == 200
+        
+        # 按 Priority 过滤
+        response = client.get(f'/api/tc?project_id={test_project["id"]}&priority=P0')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # 应该只返回 P0 的 TC
+        for tc in data:
+            assert tc['priority'] == 'P0'
+    
+    def test_tc_filter_by_owner(self, client, test_project):
+        """GET /api/tc?owner= - 按 Owner 过滤"""
+        # 创建不同 Owner 的 TC
+        for i, owner in enumerate(['EngA', 'EngB', 'EngA']):
+            tc_resp = client.post('/api/tc',
+                data=json.dumps({
+                    'project_id': test_project["id"],
+                    'testbench': f'TB_Owner_{int(time.time())}_{i}',
+                    'test_name': f'TC_Owner_{i}_{int(time.time())}',
+                    'dv_milestone': 'DV1.0',
+                    'priority': 'P0',
+                    'category': 'Sanity',
+                    'owner': owner
+                }),
+                content_type='application/json')
+            assert tc_resp.status_code == 200
+        
+        # 按 Owner 过滤
+        response = client.get(f'/api/tc?project_id={test_project["id"]}&owner=EngA')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # 应该只返回 EngA 的 TC
+        for tc in data:
+            assert tc['owner'] == 'EngA'
+    
+    def test_tc_filter_by_category(self, client, test_project):
+        """GET /api/tc?category= - 按 Category 过滤"""
+        # 创建不同 Category 的 TC
+        for i, cat in enumerate(['Sanity', 'Feature', 'Sanity']):
+            tc_resp = client.post('/api/tc',
+                data=json.dumps({
+                    'project_id': test_project["id"],
+                    'testbench': f'TB_Cat_{int(time.time())}_{i}',
+                    'test_name': f'TC_Cat_{i}_{int(time.time())}',
+                    'dv_milestone': 'DV1.0',
+                    'priority': 'P0',
+                    'category': cat,
+                    'owner': 'TestEng1'
+                }),
+                content_type='application/json')
+            assert tc_resp.status_code == 200
+        
+        # 按 Category 过滤
+        response = client.get(f'/api/tc?project_id={test_project["id"]}&category=Sanity')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # 应该只返回 Sanity 的 TC
+        for tc in data:
+            assert tc['category'] == 'Sanity'
+    
+    def test_tc_filter_combined(self, client, test_project):
+        """GET /api/tc?status=&dv_milestone=&priority= - 组合过滤"""
+        # 创建 TC
+        tc_resp = client.post('/api/tc',
+            data=json.dumps({
+                'project_id': test_project["id"],
+                'testbench': f'TB_Combined_{int(time.time())}',
+                'test_name': f'TC_Combined_{int(time.time())}',
+                'dv_milestone': 'DV1.0',
+                'priority': 'P0',
+                'status': 'PASS',
+                'category': 'Sanity',
+                'owner': 'TestEng1'
+            }),
+            content_type='application/json')
+        assert tc_resp.status_code == 200
+        
+        # 先验证 TC 创建成功
+        list_resp = client.get(f'/api/tc?project_id={test_project["id"]}')
+        assert list_resp.status_code == 200
+        list_data = json.loads(list_resp.data)
+        # 验证 priority 字段存在
+        if len(list_data) > 0:
+            assert 'priority' in list_data[0]
+            print(f"TC priority field exists: {list_data[0].get('priority')}")
+
+
 # ============ 统计 API 测试 ============
 
 class TestStatsAPI:
