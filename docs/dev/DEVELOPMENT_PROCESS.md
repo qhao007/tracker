@@ -196,15 +196,21 @@ git checkout -b feature/功能名称
 git add .
 git commit -m "feat: 功能说明"
 
-# 6. 合并到 develop
+# 6. 合并到 develop 前，先更新版本号
+#    - 编辑 dev/VERSION 文件，更新版本号（如 v0.6.1 → v0.6.2）
+#    - git add dev/VERSION && git commit -m "chore: 更新 VERSION 文件为 v0.6.2"
+
+# 7. 合并到 develop
 git checkout develop
 git merge feature/功能名称 --no-ff -m "merge: 合并功能名称"
 
-# 7. 推送
+# 8. 推送
 git push origin develop
 ```
 
-**⚠️ 重要**: 步骤 4（开发测试）是必需的，所有测试必须通过后才能执行步骤 5（提交代码）。
+**⚠️ 重要**: 
+- 步骤 4（开发测试）是必需的，所有测试必须通过后才能执行步骤 5（提交代码）。
+- **步骤 6（更新版本号）是必需的**，每次合并新功能到 develop 前必须更新 VERSION 文件，确保 develop 分支始终显示下一个开发版本的版本号。
 
 ### 4.2 开发环境
 
