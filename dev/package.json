@@ -1,0 +1,7 @@
+{
+  "devDependencies": {
+    "@html-eslint/eslint-plugin": "^0.54.2",
+    "@html-eslint/parser": "^0.54.0",
+    "@playwright/test": "^1.58.2"
+  }
+}

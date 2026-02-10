@@ -54,8 +54,11 @@
         .bg-yellow { background: #ff9800; color: white; }
         .bg-gray { background: #9e9e9e; color: white; }
         .bg-red { background: #f44336; color: white; }
-        .status-OPEN { background: #e3f2fd; color: #1976d2; }
-.status-REMOVED { background: #f5f5f5; color: #9e9e9e; text-decoration: line-through; } .status-CODED { background: #fff3e0; color: #f57c00; } .status-FAIL { background: #ffebee; color: #d32f2f; } .status-PASS { background: #e8f5e9; color: #388e3c; }
+                .status-OPEN { background: #e3f2fd; color: #1976d2; font-weight: 600; }
+        .status-REMOVED { background: #f5f5f5; color: #9e9e9e; text-decoration: line-through; font-weight: 600; }
+        .status-CODED { background: #fff3e0; color: #f57c00; font-weight: 600; }
+        .status-FAIL { background: #ffebee; color: #d32f2f; font-weight: 600; }
+        .status-PASS { background: #e8f5e9; color: #388e3c; font-weight: 600; }
         .details-toggle { color: #2170bb; cursor: pointer; font-size: 11px; text-decoration: underline; }
         .details-content { display: none; margin-top: 5px; padding: 8px; background: #f5f5f5; border-radius: 3px; font-size: 11px; }
         .details-content.show { display: block; }
@@ -129,6 +132,9 @@
                 <div class="toolbar-left">
                     <button class="btn btn-primary" onclick="openCPModal()">+ 添加 CP</button>
                     <input type="text" class="search-input" placeholder="搜索..." onkeyup="filterCP(this.value)">
+                    <select id="cpFeatureFilter" onchange="filterCPByFeature()"><option value="">全部 Feature</option></select>
+                    <select id="cpPriorityFilter" onchange="filterCPByPriority()"><option value="">全部 Priority</option><option value="P0">P0</option><option value="P1">P1</option><option value="P2">P2</option></select>
+                    <button class="btn" onclick="resetCPFilter()" style="padding: 4px 8px; font-size: 12px;">重置</button>
                 </div>
                 <div class="toolbar-right"><span style="color: #666; font-size: 12px;">共 <span id="cpCount">0</span> 条</span></div>
             </div>
@@ -235,7 +241,15 @@
             <div class="modal-header"><span>备份与恢复</span><button class="modal-close" onclick="closeModal('archiveModal')">&times;</button></div>
             <div class="modal-body">
                 <div class="form-group"><label>备份当前项目</label><button class="btn btn-primary" onclick="archiveCurrentProject()">💾 导出备份</button></div>
-                <div class="form-group"><label>从备份恢复</label><div class="project-list" id="archiveList"></div></div>
+                <div class="form-group">
+                    <label>从备份恢复</label>
+                    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                        <input type="file" id="restoreFile" accept=".json" style="flex: 1;">
+                        <button class="btn" onclick="uploadAndRestore()">上传恢复</button>
+                    </div>
+                    <div id="uploadStatus" style="margin-bottom: 10px;"></div>
+                </div>
+                <div class="form-group"><label>或从默认目录选择</label><div class="project-list" id="archiveList"></div></div>
             </div>
         </div>
     </div>
@@ -404,6 +418,13 @@
                 const res = await fetch(`${API_BASE}/cp?project_id=${currentProject.id}`);
                 coverPoints = await res.json();
                 renderCP();
+                // 填充 Feature 过滤下拉框
+                const features = [...new Set(coverPoints.map(cp => cp.feature).filter(f => f))];
+                const featureSelect = document.getElementById('cpFeatureFilter');
+                if (featureSelect) {
+                    featureSelect.innerHTML = '<option value="">全部 Feature</option>' + 
+                        features.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('');
+                }
             } catch (e) { console.error('加载 CP 失败:', e); }
         }
         
@@ -431,12 +452,27 @@
         
         function renderCP(filter = '') {
             let filtered = coverPoints;
+            
+            // 文本搜索过滤
             if (filter) { filter = filter.toLowerCase(); filtered = filtered.filter(cp => cp.feature.toLowerCase().includes(filter) || (cp.sub_feature && cp.sub_feature.toLowerCase().includes(filter)) || cp.cover_point.toLowerCase().includes(filter)); }
+            
+            // Feature 下拉过滤
+            const featureFilter = document.getElementById('cpFeatureFilter')?.value;
+            if (featureFilter) { filtered = filtered.filter(cp => cp.feature === featureFilter); }
+            
+            // Priority 下拉过滤
+            const priorityFilter = document.getElementById('cpPriorityFilter')?.value;
+            if (priorityFilter) { filtered = filtered.filter(cp => cp.priority === priorityFilter); }
+            
             document.getElementById('cpCount').textContent = filtered.length;
             const tbody = document.getElementById('cpList');
-            if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #999; padding: 30px;">暂无数据</td></tr>'; return; }
+            if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #999; padding: 30px;">暂无数据</td></tr>'; return; }
             tbody.innerHTML = filtered.map(cp => `<tr><td><input type="checkbox" class="cp-select" value="${cp.id}" onchange="getSelectedCPs()"></td><td>${escapeHtml(cp.feature)}</td><td>${escapeHtml(cp.sub_feature || '')}</td><td><strong>${escapeHtml(cp.cover_point)}</strong></td><td>${escapeHtml(cp.cover_point_details || '')}</td><td><span class="priority-badge">${cp.priority || 'P0'}</span></td><td><span class="coverage-badge ${cp.coverage === 100 ? 'bg-green' : cp.coverage > 0 ? 'bg-yellow' : 'bg-red'}">${cp.coverage}%</span><small class="coverage-detail">${cp.coverage_detail}</small></td><td><div class="action-btns"><button class="action-btn edit" onclick="editCP(${cp.id})">编辑</button><button class="action-btn delete" onclick="deleteCP(${cp.id})">删除</button></div></td></tr>`).join('');
         }
+        
+        function filterCP(value) { renderCP(value); }
+        function filterCPByFeature() { renderCP(); }
+        function filterCPByPriority() { renderCP(); }
         
         function renderTC(filter = '', statusFilter = '', sortBy = 'id') {
             let filtered = testCases;
@@ -451,7 +487,7 @@
             });
             document.getElementById('tcCount').textContent = filtered.length;
             const tbody = document.getElementById('tcList');
-            if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: #999; padding: 30px;">暂无数据</td></tr>'; return; }
+            if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="11" style="text-align: center; color: #999; padding: 30px;">暂无数据</td></tr>'; return; }
             tbody.innerHTML = filtered.map(tc => {
                 const hasDetails = tc.checker_details || tc.coverage_details || tc.comments;
                 const detailsId = `tc-details-${tc.id}`;
@@ -466,6 +502,18 @@
         
         function toggleDetails(id) { const el = document.getElementById(id); el.classList.toggle('show'); }
         function filterCP(value) { renderCP(value); }
+        function filterCPByFeature() { renderCP(); }
+        function filterCPByPriority() { renderCP(); }
+        function resetCPFilter() {
+            const featureSelect = document.getElementById('cpFeatureFilter');
+            const prioritySelect = document.getElementById('cpPriorityFilter');
+            if (featureSelect) featureSelect.value = '';
+            if (prioritySelect) prioritySelect.value = '';
+            // 重置搜索框
+            const searchInput = document.querySelector('#cpPanel .search-input');
+            if (searchInput) searchInput.value = '';
+            renderCP();
+        }
         function filterTC(value) { renderTC(value); }
         function filterTCStatus(value) { renderTC('', value); }
         function sortTC(value) { renderTC('', '', value); }
@@ -729,22 +777,63 @@
                 const res = await fetch('/api/projects/archive/list');
                 archives = await res.json();
                 const list = document.getElementById('archiveList');
-                list.innerHTML = archives.map(a => `<div class="project-item"><div class="project-info"><span class="project-name">${a.project_name}</span><span class="project-meta">${a.backup_date}</span></div><button class="btn btn-primary" onclick="restoreArchive(${a.id})">恢复</button></div>`).join('') || '<p style="color: #999;">暂无备份</p>';
+                list.innerHTML = archives.map(a => `<div class="project-item"><div class="project-info"><span class="project-name">${a.project_name}</span><span class="project-meta">${a.backup_date}</span></div><button class="btn btn-primary" onclick="restoreArchive('${escapeHtml(a.filename)}')">恢复</button></div>`).join('') || '<p style="color: #999;">暂无备份</p>';
             } catch (err) { console.error('加载归档失败:', err); }
         }
         
-        async function restoreArchive(id) {
+        async function restoreArchive(filename) {
             if (!confirm('确定要从备份恢复吗？注意：不能恢复与现有项目同名的备份。')) return;
             try {
                 const res = await fetch('/api/projects/restore', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({archive_id: id})
+                    body: JSON.stringify({filename: filename})
                 });
                 const result = await res.json();
                 if (result.success) { closeModal('archiveModal'); await loadProjects(); selectProject(result.project.id); alert('恢复成功！'); }
                 else { alert(result.error || '恢复失败'); }
             } catch (err) { alert('恢复失败: ' + err); }
+        }
+        
+        async function uploadAndRestore() {
+            const fileInput = document.getElementById('restoreFile');
+            const statusDiv = document.getElementById('uploadStatus');
+            
+            if (!fileInput.files[0]) {
+                statusDiv.innerHTML = '<span style="color: #ef4444;">请选择备份文件</span>';
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            if (!file.name.endsWith('.json')) {
+                statusDiv.innerHTML = '<span style="color: #ef4444;">只支持 JSON 格式</span>';
+                return;
+            }
+            
+            statusDiv.innerHTML = '<span style="color: #666;">正在上传...</span>';
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                const res = await fetch('/api/projects/restore/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await res.json();
+                
+                if (result.success) {
+                    statusDiv.innerHTML = '<span style="color: #22c55e;">恢复成功！</span>';
+                    closeModal('archiveModal');
+                    await loadProjects();
+                    selectProject(result.project.id);
+                    setTimeout(() => { statusDiv.innerHTML = ''; }, 2000);
+                } else {
+                    statusDiv.innerHTML = `<span style="color: #ef4444;">${result.error || '恢复失败'}</span>`;
+                }
+            } catch (err) {
+                statusDiv.innerHTML = '<span style="color: #ef4444;">上传失败: ' + err + '</span>';
+            }
         }
         
         function showArchiveModal() {

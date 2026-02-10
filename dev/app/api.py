@@ -312,6 +312,7 @@ def list_archives():
                     data = json.load(file)
                     archives.append({
                         'id': len(archives) + 1,
+                        'filename': f,
                         'project_name': data.get('name', f),
                         'backup_date': data.get('backup_date', '')
                     })
@@ -396,6 +397,100 @@ def restore_project():
     
     return jsonify({'success': True, 'project': project})
 
+@api.route('/api/projects/restore/upload', methods=['POST'])
+def restore_project_upload():
+    """从上传文件恢复项目"""
+    from werkzeug.utils import secure_filename
+    
+    # 检查是否有文件
+    if 'file' not in request.files:
+        return jsonify({'error': '没有文件'}), 400
+    
+    file = request.files['file']
+    
+    # 检查文件名
+    if file.filename == '':
+        return jsonify({'error': '没有选择文件'}), 400
+    
+    # 验证是 JSON 文件
+    if not file.filename.endswith('.json'):
+        return jsonify({'error': '只支持 JSON 格式的备份文件'}), 400
+    
+    try:
+        # 读取并解析 JSON
+        project_data = json.load(file)
+    except Exception as e:
+        return jsonify({'error': f'解析 JSON 文件失败: {str(e)}'}), 400
+    
+    project_name = project_data.get('name')
+    
+    if not project_name:
+        return jsonify({'error': '备份文件缺少项目名称'}), 400
+    
+    # 检查项目是否已存在
+    projects = load_projects()
+    if any(p['name'] == project_name and not p.get('is_archived', False) for p in projects):
+        return jsonify({'error': f'项目 "{project_name}" 已存在，无法恢复'}), 400
+    
+    # 初始化新项目数据库
+    init_project_db(project_name)
+    conn = get_db(project_name)
+    cursor = conn.cursor()
+    
+    # 恢复 Cover Points
+    for cp_data in project_data.get('cover_points', []):
+        cursor.execute('''
+            INSERT INTO cover_point (project_id, feature, sub_feature, cover_point, cover_point_details, comments, priority, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (cp_data.get('project_id', project_data.get('id', 1)), 
+              cp_data.get('feature', ''),
+              cp_data.get('sub_feature', ''),
+              cp_data.get('cover_point', ''),
+              cp_data.get('cover_point_details', ''),
+              cp_data.get('comments', ''),
+              cp_data.get('priority', 'P0'),
+              cp_data.get('created_at', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))))
+    
+    # 恢复 Test Cases
+    for tc_data in project_data.get('test_cases', []):
+        cursor.execute('''
+            INSERT INTO test_case (project_id, dv_milestone, testbench, category, owner, test_name, 
+            scenario_details, checker_details, coverage_details, comments, status, created_at,
+            coded_date, fail_date, pass_date, removed_date, target_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (tc_data.get('project_id', project_data.get('id', 1)),
+              tc_data.get('dv_milestone', ''),
+              tc_data.get('testbench', ''),
+              tc_data.get('category', ''),
+              tc_data.get('owner', ''),
+              tc_data.get('test_name', ''),
+              tc_data.get('scenario_details', ''),
+              tc_data.get('checker_details', ''),
+              tc_data.get('coverage_details', ''),
+              tc_data.get('comments', ''),
+              tc_data.get('status', 'OPEN'),
+              tc_data.get('created_at', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
+              tc_data.get('coded_date'),
+              tc_data.get('fail_date'),
+              tc_data.get('pass_date'),
+              tc_data.get('removed_date'),
+              tc_data.get('target_date')))
+    
+    conn.commit()
+    
+    # 添加到项目列表
+    project = {
+        'id': len(projects) + 1,
+        'name': project_name,
+        'created_at': project_data.get('created_at', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
+        'is_archived': False,
+        'version': project_data.get('version', 'stable')
+    }
+    projects.append(project)
+    save_projects(projects)
+    
+    return jsonify({'success': True, 'project': project})
+
 @api.route('/api/projects/<int:project_id>', methods=['DELETE'])
 def delete_project(project_id):
     """删除项目"""
@@ -418,8 +513,10 @@ def delete_project(project_id):
 
 @api.route('/api/cp', methods=['GET'])
 def get_coverpoints():
-    """获取 CP 列表（含覆盖率计算）"""
+    """获取 CP 列表（含覆盖率计算和过滤）"""
     project_id = request.args.get('project_id', type=int)
+    feature_filter = request.args.get('feature')
+    priority_filter = request.args.get('priority')
     
     if not project_id:
         return jsonify([])
@@ -432,7 +529,25 @@ def get_coverpoints():
     
     conn = get_db(project['name'])
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM cover_point ORDER BY id')
+    
+    # 构建过滤查询
+    query = 'SELECT * FROM cover_point WHERE 1=1'
+    params = []
+    
+    if feature_filter:
+        features = [f.strip() for f in feature_filter.split(',')]
+        placeholders = ','.join(['?'] * len(features))
+        query += f' AND feature IN ({placeholders})'
+        params.extend(features)
+    
+    if priority_filter:
+        priorities = [p.strip() for p in priority_filter.split(',')]
+        placeholders = ','.join(['?'] * len(priorities))
+        query += f' AND priority IN ({placeholders})'
+        params.extend(priorities)
+    
+    query += ' ORDER BY id'
+    cursor.execute(query, params)
     
     cps = []
     for row in cursor.fetchall():

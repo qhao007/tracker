@@ -186,17 +186,25 @@ git checkout -b feature/功能名称
 #    - 修改 dev/ 目录下的代码
 #    - 在 dev 版本测试
 
-# 4. 提交代码
+# 4. 开发测试
+#    - 执行 ESLint 检查: bash dev/check_frontent.sh
+#    - 执行 API 测试: cd dev && PYTHONPATH=. pytest tests/test_api.py -v
+#    - 执行冒烟测试: cd dev && npx playwright test tests/test_smoke.spec.ts --project=firefox
+#    - ⚠️ 必须所有测试通过后才能提交代码
+
+# 5. 提交代码
 git add .
 git commit -m "feat: 功能说明"
 
-# 5. 合并到 develop
+# 6. 合并到 develop
 git checkout develop
 git merge feature/功能名称 --no-ff -m "merge: 合并功能名称"
 
-# 6. 推送
+# 7. 推送
 git push origin develop
 ```
+
+**⚠️ 重要**: 步骤 4（开发测试）是必需的，所有测试必须通过后才能执行步骤 5（提交代码）。
 
 ### 4.2 开发环境
 
@@ -204,7 +212,8 @@ git push origin develop
 |------|------|
 | **开发版** | `dev/` 目录，端口 8081，test_data |
 | **测试数据** | `/projects/management/tracker/shared/data/test_data/` |
-| **启动命令** | `cd dev && bash start_server_test.sh` |
+| **启动命令** | `cd dev && ./start_server_test.sh` |
+| **WSGI 入口** | `wsgi.py` (gunicorn 使用) |
 
 ### 4.3 代码规范
 
@@ -236,31 +245,90 @@ git push origin develop
 - 前端代码保持简洁
 - 关键函数添加注释
 
+#### 4.3.3 ESLint 检查（前端代码）
+
+**适用场景**: 每次提交包含前端代码（index.html, JavaScript 文件）的 CI 检查。
+
+**检查内容**:
+1. **ESLint 检查**: HTML 文件中的 JavaScript 语法错误
+2. **关键函数完整性检查**: renderTC, renderCP, loadCP, loadTC 等核心函数
+3. **API 端点检查**: API_BASE 和 /api/* 端点定义
+
+**执行命令**:
+```bash
+# 在项目根目录执行
+cd /projects/management/tracker/dev
+bash check_frontent.sh
+```
+
+**检查输出示例**:
+```
+=== Tracker 前端代码检查 ===
+
+1. ESLint 检查...
+   ✅ ESLint 检查通过
+
+2. 关键函数完整性检查...
+   ✅ renderTC 函数存在
+   ✅ renderCP 函数存在
+   ...
+
+3. API 端点检查...
+   ✅ API_BASE 定义正确
+   ✅ API 端点定义完整
+
+=== 检查通过 ✅ ===
+```
+
+**CI 集成**: 在 `.github/workflows/` 或等价 CI 系统中添加步骤：
+```yaml
+- name: Frontend Code Check
+  run: cd dev && bash check_frontent.sh
+```
+
+**失败处理**: ESLint 检查失败时，禁止合并代码，必须修复后才能提交。
+
 ---
 
 ## 5. 测试流程
 
 ### 5.1 测试类型
 
-| 测试类型 | 执行方式 | 覆盖范围 | 测试文件 |
-|----------|----------|----------|----------|
-| **单元测试** | pytest | API 接口 | `tests/test_api.py` |
-| **Playwright 冒烟测试** | UI 自动化 | 核心功能点 | `tests/test_smoke.spec.ts` |
-| **兼容性测试** | Playwright | 数据库兼容性 | 用户数据 → 测试数据 |
+| 测试类型 | 执行方式 | 覆盖范围 | 测试文件 | 执行频率 |
+|----------|----------|----------|----------|----------|
+| **ESLint 检查** | 脚本 | 前端 JS 语法 | `check_frontent.sh` | 每次提交 |
+| **单元测试** | pytest | API 接口 | `tests/test_api.py` | 每次提交 |
+| **Playwright 冒烟测试** | UI 自动化 | 核心功能点 | `tests/test_smoke.spec.ts` | 每次提交 |
+| **兼容性测试** | Playwright | 数据库兼容性 | 用户数据 → 测试数据 | 发布前 |
+
+### 5.1.1 ESLint 检查（前端代码）
+
+| 检查项 | 说明 | 命令 |
+|--------|------|------|
+| ESLint 检查 | HTML 中的 JavaScript 语法错误 | `bash check_frontent.sh` |
+| 关键函数检查 | renderTC, renderCP, loadCP, loadTC 等 | `bash check_frontent.sh` |
+| API 端点检查 | API_BASE 和 /api/* 端点定义 | `bash check_frontent.sh` |
 
 ### 5.2 测试执行
 
 ```bash
+# ========== ESLint 检查 (dev 版本，前端代码) ==========
+cd dev
+bash check_frontent.sh
+# 覆盖: JavaScript 语法、关键函数完整性、API 端点
+# 期望: 全部检查通过 ✅
+
 # ========== API 测试 (dev 版本) ==========
 cd dev
 PYTHONPATH=. pytest tests/test_api.py -v
-# 覆盖: API 接口测试 (期望: 21/21 通过, v0.6.0)
+# 覆盖: API 接口测试
+# 期望: 22/22 通过 (v0.6.1)
 
 # ========== Playwright 冒烟测试 ==========
 cd dev
 npx playwright test tests/test_smoke.spec.ts --project=firefox --timeout=60000
-# 覆盖: F001, F004, F005, F007, F012 核心功能 + v0.6.0 功能
-# 期望: 12/12 通过 (v0.6.0)
+# 覆盖: 页面访问、项目加载、数据加载、控制台错误检测
+# 期望: 3/3 通过 (v0.6.1)
 
 # ========== 兼容性测试 ==========
 cd /projects/management/tracker
@@ -532,6 +600,6 @@ journalctl -u tracker -f
 
 ---
 
-**文档版本**: v1.5  
-**最后更新**: 2026-02-08  
+**文档版本**: v1.6  
+**最后更新**: 2026-02-09  
 **维护者**: 小栗子 🌰
