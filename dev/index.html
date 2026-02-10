@@ -621,7 +621,7 @@
         async function loadCPTcConnections(cpId) {
             const container = document.getElementById(`cp-tcs-${cpId}`);
             try {
-                const projectId = document.getElementById('projectSelect')?.value;
+                const projectId = document.getElementById('projectSelector')?.value;
                 const res = await fetch(`${API_BASE}/cp/${cpId}/tcs${projectId ? '?project_id=' + projectId : ''}`);
                 const data = await res.json();
                 
