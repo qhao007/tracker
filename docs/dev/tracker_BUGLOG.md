@@ -700,6 +700,39 @@ async function toggleAllCPDetails() {
 | BUG-033 | TC Status/DV Milestone 需要单选下拉框 | 2026-02-10 |
 | BUG-034 | TC Status/DV Milestone 缺少全部选项 | 2026-02-10 |
 | BUG-035 | TC DV Milestone 过滤选项不动态加载 | 2026-02-10 |
+| BUG-036 | projectSelector ID 拼写错误 | 2026-02-10 |
+
+---
+
+### BUG-036: projectSelector ID 拼写错误
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-10 |
+| **报告人** | 用户 |
+| **修复日期** | 2026-02-10 |
+| **修复人** | 小栗子 |
+
+**描述**: 点击 CP 详情后显示"加载失败"，API 返回 404。
+
+**原因**: `loadCPTcConnections()` 函数中使用 `document.getElementById('projectSelect')` 获取项目ID，但实际元素的ID是 `projectSelector'`。
+
+**修复方案**:
+将 `projectSelect` 改为 `projectSelector'`。
+
+```javascript
+// 修复前
+const projectId = document.getElementById('projectSelect')?.value;
+
+// 修复后
+const projectId = document.getElementById('projectSelector')?.value;
+```
+
+**验证**: 点击 CP 详情后正确显示关联的 Test Case。
+
+**Git 提交**: `8b44006 fix: 修复 projectSelector ID 拼写错误`
 
 ---
 
