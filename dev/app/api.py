@@ -797,10 +797,14 @@ def get_cp_tcs(cp_id):
 
 @api.route('/api/tc', methods=['GET'])
 def get_testcases():
-    """获取 TC 列表"""
+    """获取 TC 列表（支持过滤，v0.6.2）"""
     project_id = request.args.get('project_id', type=int)
     sort_by = request.args.get('sort_by', 'id')
     status_filter = request.args.get('status')
+    dv_milestone_filter = request.args.get('dv_milestone')
+    priority_filter = request.args.get('priority')
+    owner_filter = request.args.get('owner')
+    category_filter = request.args.get('category')
     search = request.args.get('search', '')
     
     if not project_id:
@@ -818,7 +822,46 @@ def get_testcases():
     query = 'SELECT * FROM test_case WHERE 1=1'
     params = []
     
+    # Status 过滤（支持多值，逗号分隔）
     if status_filter:
+        statuses = [s.strip() for s in status_filter.split(',')]
+        placeholders = ','.join(['?'] * len(statuses))
+        query += f' AND status IN ({placeholders})'
+        params.extend(statuses)
+        placeholders = ','.join(['?'] * len(statuses))
+        query += f' AND status IN ({placeholders})'
+        params.extend(statuses)
+    
+    # DV Milestone 过滤（支持多值，逗号分隔）
+    if dv_milestone_filter:
+        milestones = [m.strip() for m in dv_milestone_filter.split(',')]
+        placeholders = ','.join(['?'] * len(milestones))
+        query += f' AND dv_milestone IN ({placeholders})'
+        params.extend(milestones)
+    
+    # Priority 过滤
+    if priority_filter:
+        priorities = [p.strip() for p in priority_filter.split(',')]
+        placeholders = ','.join(['?'] * len(priorities))
+        query += f' AND priority IN ({placeholders})'
+        params.extend(priorities)
+    
+    # Owner 过滤（支持多值，逗号分隔）
+    if owner_filter:
+        owners = [o.strip() for o in owner_filter.split(',')]
+        placeholders = ','.join(['?'] * len(owners))
+        query += f' AND owner IN ({placeholders})'
+        params.extend(owners)
+    
+    # Category 过滤（支持多值，逗号分隔）
+    if category_filter:
+        categories = [c.strip() for c in category_filter.split(',')]
+        placeholders = ','.join(['?'] * len(categories))
+        query += f' AND category IN ({placeholders})'
+        params.extend(categories)
+    
+    # 保留原有 status_filter 参数（兼容旧版本）
+    if status_filter and not status_filter:
         query += ' AND status=?'
         params.append(status_filter)
     

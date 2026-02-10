@@ -80,6 +80,57 @@
         .cp-connected-tcs { background: #fff; border-radius: 4px; border: 1px solid #e0e0e0; overflow: hidden; }
         .cp-connected-tcs th { background: #f5f5f5 !important; }
         
+        /* TC 过滤面板样式 (v0.6.2) */
+        .tc-filter-panel {
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+        .tc-filter-panel .filter-row {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .tc-filter-panel .filter-group {
+            min-width: 100px;
+        }
+        .tc-filter-panel .filter-group label {
+            display: block;
+            font-size: 11px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+        .tc-filter-panel .filter-group select {
+            width: 100%;
+            padding: 6px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 12px;
+            min-width: 100px;
+        }
+        .tc-filter-panel .filter-group select[multiple] {
+            height: 80px;
+        }
+        .tc-filter-panel .filter-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-top: 10px;
+        }
+        .tc-filter-panel .filter-actions .btn {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        .tc-filter-panel .filter-actions .btn-secondary {
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+        }
+        .tc-filter-panel .filter-actions .btn-secondary:hover {
+            background: #eee;
+        }
+        
         .status-select { padding: 2px 5px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; background: white; cursor: pointer; }
         .status-select option { background: white; color: #333; }
         .cp-select, .tc-select { width: 16px; height: 16px; cursor: pointer; }
@@ -155,6 +206,57 @@
             </table>
         </div>
         <div id="tcPanel" style="display: none;">
+            <!-- TC 过滤面板 (v0.6.2) -->
+            <div class="tc-filter-panel" id="tcFilterPanel">
+                <div class="filter-row">
+                    <div class="filter-group">
+                        <label>Status</label>
+                        <select id="tcStatusFilter" multiple onchange="applyTCFilter()">
+                            <option value="OPEN">OPEN</option>
+                            <option value="CODED">CODED</option>
+                            <option value="FAIL">FAIL</option>
+                            <option value="PASS">PASS</option>
+                            <option value="REMOVED">REMOVED</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>DV Milestone</label>
+                        <select id="tcDvFilter" multiple onchange="applyTCFilter()">
+                            <option value="DV1.0">DV1.0</option>
+                            <option value="DV2.0">DV2.0</option>
+                            <option value="DV3.0">DV3.0</option>
+                            <option value="DV4.0">DV4.0</option>
+                            <option value="DV5.0">DV5.0</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Priority</label>
+                        <select id="tcPriorityFilter" onchange="applyTCFilter()">
+                            <option value="">全部</option>
+                            <option value="P0">P0</option>
+                            <option value="P1">P1</option>
+                            <option value="P2">P2</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Owner</label>
+                        <select id="tcOwnerFilter" onchange="applyTCFilter()">
+                            <option value="">全部</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Category</label>
+                        <select id="tcCategoryFilter" onchange="applyTCFilter()">
+                            <option value="">全部</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="filter-actions">
+                    <button type="button" class="btn btn-secondary" onclick="resetTCFilter()">重置</button>
+                    <span id="tcFilterCount" style="margin-left: auto; font-size: 12px; color: #999;">显示 0/0 条</span>
+                </div>
+            </div>
+            
             <div class="toolbar">
                 <div class="toolbar-left">
             <button class="btn" onclick="showBatchStatusModal()">📋 批量更新状态</button>
@@ -584,8 +686,43 @@
         
         function renderTC(filter = '', statusFilter = '', sortBy = 'id') {
             let filtered = testCases;
+            
+            // 文本搜索过滤
             if (filter) { filter = filter.toLowerCase(); filtered = filtered.filter(tc => (tc.test_name && tc.test_name.toLowerCase().includes(filter)) || (tc.testbench && tc.testbench.toLowerCase().includes(filter)) || (tc.owner && tc.owner.toLowerCase().includes(filter))); }
-            if (statusFilter) filtered = filtered.filter(tc => tc.status === statusFilter);
+            
+            // Status 过滤（支持多选）
+            if (statusFilter) {
+                const statusValues = statusFilter.split(',').map(s => s.trim());
+                filtered = filtered.filter(tc => statusValues.includes(tc.status));
+            }
+            
+            // DV Milestone 过滤（支持多选）
+            const dvFilter = document.getElementById('tcDvFilter')?.value;
+            if (dvFilter) {
+                const dvValues = dvFilter.split(',').map(d => d.trim());
+                filtered = filtered.filter(tc => dvValues.includes(tc.dv_milestone));
+            }
+            
+            // Priority 过滤
+            const priorityFilter = document.getElementById('tcPriorityFilter')?.value;
+            if (priorityFilter) {
+                const priorityValues = priorityFilter.split(',').map(p => p.trim());
+                filtered = filtered.filter(tc => priorityValues.includes(tc.priority));
+            }
+            
+            // Owner 过滤
+            const ownerFilter = document.getElementById('tcOwnerFilter')?.value;
+            if (ownerFilter) {
+                filtered = filtered.filter(tc => tc.owner === ownerFilter);
+            }
+            
+            // Category 过滤
+            const categoryFilter = document.getElementById('tcCategoryFilter')?.value;
+            if (categoryFilter) {
+                filtered = filtered.filter(tc => tc.category === categoryFilter);
+            }
+            
+            // 排序
             filtered.sort((a, b) => {
                 if (sortBy === 'id') return a.id - b.id;
                 if (sortBy === 'testbench') return (a.testbench || '').localeCompare(b.testbench || '');
@@ -593,6 +730,15 @@
                 if (sortBy === 'status') { const order = {'OPEN':0, 'CODED':1, 'FAIL':2, 'PASS':3, 'REMOVED':4}; return (order[a.status]||0) - (order[b.status]||0); }
                 return 0;
             });
+            
+            // 更新过滤计数
+            const totalCount = testCases.length;
+            const filterCount = filtered.length;
+            const tcFilterCountEl = document.getElementById('tcFilterCount');
+            if (tcFilterCountEl) {
+                tcFilterCountEl.textContent = `显示 ${filterCount}/${totalCount} 条`;
+            }
+            
             document.getElementById('tcCount').textContent = filtered.length;
             const tbody = document.getElementById('tcList');
             if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="11" style="text-align: center; color: #999; padding: 30px;">暂无数据</td></tr>'; return; }
@@ -622,6 +768,32 @@
             if (searchInput) searchInput.value = '';
             renderCP();
         }
+        
+        // TC 过滤函数 (v0.6.2)
+        function applyTCFilter() {
+            const filter = document.querySelector('#tcPanel .search-input')?.value || '';
+            const statusFilter = Array.from(document.getElementById('tcStatusFilter')?.selectedOptions || []).map(opt => opt.value).join(',');
+            renderTC(filter, statusFilter);
+        }
+        
+        function resetTCFilter() {
+            // 重置所有过滤下拉框
+            document.getElementById('tcStatusFilter')?.selectedOptions.length;
+            if (document.getElementById('tcStatusFilter')) {
+                Array.from(document.getElementById('tcStatusFilter').options).forEach(opt => opt.selected = false);
+            }
+            document.getElementById('tcDvFilter').selectedOptions.length;
+            if (document.getElementById('tcDvFilter')) {
+                Array.from(document.getElementById('tcDvFilter').options).forEach(opt => opt.selected = false);
+            }
+            document.getElementById('tcPriorityFilter').value = '';
+            document.getElementById('tcOwnerFilter').value = '';
+            document.getElementById('tcCategoryFilter').value = '';
+            
+            // 重新渲染
+            renderTC();
+        }
+        
         function filterTC(value) { renderTC(value); }
         function filterTCStatus(value) { renderTC('', value); }
         function sortTC(value) { renderTC('', '', value); }
