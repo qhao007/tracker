@@ -439,6 +439,56 @@ class TestCPBatchPriorityAPI:
             assert data['success'] == 1
 
 
+class TestCPTcConnectionsAPI:
+    """CP 关联 TC API 测试 (v0.6.2)"""
+    
+    def test_get_cp_tcs(self, client, test_project):
+        """GET /api/cp/{cp_id}/tcs - 获取 CP 关联的 TC 列表"""
+        # 先创建 CP
+        create_cp = client.post('/api/cp',
+            data=json.dumps({
+                'project_id': test_project["id"],
+                'feature': f'Feature_TC_{int(time.time())}',
+                'cover_point': f'CP_TC_{int(time.time())}',
+                'cover_point_details': 'Test CP-TC connection'
+            }),
+            content_type='application/json')
+        assert create_cp.status_code == 200
+        cp_data = json.loads(create_cp.data)
+        cp_id = cp_data['item']['id']
+        
+        # 创建 TC 并关联到 CP
+        create_tc = client.post('/api/tc',
+            data=json.dumps({
+                'project_id': test_project["id"],
+                'testbench': f'TB_{int(time.time())}',
+                'test_name': f'TC_Name_{int(time.time())}',
+                'category': 'Sanity',
+                'owner': 'TestEng1',
+                'connections': [cp_id]
+            }),
+            content_type='application/json')
+        assert create_tc.status_code == 200
+        tc_data = json.loads(create_tc.data)
+        tc_id = tc_data['item']['id']
+        
+        # 获取关联的 TC（传入 project_id）
+        response = client.get(f'/api/cp/{cp_id}/tcs?project_id={test_project["id"]}')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert 'cp_id' in data
+        assert 'connected_tcs' in data
+        assert data['cp_id'] == cp_id
+        # 验证关联的 TC 包含刚创建的 TC
+        tc_ids = [tc['id'] for tc in data['connected_tcs']]
+        assert tc_id in tc_ids
+        
+    def test_get_cp_tcs_not_found(self, client):
+        """GET /api/cp/{cp_id}/tcs - CP 不存在时返回 404"""
+        response = client.get('/api/cp/99999/tcs')
+        assert response.status_code == 404
+
+
 # ============ 统计 API 测试 ============
 
 class TestStatsAPI:

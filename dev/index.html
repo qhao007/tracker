@@ -69,6 +69,68 @@
         .action-btn { padding: 2px 6px; font-size: 10px; border: 1px solid #ccc; background: white; cursor: pointer; border-radius: 2px; }
         .action-btn:hover { background: #f0f0f0; }
         .action-btn.edit { color: #2170bb; } .action-btn.delete { color: #d32f2f; } .action-btn.toggle { color: #388e3c; }
+        .action-btn.active { background: #e3f2fd; border-color: #2170bb; color: #2170bb; }
+        
+        .cp-detail-row { display: none; background: #fafafa; }
+        .cp-detail-row.expanded { display: table-row; }
+        .cp-detail-content { padding: 12px 20px; }
+        .cp-extra-fields { margin-bottom: 10px; }
+        .cp-extra-field { margin-bottom: 6px; font-size: 12px; }
+        .cp-extra-field label { font-size: 10px; color: #999; margin-right: 8px; }
+        .cp-connected-tcs { background: #fff; border-radius: 4px; border: 1px solid #e0e0e0; overflow: hidden; }
+        .cp-connected-tcs th { background: #f5f5f5 !important; }
+        
+        /* TC 过滤面板样式 (v0.6.2) */
+        .tc-filter-panel {
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+        .tc-filter-panel .filter-row {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .tc-filter-panel .filter-group {
+            min-width: 100px;
+        }
+        .tc-filter-panel .filter-group label {
+            display: block;
+            font-size: 11px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+        .tc-filter-panel .filter-group select {
+            width: 100%;
+            padding: 6px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 12px;
+            min-width: 100px;
+        }
+        .tc-filter-panel .filter-group select[multiple] {
+            height: 80px;
+        }
+        .tc-filter-panel .filter-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-top: 10px;
+        }
+        .tc-filter-panel .filter-actions .btn {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        .tc-filter-panel .filter-actions .btn-secondary {
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+        }
+        .tc-filter-panel .filter-actions .btn-secondary:hover {
+            background: #eee;
+        }
+        
         .status-select { padding: 2px 5px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; background: white; cursor: pointer; }
         .status-select option { background: white; color: #333; }
         .cp-select, .tc-select { width: 16px; height: 16px; cursor: pointer; }
@@ -136,7 +198,7 @@
                     <select id="cpPriorityFilter" onchange="filterCPByPriority()"><option value="">全部 Priority</option><option value="P0">P0</option><option value="P1">P1</option><option value="P2">P2</option></select>
                     <button class="btn" onclick="resetCPFilter()" style="padding: 4px 8px; font-size: 12px;">重置</button>
                 </div>
-                <div class="toolbar-right"><span style="color: #666; font-size: 12px;">共 <span id="cpCount">0</span> 条</span></div>
+                <div class="toolbar-right"><span style="color: #666; font-size: 12px;">共 <span id="cpCount">0</span> 条</span> <button class="btn" id="toggleAllCPDetails" onclick="toggleAllCPDetails()" style="padding: 4px 8px; font-size: 12px;">详情 ▼</button></div>
             </div>
             <table class="data-table cp-table" id="cpTable">
                 <thead><tr><th style="width: 30px;"><input type="checkbox" onchange="document.querySelectorAll('.cp-select').forEach(cb => cb.checked = this.checked); getSelectedCPs()"></th><th>Feature</th><th>Sub-Feature</th><th>Cover Point</th><th>Details</th><th>Priority</th><th>覆盖率</th><th>操作</th></tr></thead>
@@ -144,6 +206,57 @@
             </table>
         </div>
         <div id="tcPanel" style="display: none;">
+            <!-- TC 过滤面板 (v0.6.2) -->
+            <div class="tc-filter-panel" id="tcFilterPanel">
+                <div class="filter-row">
+                    <div class="filter-group">
+                        <label>Status</label>
+                        <select id="tcStatusFilter" multiple onchange="applyTCFilter()">
+                            <option value="OPEN">OPEN</option>
+                            <option value="CODED">CODED</option>
+                            <option value="FAIL">FAIL</option>
+                            <option value="PASS">PASS</option>
+                            <option value="REMOVED">REMOVED</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>DV Milestone</label>
+                        <select id="tcDvFilter" multiple onchange="applyTCFilter()">
+                            <option value="DV1.0">DV1.0</option>
+                            <option value="DV2.0">DV2.0</option>
+                            <option value="DV3.0">DV3.0</option>
+                            <option value="DV4.0">DV4.0</option>
+                            <option value="DV5.0">DV5.0</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Priority</label>
+                        <select id="tcPriorityFilter" onchange="applyTCFilter()">
+                            <option value="">全部</option>
+                            <option value="P0">P0</option>
+                            <option value="P1">P1</option>
+                            <option value="P2">P2</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Owner</label>
+                        <select id="tcOwnerFilter" onchange="applyTCFilter()">
+                            <option value="">全部</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Category</label>
+                        <select id="tcCategoryFilter" onchange="applyTCFilter()">
+                            <option value="">全部</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="filter-actions">
+                    <button type="button" class="btn btn-secondary" onclick="resetTCFilter()">重置</button>
+                    <span id="tcFilterCount" style="margin-left: auto; font-size: 12px; color: #999;">显示 0/0 条</span>
+                </div>
+            </div>
+            
             <div class="toolbar">
                 <div class="toolbar-left">
             <button class="btn" onclick="showBatchStatusModal()">📋 批量更新状态</button>
@@ -467,17 +580,149 @@
             document.getElementById('cpCount').textContent = filtered.length;
             const tbody = document.getElementById('cpList');
             if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #999; padding: 30px;">暂无数据</td></tr>'; return; }
-            tbody.innerHTML = filtered.map(cp => `<tr><td><input type="checkbox" class="cp-select" value="${cp.id}" onchange="getSelectedCPs()"></td><td>${escapeHtml(cp.feature)}</td><td>${escapeHtml(cp.sub_feature || '')}</td><td><strong>${escapeHtml(cp.cover_point)}</strong></td><td>${escapeHtml(cp.cover_point_details || '')}</td><td><span class="priority-badge">${cp.priority || 'P0'}</span></td><td><span class="coverage-badge ${cp.coverage === 100 ? 'bg-green' : cp.coverage > 0 ? 'bg-yellow' : 'bg-red'}">${cp.coverage}%</span><small class="coverage-detail">${cp.coverage_detail}</small></td><td><div class="action-btns"><button class="action-btn edit" onclick="editCP(${cp.id})">编辑</button><button class="action-btn delete" onclick="deleteCP(${cp.id})">删除</button></div></td></tr>`).join('');
+            tbody.innerHTML = filtered.map(cp => `
+                <tr data-cp-id="${cp.id}">
+                    <td><input type="checkbox" class="cp-select" value="${cp.id}" onchange="getSelectedCPs()"></td>
+                    <td>${escapeHtml(cp.feature)}</td>
+                    <td>${escapeHtml(cp.sub_feature || '')}</td>
+                    <td><strong>${escapeHtml(cp.cover_point)}</strong></td>
+                    <td>${escapeHtml(cp.cover_point_details || '')}</td>
+                    <td><span class="priority-badge">${cp.priority || 'P0'}</span></td>
+                    <td><span class="coverage-badge ${cp.coverage === 100 ? 'bg-green' : cp.coverage > 0 ? 'bg-yellow' : 'bg-red'}">${cp.coverage}%</span><small class="coverage-detail">${cp.coverage_detail}</small></td>
+                    <td><div class="action-btns"><button class="action-btn" onclick="toggleCPDetail(${cp.id})">详情</button><button class="action-btn edit" onclick="editCP(${cp.id})">编辑</button><button class="action-btn delete" onclick="deleteCP(${cp.id})">删除</button></div></td>
+                </tr>
+                <tr id="cp-detail-${cp.id}" class="cp-detail-row" style="display: none;">
+                    <td colspan="8">
+                        <div class="cp-detail-content">
+                            ${cp.cover_point_details ? `<div class="cp-extra-fields"><div class="cp-extra-field"><label>详细信息</label>${escapeHtml(cp.cover_point_details)}</div></div>` : ''}
+                            ${cp.comments ? `<div class="cp-extra-fields"><div class="cp-extra-field"><label>Comments</label>${escapeHtml(cp.comments)}</div></div>` : ''}
+                            <div class="cp-connected-tcs" id="cp-tcs-${cp.id}">
+                                <div style="padding: 8px; color: #666; font-size: 12px;">加载中...</div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
         }
         
         function filterCP(value) { renderCP(value); }
         function filterCPByFeature() { renderCP(); }
         function filterCPByPriority() { renderCP(); }
         
+        // CP 详情展开/收起
+        async function toggleCPDetail(cpId) {
+            const detailRow = document.getElementById(`cp-detail-${cpId}`);
+            const btn = document.querySelector(`tr[data-cp-id="${cpId}"] .action-btn`);
+            
+            if (detailRow.style.display === 'none') {
+                // 展开
+                detailRow.style.display = 'table-row';
+                btn.textContent = '收起';
+                btn.classList.add('active');
+                // 加载关联 TC
+                await loadCPTcConnections(cpId);
+            } else {
+                // 收起
+                detailRow.style.display = 'none';
+                btn.textContent = '详情';
+                btn.classList.remove('active');
+            }
+        }
+        
+        // 加载 CP 关联的 TC
+        async function loadCPTcConnections(cpId) {
+            const container = document.getElementById(`cp-tcs-${cpId}`);
+            try {
+                const res = await fetch(`${API_BASE}/cp/${cpId}/tcs`);
+                const data = await res.json();
+                
+                if (data.connected_tcs && data.connected_tcs.length > 0) {
+                    container.innerHTML = `
+                        <table style="width: 100%; font-size: 12px;">
+                            <thead><tr><th style="padding: 6px 8px; text-align: left; background: #f5f5f5;">ID</th><th style="padding: 6px 8px; text-align: left; background: #f5f5f5;">Test Name</th><th style="padding: 6px 8px; text-align: left; background: #f5f5f5;">Status</th></tr></thead>
+                            <tbody>
+                                ${data.connected_tcs.map(tc => `
+                                    <tr>
+                                        <td style="padding: 6px 8px;">${tc.id}</td>
+                                        <td style="padding: 6px 8px;">${escapeHtml(tc.test_name || '')}</td>
+                                        <td style="padding: 6px 8px;"><span class="status-badge status-${tc.status}">${tc.status}</span></td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    `;
+                } else {
+                    container.innerHTML = '<div style="padding: 8px; color: #999; font-size: 12px;">无关联的 Test Cases</div>';
+                }
+            } catch (e) {
+                container.innerHTML = '<div style="padding: 8px; color: #f44336; font-size: 12px;">加载失败</div>';
+            }
+        }
+        
+        // 展开/收起所有 CP 详情
+        function toggleAllCPDetails() {
+            const btn = document.getElementById('toggleAllCPDetails');
+            const allDetails = document.querySelectorAll('.cp-detail-row');
+            const isExpanded = btn.textContent.includes('收起');
+            
+            if (isExpanded) {
+                // 收起所有
+                allDetails.forEach(row => row.style.display = 'none');
+                document.querySelectorAll('#cpList .action-btn').forEach(btn => {
+                    btn.textContent = '详情';
+                    btn.classList.remove('active');
+                });
+                btn.textContent = '详情 ▼';
+            } else {
+                // 展开所有
+                allDetails.forEach(row => row.style.display = 'table-row');
+                document.querySelectorAll('#cpList .action-btn').forEach(btn => {
+                    btn.textContent = '收起';
+                    btn.classList.add('active');
+                });
+                btn.textContent = '收起 ▼';
+            }
+        }
+        
         function renderTC(filter = '', statusFilter = '', sortBy = 'id') {
             let filtered = testCases;
+            
+            // 文本搜索过滤
             if (filter) { filter = filter.toLowerCase(); filtered = filtered.filter(tc => (tc.test_name && tc.test_name.toLowerCase().includes(filter)) || (tc.testbench && tc.testbench.toLowerCase().includes(filter)) || (tc.owner && tc.owner.toLowerCase().includes(filter))); }
-            if (statusFilter) filtered = filtered.filter(tc => tc.status === statusFilter);
+            
+            // Status 过滤（支持多选）
+            if (statusFilter) {
+                const statusValues = statusFilter.split(',').map(s => s.trim());
+                filtered = filtered.filter(tc => statusValues.includes(tc.status));
+            }
+            
+            // DV Milestone 过滤（支持多选）
+            const dvFilter = document.getElementById('tcDvFilter')?.value;
+            if (dvFilter) {
+                const dvValues = dvFilter.split(',').map(d => d.trim());
+                filtered = filtered.filter(tc => dvValues.includes(tc.dv_milestone));
+            }
+            
+            // Priority 过滤
+            const priorityFilter = document.getElementById('tcPriorityFilter')?.value;
+            if (priorityFilter) {
+                const priorityValues = priorityFilter.split(',').map(p => p.trim());
+                filtered = filtered.filter(tc => priorityValues.includes(tc.priority));
+            }
+            
+            // Owner 过滤
+            const ownerFilter = document.getElementById('tcOwnerFilter')?.value;
+            if (ownerFilter) {
+                filtered = filtered.filter(tc => tc.owner === ownerFilter);
+            }
+            
+            // Category 过滤
+            const categoryFilter = document.getElementById('tcCategoryFilter')?.value;
+            if (categoryFilter) {
+                filtered = filtered.filter(tc => tc.category === categoryFilter);
+            }
+            
+            // 排序
             filtered.sort((a, b) => {
                 if (sortBy === 'id') return a.id - b.id;
                 if (sortBy === 'testbench') return (a.testbench || '').localeCompare(b.testbench || '');
@@ -485,6 +730,15 @@
                 if (sortBy === 'status') { const order = {'OPEN':0, 'CODED':1, 'FAIL':2, 'PASS':3, 'REMOVED':4}; return (order[a.status]||0) - (order[b.status]||0); }
                 return 0;
             });
+            
+            // 更新过滤计数
+            const totalCount = testCases.length;
+            const filterCount = filtered.length;
+            const tcFilterCountEl = document.getElementById('tcFilterCount');
+            if (tcFilterCountEl) {
+                tcFilterCountEl.textContent = `显示 ${filterCount}/${totalCount} 条`;
+            }
+            
             document.getElementById('tcCount').textContent = filtered.length;
             const tbody = document.getElementById('tcList');
             if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="11" style="text-align: center; color: #999; padding: 30px;">暂无数据</td></tr>'; return; }
@@ -514,6 +768,32 @@
             if (searchInput) searchInput.value = '';
             renderCP();
         }
+        
+        // TC 过滤函数 (v0.6.2)
+        function applyTCFilter() {
+            const filter = document.querySelector('#tcPanel .search-input')?.value || '';
+            const statusFilter = Array.from(document.getElementById('tcStatusFilter')?.selectedOptions || []).map(opt => opt.value).join(',');
+            renderTC(filter, statusFilter);
+        }
+        
+        function resetTCFilter() {
+            // 重置所有过滤下拉框
+            document.getElementById('tcStatusFilter')?.selectedOptions.length;
+            if (document.getElementById('tcStatusFilter')) {
+                Array.from(document.getElementById('tcStatusFilter').options).forEach(opt => opt.selected = false);
+            }
+            document.getElementById('tcDvFilter').selectedOptions.length;
+            if (document.getElementById('tcDvFilter')) {
+                Array.from(document.getElementById('tcDvFilter').options).forEach(opt => opt.selected = false);
+            }
+            document.getElementById('tcPriorityFilter').value = '';
+            document.getElementById('tcOwnerFilter').value = '';
+            document.getElementById('tcCategoryFilter').value = '';
+            
+            // 重新渲染
+            renderTC();
+        }
+        
         function filterTC(value) { renderTC(value); }
         function filterTCStatus(value) { renderTC('', value); }
         function sortTC(value) { renderTC('', '', value); }

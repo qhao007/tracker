@@ -561,6 +561,49 @@ filepath = os.path.join(archives_dir, filename)
 
 ---
 
+### BUG-026: VERSION 文件读取失败导致版本号显示为默认值
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-10 |
+| **报告人** | 用户 |
+| **修复日期** | 2026-02-10 |
+| **修复人** | 小栗子 |
+
+**描述**: 正式版和开发版前端界面显示版本号为 "v1.0.0"，实际应为 "v0.6.1"。
+
+**问题分析**:
+- VERSION 文件内容为 `v0.6.1`（无 `VERSION=` 前缀）
+- `get_version()` 函数期望格式为 `VERSION=v0.6.1`
+- 不匹配导致使用默认值 `1.0.0`
+
+**修复方案**:
+修改 `dev/app/api.py` 的 `get_version()` 函数，兼容两种格式：
+
+```python
+for line in lines:
+    line = line.strip()
+    if '=' in line:
+        key, value = line.split('=', 1)
+        if key == 'VERSION':
+            version = value
+        elif key == 'RELEASE_DATE':
+            release_date = value
+    elif line:
+        # 兼容只有版本号的格式，如 "v0.6.1"
+        version = line
+```
+
+**验证**:
+- 正式版 (8080): 显示 v0.6.1 ✅
+- 开发版 (8081): 显示 v0.6.1 ✅
+
+**Git 提交**: `ce003fe fix: 修复 VERSION 文件读取逻辑`
+
+---
+
 ## 3. 测试用例
 
 ### 测试覆盖矩阵
@@ -678,3 +721,4 @@ cd dev && npx playwright test tests/tracker.spec.ts --project=firefox
 | v1.7 | 2026-02-08 | 添加 BUG-018, BUG-019, BUG-020 |
 | v1.8 | 2026-02-08 | 修复 BUG-021 备份功能失败；添加 FEAT-002 备份恢复自定义路径 |
 | v1.9 | 2026-02-09 | 修复 BUG-022 CP列表显示批量操作按钮 |
+| v2.0 | 2026-02-10 | 修复 BUG-026 VERSION 文件读取失败 |
