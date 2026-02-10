@@ -660,7 +660,7 @@
         }
         
         // 展开/收起所有 CP 详情
-        function toggleAllCPDetails() {
+        async function toggleAllCPDetails() {
             const btn = document.getElementById('toggleAllCPDetails');
             const allDetails = document.querySelectorAll('.cp-detail-row');
             const isExpanded = btn.textContent.includes('收起');
@@ -674,12 +674,18 @@
                 });
                 btn.textContent = '详情 ▼';
             } else {
-                // 展开所有
-                allDetails.forEach(row => row.style.display = 'table-row');
-                document.querySelectorAll('#cpList .action-btn').forEach(btn => {
-                    btn.textContent = '收起';
-                    btn.classList.add('active');
-                });
+                // 展开所有 - 需要加载每个 CP 的关联 TC
+                for (const row of allDetails) {
+                    row.style.display = 'table-row';
+                    const cpId = row.id.replace('cp-detail-', '');
+                    await loadCPTcConnections(cpId);
+                    // 更新按钮状态
+                    const actionBtn = document.querySelector(`tr[data-cp-id="${cpId}"] .action-btn`);
+                    if (actionBtn) {
+                        actionBtn.textContent = '收起';
+                        actionBtn.classList.add('active');
+                    }
+                }
                 btn.textContent = '收起 ▼';
             }
         }
@@ -778,13 +784,13 @@
         
         function resetTCFilter() {
             // 重置所有过滤下拉框
-            document.getElementById('tcStatusFilter')?.selectedOptions.length;
-            if (document.getElementById('tcStatusFilter')) {
-                Array.from(document.getElementById('tcStatusFilter').options).forEach(opt => opt.selected = false);
+            const statusFilter = document.getElementById('tcStatusFilter');
+            if (statusFilter) {
+                Array.from(statusFilter.options).forEach(opt => opt.selected = false);
             }
-            document.getElementById('tcDvFilter').selectedOptions.length;
-            if (document.getElementById('tcDvFilter')) {
-                Array.from(document.getElementById('tcDvFilter').options).forEach(opt => opt.selected = false);
+            const dvFilter = document.getElementById('tcDvFilter');
+            if (dvFilter) {
+                Array.from(dvFilter.options).forEach(opt => opt.selected = false);
             }
             document.getElementById('tcPriorityFilter').value = '';
             document.getElementById('tcOwnerFilter').value = '';
