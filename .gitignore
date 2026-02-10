@@ -49,3 +49,6 @@ stable/backup_*/
 
 # 发布目录（由 release.py 生成，不纳入版本控制）
 /release/
+
+# ========== Node.js ==========
+node_modules/
