@@ -735,6 +735,64 @@ def delete_coverpoint(cp_id):
     
     return jsonify({'success': True})
 
+@api.route('/api/cp/<int:cp_id>/tcs', methods=['GET'])
+def get_cp_tcs(cp_id):
+    """获取 CP 关联的 TC 列表"""
+    project_id = request.args.get('project_id', type=int)
+    projects = load_projects()
+    
+    # 如果提供了 project_id，直接使用
+    project = None
+    if project_id:
+        project = next((p for p in projects if p['id'] == project_id), None)
+    
+    # 如果没找到，遍历所有项目查找
+    if not project:
+        for p in projects:
+            conn = get_db(p['name'])
+            cursor = conn.cursor()
+            try:
+                cursor.execute('SELECT id FROM cover_point WHERE id=?', (cp_id,))
+                if cursor.fetchone():
+                    project = p
+                    break
+            except sqlite3.OperationalError:
+                continue
+    
+    if not project:
+        return jsonify({'error': 'CP 不存在'}), 404
+    
+    conn = get_db(project['name'])
+    cursor = conn.cursor()
+    
+    # 获取关联的 TC
+    try:
+        cursor.execute('''
+            SELECT tc.id, tc.test_name, tc.status
+            FROM test_case tc
+            INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+            WHERE tcc.cp_id = ?
+            ORDER BY tc.id
+        ''', (cp_id,))
+    except sqlite3.OperationalError:
+        return jsonify({
+            'cp_id': cp_id,
+            'connected_tcs': []
+        })
+    
+    tcs = []
+    for row in cursor.fetchall():
+        tcs.append({
+            'id': row['id'],
+            'test_name': row['test_name'],
+            'status': row['status']
+        })
+    
+    return jsonify({
+        'cp_id': cp_id,
+        'connected_tcs': tcs
+    })
+
 # ============ Test Cases ============
 
 @api.route('/api/tc', methods=['GET'])
