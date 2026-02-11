@@ -7,7 +7,7 @@ cd /projects/management/tracker/dev
 
 # ========== 规格文档下载服务 ==========
 DOCS_PORT=8888
-DOCS_DIR="/projects/management/tracker/docs/dev"
+DOCS_DIR="/projects/management/tracker/docs"
 
 # 检查是否已有 HTTP 服务运行
 if lsof -i:$DOCS_PORT > /dev/null 2>&1; then
@@ -20,6 +20,13 @@ else
     if curl -s http://localhost:$DOCS_PORT > /dev/null; then
         echo "✅ 规格文档服务启动成功"
         echo "📍 下载地址: http://<你的IP>:$DOCS_PORT/"
+        echo ""
+        echo "📚 可下载的文档:"
+        echo "   - SPECIFICATIONS/tracker_OVERALL_SPECS.md  (总体规格书)"
+        echo "   - SPECIFICATIONS/tracker_SPECS_v0.6.2.md   (v0.6.2 详细规格)"
+        echo "   - DEVELOPMENT/DEVELOPMENT_PROCESS.md      (开发流程)"
+        echo "   - REPORTS/tracker_TEST_PLAN.md            (测试计划)"
+        echo "   - BUGLOG/tracker_BUGLOG.md               (Bug 追踪)"
     else
         echo "❌ 规格文档服务启动失败"
     fi
