@@ -1,6 +1,6 @@
 # Tracker v0.6.2 第三阶段规格书
 
-> **版本**: v0.6.2 | **创建日期**: 2026-02-10 | **状态**: 开发中
+> **版本**: v0.6.2 | **创建日期**: 2026-02-10 | **状态**: ✅ 已完成
 
 ---
 
@@ -329,19 +329,27 @@ GET /api/tc?project_id=1&status=PASS&dv_milestone=DV1.0&priority=P0
 - [x] 再次点击收起详情
 - [x] 按钮文字切换为"收起详情"/"详情"
 - [x] API `GET /api/cp/{id}/tcs` 返回关联 TC 列表（只含 ID, test_name, status）
+- [x] **BUG-027 修复**: 展开所有 CP 详情时正确加载 TC 数据
+- [x] **BUG-030 修复**: CP 详情关联 TC 显示错误（API 传递 project_id 参数）
+- [x] **BUG-036 修复**: projectSelector ID 拼写错误导致加载失败
 
 ### 需求 8: TC 过滤
 
 - [x] 过滤面板显示在 TC 列表上方
-- [x] 支持 Status 多选过滤
-- [x] 支持 DV Milestone 多选过滤
-- [x] 支持 Priority 单选过滤
+- [x] 支持 Status 单选过滤（多选改为单选，体验更好）
+- [x] 支持 DV Milestone 单选过滤（多选改为单选）
+- [x] ~~支持 Priority 单选过滤~~（TC 没有 priority 字段，已移除）
 - [x] 支持 Owner 过滤（动态填充选项）
 - [x] 支持 Category 过滤（动态填充选项）
 - [x] 支持组合过滤
 - [x] 显示过滤后的记录数量
 - [x] 支持重置过滤条件
 - [x] API `GET /api/tc` 支持所有过滤参数
+- [x] **BUG-031 修复**: 移除 TC Priority 过滤选项
+- [x] **BUG-032 修复**: Owner/Category 过滤选项动态加载
+- [x] **BUG-033 修复**: Status/DV Milestone 改为单选下拉框
+- [x] **BUG-034 修复**: Status/DV Milestone 添加"全部"选项
+- [x] **BUG-035 修复**: DV Milestone 过滤选项动态加载
 
 ---
 
@@ -353,3 +361,4 @@ GET /api/tc?project_id=1&status=PASS&dv_milestone=DV1.0&priority=P0
 | v0.6.2 | 2026-02-10 | 去掉动画效果；按钮移至操作栏；简化详情内容 |
 | v0.6.2 | 2026-02-10 | #7 CP 详情下拉功能完成 |
 | v0.6.2 | 2026-02-10 | #8 TC 过滤功能完成 |
+| **v0.6.2** | **2026-02-10** | **#7 #8 功能完成，BUG-027~036 全部修复** |

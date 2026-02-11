@@ -902,7 +902,6 @@ def get_testcases():
             'checker_details': row['checker_details'],
             'coverage_details': row['coverage_details'],
             'comments': row['comments'],
-            'priority': row['priority'],
             'status': row['status'],
             'created_at': row['created_at'],
             'coded_date': row['coded_date'],
