@@ -300,8 +300,8 @@ def run_smoke_tests(dry_run=False):
         return False
 
 
-def run_buglog_tests(dry_run=False):
-    """步骤 3: 运行兼容性测试 (已移除 BugLog 回归测试)"""
+def run_compatibility_tests(dry_run=False):
+    """步骤 3: 运行兼容性测试"""
     print_step(3, "运行兼容性测试")
 
     repo_root = Path(__file__).parent.parent
@@ -311,30 +311,16 @@ def run_buglog_tests(dry_run=False):
         print("[演练] 跳过兼容性测试")
         return True
 
-    # 1. 复制用户数据到测试目录
-    print("\n1. 复制用户数据到测试目录...")
-    cmd = f"python3 {scripts_dir}/data_manager.py sync"
-    success, _ = run_command(cmd, "同步用户数据", cwd=repo_root)
-    if not success:
-        print(YELLOW + "⚠️  数据同步失败，跳过兼容性测试" + RESET)
-        return True  # 允许继续
-
-    # 2. 验证数据文件存在
-    print("\n2. 验证测试数据...")
-    test_data_dir = repo_root / "shared" / "data" / "test_data"
-    if test_data_dir.exists():
-        db_files = list(test_data_dir.glob("*.db"))
-        print(f"✓ 测试数据目录存在，共有 {len(db_files)} 个数据库文件")
-    else:
-        print(YELLOW + "⚠️  测试数据目录不存在" + RESET)
+    # 执行兼容性测试脚本
+    cmd = f"python3 {scripts_dir}/compatibility_test.py all"
+    success, output = run_command(cmd, "执行兼容性测试", cwd=repo_root)
+    
+    if success:
+        print(GREEN + "✓ 兼容性测试通过" + RESET)
         return True
-
-    # 3. 清理测试数据（可选）
-    print("\n3. 兼容性测试完成")
-    print("   如需清理测试数据，请运行: python3 scripts/data_manager.py clean")
-
-    print(GREEN + "✓ 兼容性测试通过" + RESET)
-    return True
+    else:
+        print(YELLOW + "⚠️  兼容性测试未完全通过，但允许继续" + RESET)
+        return True  # 允许继续，不中止发布
 
 
 def main():
