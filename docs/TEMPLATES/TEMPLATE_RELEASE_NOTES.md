@@ -112,8 +112,8 @@ python3 scripts/release.py --rollback --force
 
 ## 相关资源
 
-- **规格书**: `docs/dev/tracker_SPECIFICATION.md`
-- **测试计划**: `docs/dev/tracker_TEST_PLAN.md`
+- **规格书**: `docs/SPECIFICATIONS/tracker_OVERALL_SPECS.md`
+- **测试计划**: `docs/REPORTS/tracker_TEST_PLAN.md`
 - **Git 分支策略**: 规格书 6.1 章节
 
 ---

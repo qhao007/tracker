@@ -679,7 +679,7 @@ TRACKER_TEST_REPORT_v0.3.1_20260204_2250.md
 
 ### 8.4 报告模板
 
-**模板文件:** `docs/dev/TEMPLATE_TEST_REPORT.md`
+**模板文件:** `docs/TEMPLATES/TEMPLATE_TEST_REPORT.md`
 
 ---
 
@@ -882,7 +882,7 @@ python3 scripts/release.py --version v0.3.3 --force
 
 ### 9.1 覆盖功能列表
 
-根据规格书 `docs/dev/tracker_SPECIFICATION.md` 3.1 功能列表，以下关键功能需要 Playwright 自动化测试覆盖：
+根据规格书 `docs/SPECIFICATIONS/tracker_OVERALL_SPECS.md` 3.1 功能列表，以下关键功能需要 Playwright 自动化测试覆盖：
 
 | 编号 | 功能 | 描述 | 测试优先级 |
 |------|------|------|----------|
