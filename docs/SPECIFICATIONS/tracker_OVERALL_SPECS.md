@@ -1,6 +1,6 @@
-# 芯片验证 Tracker v0.6.1 总体规格书
+# 芯片验证 Tracker v0.6.2 总体规格书
 
-> **版本**: v0.6.1 | **更新日期**: 2026-02-09 | **状态**: 开发中
+> **版本**: v0.6.2 | **更新日期**: 2026-02-11 | **状态**: ✅ 已完成
 
 ---
 
@@ -66,6 +66,37 @@
 - **Status 颜色粗体显示**: Test Case Status 颜色改为粗体显示，更醒目
 - **CP 过滤功能**: 支持按 Feature 和 Priority 过滤 Cover Points
 - **备份恢复自定义路径**: 支持上传本地备份文件恢复项目
+
+### 1.6 v0.6.2 重大变更
+
+**v0.6.2 第三阶段功能增强（2026-02-10 完成）：**
+
+- **CP 详情下拉**: 点击详情按钮展开 CP 完整信息和关联 TC 列表
+  - 新增 API: `GET /api/cp/{id}/tcs` 获取 CP 关联的 TC 列表
+  - 详情面板显示 cover_point_details、comments 和关联 TC
+
+- **TC 过滤**: 支持多字段过滤 Test Cases 列表
+  - Status 单选过滤（多选改为单选，体验更好）
+  - DV Milestone 单选过滤
+  - Owner 动态过滤（从 TC 列表自动填充）
+  - Category 动态过滤
+  - 显示过滤后的记录数量
+  - 重置过滤条件
+
+**v0.6.2 Bug 修复（BUG-027~036）：**
+
+| Bug ID | 问题 | 修复内容 |
+|--------|------|----------|
+| BUG-027 | 展开所有 CP 详情时 TC 数据不加载 | toggleAllCPDetails() 添加 loadCPTcConnections() 调用 |
+| BUG-028 | TC 过滤重置后列表不刷新 | resetTCFilter() 末尾添加 renderTC() 调用 |
+| BUG-029 | TC 过滤重置代码存在无效语句 | 删除无效代码行 |
+| BUG-030 | CP 详情关联 TC 显示错误 | API 添加 project_id 参数 |
+| BUG-031 | TC Priority 过滤不需要 | 从过滤面板移除 Priority 选项 |
+| BUG-032 | TC Owner/Category 过滤选项不动态加载 | 添加 loadTCFilterOptions() 函数 |
+| BUG-033 | TC Status/DV Milestone 需要单选下拉框 | 多选改为单选 |
+| BUG-034 | TC Status/DV Milestone 缺少全部选项 | 添加"全部"选项 |
+| BUG-035 | TC DV Milestone 过滤选项不动态加载 | 动态从 TC 列表加载 |
+| BUG-036 | projectSelector ID 拼写错误 | projectSelect → projectSelector |
 
 ---
 
@@ -205,6 +236,8 @@ python3 scripts/data_manager.py clean
 | **F026** | **Status 粗体显示** | Test Case Status 颜色改为粗体 | P2 |
 | **F027** | **CP 过滤功能** | 按 Feature/Priority 过滤 CP | P0 |
 | **F028** | **备份路径自定义** | 支持上传本地备份文件恢复 | P1 |
+| **F029** | **CP 详情下拉** | 展开 CP 完整信息和关联 TC 列表 | P0 |
+| **F030** | **TC 过滤** | 多字段过滤 Test Cases 列表 | P0 |
 
 ### 3.2 Cover Point 字段
 
@@ -366,6 +399,7 @@ Body: file=@backup.json
 |------|------|------|
 | GET | `/api/cp` | 获取 CP 列表（**含覆盖率 + Priority + 过滤**） |
 | **GET** | **`/api/cp/{id}`** | **获取 CP 详情（需 project_id）** |
+| **GET** | **`/api/cp/{id}/tcs`** | **获取 CP 关联的 TC 列表（v0.6.2）** |
 | POST | `/api/cp` | 创建 CP |
 | PUT | `/api/cp/{id}` | 更新 CP（**需 project_id**） |
 | DELETE | `/api/cp/{id}` | 删除 CP（需 project_id） |
@@ -436,12 +470,31 @@ DELETE /api/cp/1?project_id=1
 | **coverage** | float | **覆盖率百分比 (0-100)** |
 | **coverage_detail** | string | **详情格式: "PASS/总数"** |
 
+**GET /api/cp/{id}/tcs 返回示例**（v0.6.2 新增）:
+```json
+{
+  "cp_id": 1,
+  "connected_tcs": [
+    {
+      "id": 10,
+      "test_name": "TC_复位测试_001",
+      "status": "PASS"
+    },
+    {
+      "id": 15,
+      "test_name": "TC_时钟测试_002",
+      "status": "CODED"
+    }
+  ]
+}
+```
+
 ### 4.4 Test Cases
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
-| GET | `/api/tc` | 获取 TC 列表（**含日期/DV Milestone**） |
-| **GET** | **`/api/tc/{id}`** | **获取 TC 详情（需 project_id）** |
+| **GET** | **`/api/tc?project_id=1&status=...&dv_milestone=...`** | **获取 TC 列表（支持过滤，v0.6.2）** |
+| GET | `/api/tc/{id}` | 获取 TC 详情（需 project_id） |
 | POST | `/api/tc` | 创建 TC |
 | PUT | `/api/tc/{id}` | 更新 TC 信息（**不含状态**，需 project_id） |
 | DELETE | `/api/tc/{id}` | 删除 TC（需 project_id） |
@@ -449,6 +502,31 @@ DELETE /api/cp/1?project_id=1
 | POST | `/api/tc/batch/status` | 批量更新状态（需 project_id） |
 | POST | `/api/tc/batch/target_date` | 批量更新 Target Date（需 project_id） |
 | POST | `/api/tc/batch/dv_milestone` | 批量更新 DV Milestone（需 project_id） |
+
+**GET /api/tc 过滤参数**（v0.6.2 新增）:
+
+| 参数 | 类型 | 说明 | 示例 |
+|------|------|------|------|
+| `project_id` | int | 项目 ID（必填） | `?project_id=1` |
+| `status` | string | Status 过滤（单选） | `?status=PASS` |
+| `dv_milestone` | string | DV Milestone 过滤（单选） | `?dv_milestone=DV1.0` |
+| `owner` | string | Owner 过滤（动态填充） | `?owner=TestEng1` |
+| `category` | string | Category 过滤（动态填充） | `?category=Sanity` |
+
+**请求示例**（v0.6.2）:
+```
+# 获取所有 TC
+GET /api/tc?project_id=1
+
+# 按 Status 过滤
+GET /api/tc?project_id=1&status=PASS
+
+# 按 DV Milestone 过滤
+GET /api/tc?project_id=1&dv_milestone=DV1.0
+
+# 组合过滤
+GET /api/tc?project_id=1&status=PASS&dv_milestone=DV1.0&owner=TestEng1
+```
 
 **API 参数说明**:
 - **GET /api/tc**: 通过查询参数传递 `project_id`，例如: `/api/tc?project_id=1`
@@ -1200,9 +1278,9 @@ journalctl -u tracker -f
 | v0.5.1 | 2026-02-07 | **Bug 修复**：API 和界面问题修复 |
 | **v0.6.0** | **2026-02-08** | **第一阶段功能增强**：Status 日期、Target Date、REMOVED、批量修改、DV Milestone、CP Priority |
 | **v0.6.1** | **2026-02-09** | **第二阶段功能增强**：Status 粗体、CP 过滤、备份路径自定义、ESLint 检查 |
-| **v0.6.1** | **2026-02-09** | **第二阶段功能增强**：Status 粗体、CP 过滤、备份路径自定义 |
+| **v0.6.2** | **2026-02-10** | **第三阶段功能增强**：CP 详情下拉、TC 过滤、Bug 修复（BUG-027~040） |
 
-### v0.6.1 详细变更
+### v0.6.0 详细变更
 
 1. **Status 日期记录**：
    - CODED/FAIL/PASS/REMOVED 状态变更时自动记录日期
@@ -1258,6 +1336,37 @@ journalctl -u tracker -f
    - 添加 ESLint 检查配置
    - 添加 Playwright 冒烟测试（控制台错误检测）
    - 添加 check_frontent.sh 快速检查脚本
+
+### v0.6.2 详细变更
+
+1. **CP 详情下拉**：
+   - 操作栏新增"详情"按钮
+   - 点击展开 CP 完整信息和关联 TC 列表
+   - 详情面板显示 cover_point_details、comments
+   - 关联 TC 列表显示 ID、Test Name、Status
+   - 新增 API: `GET /api/cp/{id}/tcs`
+
+2. **TC 过滤**：
+   - 过滤面板显示在 TC 列表上方
+   - Status 单选过滤（多选改为单选）
+   - DV Milestone 单选过滤
+   - Owner 动态过滤（从 TC 列表自动填充）
+   - Category 动态过滤
+   - 显示过滤后的记录数量
+   - 重置过滤条件
+   - API 支持 `status`、`dv_milestone`、`owner`、`category` 参数
+
+3. **Bug 修复（BUG-027~036）**：
+   - BUG-027: 展开所有 CP 详情时 TC 数据不加载
+   - BUG-028: TC 过滤重置后列表不刷新
+   - BUG-029: TC 过滤重置代码存在无效语句
+   - BUG-030: CP 详情关联 TC 显示错误
+   - BUG-031: TC Priority 过滤不需要（TC 没有 priority 字段）
+   - BUG-032: TC Owner/Category 过滤选项不动态加载
+   - BUG-033: TC Status/DV Milestone 需要单选下拉框
+   - BUG-034: TC Status/DV Milestone 缺少全部选项
+   - BUG-035: TC DV Milestone 过滤选项不动态加载
+   - BUG-036: projectSelector ID 拼写错误
 
 ### v0.5.x 详细变更
 

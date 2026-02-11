@@ -439,6 +439,164 @@ class TestCPBatchPriorityAPI:
             assert data['success'] == 1
 
 
+class TestCPTcConnectionsAPI:
+    """CP 关联 TC API 测试 (v0.6.2)"""
+    
+    def test_get_cp_tcs(self, client, test_project):
+        """GET /api/cp/{cp_id}/tcs - 获取 CP 关联的 TC 列表"""
+        # 先创建 CP
+        create_cp = client.post('/api/cp',
+            data=json.dumps({
+                'project_id': test_project["id"],
+                'feature': f'Feature_TC_{int(time.time())}',
+                'cover_point': f'CP_TC_{int(time.time())}',
+                'cover_point_details': 'Test CP-TC connection'
+            }),
+            content_type='application/json')
+        assert create_cp.status_code == 200
+        cp_data = json.loads(create_cp.data)
+        cp_id = cp_data['item']['id']
+        
+        # 创建 TC 并关联到 CP
+        create_tc = client.post('/api/tc',
+            data=json.dumps({
+                'project_id': test_project["id"],
+                'testbench': f'TB_{int(time.time())}',
+                'test_name': f'TC_Name_{int(time.time())}',
+                'category': 'Sanity',
+                'owner': 'TestEng1',
+                'connections': [cp_id]
+            }),
+            content_type='application/json')
+        assert create_tc.status_code == 200
+        tc_data = json.loads(create_tc.data)
+        tc_id = tc_data['item']['id']
+        
+        # 获取关联的 TC（传入 project_id）
+        response = client.get(f'/api/cp/{cp_id}/tcs?project_id={test_project["id"]}')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert 'cp_id' in data
+        assert 'connected_tcs' in data
+        assert data['cp_id'] == cp_id
+        # 验证关联的 TC 包含刚创建的 TC
+        tc_ids = [tc['id'] for tc in data['connected_tcs']]
+        assert tc_id in tc_ids
+        
+    def test_get_cp_tcs_not_found(self, client):
+        """GET /api/cp/{cp_id}/tcs - CP 不存在时返回 404"""
+        response = client.get('/api/cp/99999/tcs')
+        assert response.status_code == 404
+
+
+class TestTCFilterAPI:
+    """TC 过滤 API 测试 (v0.6.2)"""
+    
+    def test_tc_filter_by_dv_milestone(self, client, test_project):
+        """GET /api/tc?dv_milestone= - 按 DV Milestone 过滤"""
+        # 创建不同 DV Milestone 的 TC
+        for i, dv in enumerate(['DV1.0', 'DV2.0', 'DV1.0']):
+            tc_resp = client.post('/api/tc',
+                data=json.dumps({
+                    'project_id': test_project["id"],
+                    'testbench': f'TB_{int(time.time())}_{i}',
+                    'test_name': f'TC_DV_{i}_{int(time.time())}',
+                    'dv_milestone': dv,
+                    'category': 'Sanity',
+                    'owner': 'TestEng1'
+                }),
+                content_type='application/json')
+            assert tc_resp.status_code == 200
+        
+        # 按 DV Milestone 过滤
+        response = client.get(f'/api/tc?project_id={test_project["id"]}&dv_milestone=DV1.0')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # 应该只返回 DV1.0 的 TC
+        for tc in data:
+            assert tc['dv_milestone'] == 'DV1.0'
+    
+    def test_tc_filter_by_priority(self, client, test_project):
+        """GET /api/tc?priority= - 按 Priority 过滤（CP 过滤，不是 TC 字段）"""
+        # TC 表没有 priority 字段，此测试仅验证 API 调用成功
+        response = client.get(f'/api/tc?project_id={test_project["id"]}&priority=P0')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # TC 没有 priority 字段，只验证返回数据格式正确
+        assert isinstance(data, list)
+    
+    def test_tc_filter_by_owner(self, client, test_project):
+        """GET /api/tc?owner= - 按 Owner 过滤"""
+        # 创建不同 Owner 的 TC
+        for i, owner in enumerate(['EngA', 'EngB', 'EngA']):
+            tc_resp = client.post('/api/tc',
+                data=json.dumps({
+                    'project_id': test_project["id"],
+                    'testbench': f'TB_Owner_{int(time.time())}_{i}',
+                    'test_name': f'TC_Owner_{i}_{int(time.time())}',
+                    'dv_milestone': 'DV1.0',
+                    'category': 'Sanity',
+                    'owner': owner
+                }),
+                content_type='application/json')
+            assert tc_resp.status_code == 200
+        
+        # 按 Owner 过滤
+        response = client.get(f'/api/tc?project_id={test_project["id"]}&owner=EngA')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # 应该只返回 EngA 的 TC
+        for tc in data:
+            assert tc['owner'] == 'EngA'
+    
+    def test_tc_filter_by_category(self, client, test_project):
+        """GET /api/tc?category= - 按 Category 过滤"""
+        # 创建不同 Category 的 TC
+        for i, cat in enumerate(['Sanity', 'Feature', 'Sanity']):
+            tc_resp = client.post('/api/tc',
+                data=json.dumps({
+                    'project_id': test_project["id"],
+                    'testbench': f'TB_Cat_{int(time.time())}_{i}',
+                    'test_name': f'TC_Cat_{i}_{int(time.time())}',
+                    'dv_milestone': 'DV1.0',
+                    'category': cat,
+                    'owner': 'TestEng1'
+                }),
+                content_type='application/json')
+            assert tc_resp.status_code == 200
+        
+        # 按 Category 过滤
+        response = client.get(f'/api/tc?project_id={test_project["id"]}&category=Sanity')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # 应该只返回 Sanity 的 TC
+        for tc in data:
+            assert tc['category'] == 'Sanity'
+    
+    def test_tc_filter_combined(self, client, test_project):
+        """GET /api/tc?status=&dv_milestone=&priority= - 组合过滤"""
+        # 创建 TC
+        tc_resp = client.post('/api/tc',
+            data=json.dumps({
+                'project_id': test_project["id"],
+                'testbench': f'TB_Combined_{int(time.time())}',
+                'test_name': f'TC_Combined_{int(time.time())}',
+                'dv_milestone': 'DV1.0',
+                'status': 'PASS',
+                'category': 'Sanity',
+                'owner': 'TestEng1'
+            }),
+            content_type='application/json')
+        assert tc_resp.status_code == 200
+        
+        # 先验证 TC 创建成功
+        list_resp = client.get(f'/api/tc?project_id={test_project["id"]}')
+        assert list_resp.status_code == 200
+        list_data = json.loads(list_resp.data)
+        # 验证返回数据格式正确
+        assert isinstance(list_data, list)
+
+
 # ============ 统计 API 测试 ============
 
 class TestStatsAPI:

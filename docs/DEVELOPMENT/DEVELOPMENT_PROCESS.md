@@ -196,15 +196,21 @@ git checkout -b feature/功能名称
 git add .
 git commit -m "feat: 功能说明"
 
-# 6. 合并到 develop
+# 6. 合并到 develop 前，先更新版本号
+#    - 编辑 dev/VERSION 文件，更新版本号（如 v0.6.1 → v0.6.2）
+#    - git add dev/VERSION && git commit -m "chore: 更新 VERSION 文件为 v0.6.2"
+
+# 7. 合并到 develop
 git checkout develop
 git merge feature/功能名称 --no-ff -m "merge: 合并功能名称"
 
-# 7. 推送
+# 8. 推送
 git push origin develop
 ```
 
-**⚠️ 重要**: 步骤 4（开发测试）是必需的，所有测试必须通过后才能执行步骤 5（提交代码）。
+**⚠️ 重要**: 
+- 步骤 4（开发测试）是必需的，所有测试必须通过后才能执行步骤 5（提交代码）。
+- **步骤 6（更新版本号）是必需的**，每次合并新功能到 develop 前必须更新 VERSION 文件，确保 develop 分支始终显示下一个开发版本的版本号。
 
 ### 4.2 开发环境
 
@@ -348,7 +354,7 @@ python3 scripts/data_manager.py clean
 1. 填写 BugLog 模板 (`/projects/management/feedbacks/new/BugLog_YYYYMMDD.md`)
 2. 提交到 feedbacks/new/ 目录
 3. 评审后标记为待修复
-4. 修复后更新 tracker_BUGLOG.md
+4. 修复后更新 BUGLOG/tracker_BUGLOG.md
 
 **BugLog 模板位置**: `/projects/management/feedbacks/new/BugLog_YYYYMMDD.md`
 
@@ -357,10 +363,10 @@ python3 scripts/data_manager.py clean
 测试完成后，必须按照测试报告模板发布结果：
 
 **报告要求**:
-1. 使用模板: `docs/dev/TEMPLATE_TEST_REPORT.md`
+1. 使用模板: `TEMPLATES/TEST_REPORT.md`
 2. 包含整体测试开始和完成时间
 3. 包含所有测试类型的通过/失败统计
-4. 发布到: `docs/dev/TRACKER_TEST_REPORT_v{version}_{YYYYMMDD}.md`
+4. 发布到: `ARCHIVE/REPORTS/TRACKER_TEST_REPORT_v{version}_{YYYYMMDD}.md`
 
 **报告模板结构**:
 ```
@@ -383,13 +389,13 @@ python3 scripts/data_manager.py clean
 **发布命令**:
 ```bash
 # 1. 复制测试报告模板
-cp docs/dev/TEMPLATE_TEST_REPORT.md \
-   docs/dev/TRACKER_TEST_REPORT_v0.6.0_20260208.md
+cp TEMPLATES/TEST_REPORT.md \
+   ARCHIVE/REPORTS/TRACKER_TEST_REPORT_v0.6.0_20260208.md
 
 # 2. 编辑测试报告，填写测试结果
 
 # 3. 提交测试报告
-git add docs/dev/TRACKER_TEST_REPORT_*.md
+git add ARCHIVE/REPORTS/TRACKER_TEST_REPORT_*.md
 git commit -m "docs: 添加 v0.6.0 测试报告"
 ```
 

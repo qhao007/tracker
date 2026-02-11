@@ -561,6 +561,330 @@ filepath = os.path.join(archives_dir, filename)
 
 ---
 
+### BUG-026: VERSION 文件读取失败导致版本号显示为默认值
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-10 |
+| **报告人** | 用户 |
+| **修复日期** | 2026-02-10 |
+| **修复人** | 小栗子 |
+
+**描述**: 正式版和开发版前端界面显示版本号为 "v1.0.0"，实际应为 "v0.6.1"。
+
+**问题分析**:
+- VERSION 文件内容为 `v0.6.1`（无 `VERSION=` 前缀）
+- `get_version()` 函数期望格式为 `VERSION=v0.6.1`
+- 不匹配导致使用默认值 `1.0.0`
+
+**修复方案**:
+修改 `dev/app/api.py` 的 `get_version()` 函数，兼容两种格式：
+
+```python
+for line in lines:
+    line = line.strip()
+    if '=' in line:
+        key, value = line.split('=', 1)
+        if key == 'VERSION':
+            version = value
+        elif key == 'RELEASE_DATE':
+            release_date = value
+    elif line:
+        # 兼容只有版本号的格式，如 "v0.6.1"
+        version = line
+```
+
+**验证**:
+- 正式版 (8080): 显示 v0.6.1 ✅
+- 开发版 (8081): 显示 v0.6.1 ✅
+
+**Git 提交**: `ce003fe fix: 修复 VERSION 文件读取逻辑`
+
+---
+
+### BUG-027: 展开所有 CP 详情时 TC 数据不加载
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-10 |
+| **报告人** | 用户 |
+| **修复日期** | 2026-02-10 |
+| **修复人** | 小栗子 |
+
+**描述**: 点击"收起 ▼"按钮展开所有 CP 详情时，关联的 TC 列表为空。
+
+**原因**: `toggleAllCPDetails()` 函数只设置了行的 `display` 属性，没有调用 `loadCPTcConnections(cpId)` 异步加载 TC 数据。
+
+**修复方案**:
+修改 `index.html` 中的 `toggleAllCPDetails()` 函数，展开时遍历所有详情行并加载 TC 数据：
+
+```javascript
+async function toggleAllCPDetails() {
+    // ...
+    } else {
+        // 展开所有 - 需要加载每个 CP 的关联 TC
+        for (const row of allDetails) {
+            row.style.display = 'table-row';
+            const cpId = row.id.replace('cp-detail-', '');
+            await loadCPTcConnections(cpId);
+            // ...
+        }
+        btn.textContent = '收起 ▼';
+    }
+}
+```
+
+**验证**: 展开所有 CP 详情后，关联 TC 列表正确显示。
+
+**Git 提交**: `0896f5a fix: 展开所有CP详情时加载TC数据`
+
+---
+
+### BUG-028: TC 过滤重置后列表不刷新
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-10 |
+| **报告人** | 用户 |
+| **修复日期** | 2026-02-10 |
+| **修复人** | 小栗子 |
+
+**描述**: 点击"重置"按钮后，TC 过滤下拉框被清空，但列表未重新渲染。
+
+**原因**: `resetTCFilter()` 函数重置了所有下拉框后，没有调用 `renderTC()` 刷新列表。
+
+**修复方案**:
+在 `resetTCFilter()` 函数末尾添加 `renderTC()` 调用。
+
+**验证**: 点击重置按钮后，TC 列表立即刷新显示所有数据。
+
+**Git 提交**: `0896f5a fix: 重置TC过滤后刷新列表`
+
+---
+
+### BUG-029: TC 过滤重置代码存在无效语句
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Low |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-10 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-02-10 |
+| **修复人** | 小栗子 |
+
+**描述**: `resetTCFilter()` 函数中存在无意义的代码 `document.getElementById('xxx').selectedOptions.length`，读取后未使用。
+
+**修复方案**: 删除无效代码行。
+
+**Git 提交**: `0896f5a fix: 删除无效代码`
+
+---
+
+### v0.6.2 修复汇总
+
+| Bug ID | 描述 | 修复日期 |
+|--------|------|----------|
+| BUG-027 | 展开所有 CP 详情时 TC 数据不加载 | 2026-02-10 |
+| BUG-028 | TC 过滤重置后列表不刷新 | 2026-02-10 |
+| BUG-029 | TC 过滤重置代码存在无效语句 | 2026-02-10 |
+| BUG-030 | CP 详情关联 TC 显示错误 | 2026-02-10 |
+| BUG-031 | TC Priority 过滤不需要 | 2026-02-10 |
+| BUG-032 | TC Owner/Category 过滤选项不动态加载 | 2026-02-10 |
+| BUG-033 | TC Status/DV Milestone 需要单选下拉框 | 2026-02-10 |
+| BUG-034 | TC Status/DV Milestone 缺少全部选项 | 2026-02-10 |
+| BUG-035 | TC DV Milestone 过滤选项不动态加载 | 2026-02-10 |
+| BUG-036 | projectSelector ID 拼写错误 | 2026-02-10 |
+
+---
+
+### BUG-036: projectSelector ID 拼写错误
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-10 |
+| **报告人** | 用户 |
+| **修复日期** | 2026-02-10 |
+| **修复人** | 小栗子 |
+
+**描述**: 点击 CP 详情后显示"加载失败"，API 返回 404。
+
+**原因**: `loadCPTcConnections()` 函数中使用 `document.getElementById('projectSelect')` 获取项目ID，但实际元素的ID是 `projectSelector'`。
+
+**修复方案**:
+将 `projectSelect` 改为 `projectSelector'`。
+
+```javascript
+// 修复前
+const projectId = document.getElementById('projectSelect')?.value;
+
+// 修复后
+const projectId = document.getElementById('projectSelector')?.value;
+```
+
+**验证**: 点击 CP 详情后正确显示关联的 Test Case。
+
+**Git 提交**: `8b44006 fix: 修复 projectSelector ID 拼写错误`
+
+---
+
+### BUG-030: CP 详情关联 TC 显示错误
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-10 |
+| **报告人** | 用户 |
+| **修复日期** | 2026-02-10 |
+| **修复人** | 小栗子 |
+
+**描述**: 点击 CP 详情后，无法正确显示关联的 Test Case。
+
+**原因**: `loadCPTcConnections()` 函数调用 API 时没有传递 `project_id` 参数，导致 API 无法找到正确的项目数据库。
+
+**修复方案**:
+修改 `loadCPTcConnections()` 函数，传递 `project_id` 参数：
+
+```javascript
+const projectId = document.getElementById('projectSelect')?.value;
+const res = await fetch(`${API_BASE}/cp/${cpId}/tcs${projectId ? '?project_id=' + projectId : ''}`);
+```
+
+**验证**: 点击 CP 详情后正确显示关联的 Test Case。
+
+**Git 提交**: `cf66a5a fix: 修复TC过滤和CP关联TC显示Bug`
+
+---
+
+### BUG-031: TC Priority 过滤不需要
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-10 |
+| **报告人** | 用户 |
+| **修复日期** | 2026-02-10 |
+| **修复人** | 小栗子 |
+
+**描述**: TC 过滤面板中包含 Priority 过滤选项，但 Test Case 没有 priority 字段。
+
+**原因**: 规格书要求 CP 有 priority 过滤，但 TC 没有。
+
+**修复方案**:
+从 TC 过滤面板中移除 Priority 过滤选项。
+
+**验证**: TC 过滤面板不再显示 Priority 选项。
+
+**Git 提交**: `cf66a5a fix: 修复TC过滤和CP关联TC显示Bug`
+
+---
+
+### BUG-032: TC Owner/Category 过滤选项不动态加载
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-10 |
+| **报告人** | 用户 |
+| **修复日期** | 2026-02-10 |
+| **修复人** | 小栗子 |
+
+**描述**: Owner 和 Category 过滤下拉菜单只显示"全部"选项，没有加载 TC 列表中的实际数据。
+
+**修复方案**:
+添加 `loadTCFilterOptions()` 函数，动态从 TC 列表中提取唯一的 Owner 和 Category 值：
+
+```javascript
+function loadTCFilterOptions() {
+    const owners = [...new Set(testCases.map(tc => tc.owner).filter(o => o))].sort();
+    const categories = [...new Set(testCases.map(tc => tc.category).filter(c => c))].sort();
+    // 填充下拉框...
+}
+```
+
+**验证**: Owner 和 Category 下拉菜单正确显示 TC 列表中的实际数据。
+
+**Git 提交**: `cf66a5a fix: 修复TC过滤和CP关联TC显示Bug`
+
+---
+
+### BUG-033: TC Status/DV Milestone 需要单选下拉框
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-10 |
+| **报告人** | 用户 |
+| **修复日期** | 2026-02-10 |
+| **修复人** | 小栗子 |
+
+**描述**: Status 和 DV Milestone 过滤使用多选 (multiple) 下拉框，体验不好，应该使用单选下拉框。
+
+**修复方案**:
+将 `multiple` 属性移除，改为单选下拉框。
+
+**验证**: Status 和 DV Milestone 过滤使用单选下拉框。
+
+**Git 提交**: `cf66a5a fix: 修复TC过滤和CP关联TC显示Bug`
+
+---
+
+### BUG-034: TC Status/DV Milestone 缺少全部选项
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-10 |
+| **报告人** | 用户 |
+| **修复日期** | 2026-02-10 |
+| **修复人** | 小栗子 |
+
+**描述**: Status 和 DV Milestone 过滤下拉菜单缺少"全部"选项。
+
+**修复方案**:
+在 Status 和 DV Milestone 下拉菜单中添加"全部"选项。
+
+**验证**: Status 和 DV Milestone 下拉菜单包含"全部"选项。
+
+**Git 提交**: `cf66a5a fix: 修复TC过滤和CP关联TC显示Bug`
+
+---
+
+### BUG-035: TC DV Milestone 过滤选项不动态加载
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-10 |
+| **报告人** | 用户 |
+| **修复日期** | 2026-02-10 |
+| **修复人** | 小栗子 |
+
+**描述**: DV Milestone 过滤下拉菜单使用硬编码的 DV1.0-DV5.0 选项，没有加载 TC 列表中的实际数据。
+
+**修复方案**:
+在 `loadTCFilterOptions()` 函数中动态加载 DV Milestone 选项。
+
+**验证**: DV Milestone 下拉菜单正确显示 TC 列表中的实际 DV Milestone 值。
+
+**Git 提交**: `cf66a5a fix: 修复TC过滤和CP关联TC显示Bug`
+
+---
+
 ## 3. 测试用例
 
 ### 测试覆盖矩阵
@@ -678,3 +1002,4 @@ cd dev && npx playwright test tests/tracker.spec.ts --project=firefox
 | v1.7 | 2026-02-08 | 添加 BUG-018, BUG-019, BUG-020 |
 | v1.8 | 2026-02-08 | 修复 BUG-021 备份功能失败；添加 FEAT-002 备份恢复自定义路径 |
 | v1.9 | 2026-02-09 | 修复 BUG-022 CP列表显示批量操作按钮 |
+| v2.0 | 2026-02-10 | 修复 BUG-026 VERSION 文件读取失败 |
