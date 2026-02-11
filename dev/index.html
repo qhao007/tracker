@@ -67,7 +67,7 @@
         .detail-row { display: flex; margin-bottom: 3px; }
         .detail-label { font-weight: bold; width: 100px; color: #666; }
         .detail-value { flex: 1; }
-        .action-btns { display: flex; gap: 3px; }
+        .action-btns { display: flex; gap: 1px; }
         .action-btn { padding: 2px 6px; font-size: 10px; border: 1px solid #ccc; background: white; cursor: pointer; border-radius: 2px; }
         .action-btn:hover { background: #f0f0f0; }
         .action-btn.edit { color: #2170bb; } .action-btn.delete { color: #d32f2f; } .action-btn.toggle { color: #388e3c; }
@@ -259,7 +259,7 @@
                 <div class="toolbar-right"><span style="color: #666; font-size: 12px;">共 <span id="tcCount">0</span> 条</span></div>
             </div>
             <table class="data-table tc-table" id="tcTable">
-                <thead><tr><th style="width: 30px;"><input type="checkbox" onchange="document.querySelectorAll('.tc-select').forEach(cb => cb.checked = this.checked); getSelectedTCs()"></th><th>ID</th><th>DV Milestone</th><th>TestBench</th><th>Category</th><th>Owner</th><th>Test Name</th><th>Target Date</th><th>Status</th><th>Status Date</th><th>操作</th></tr></thead>
+                <thead><tr><th style="width: 30px;"><input type="checkbox" onchange="document.querySelectorAll('.tc-select').forEach(cb => cb.checked = this.checked); getSelectedTCs()"></th><th>ID</th><th>DV Milestone</th><th>TestBench</th><th>Category</th><th style="width: 50px;">Owner</th><th style="width: 30%;">Test Name</th><th>Target Date</th><th>Status</th><th style="width: 70px;">Status Date</th><th style="width: 35px;">操作</th></tr></thead>
                 <tbody id="tcList"></tbody>
             </table>
         </div>
