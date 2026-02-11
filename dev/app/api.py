@@ -1397,6 +1397,17 @@ def get_stats():
     conn = get_db(project['name'])
     cursor = conn.cursor()
     
+    # 检查数据库表是否存在
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    tables = {row[0] for row in cursor.fetchall()}
+    
+    if 'cover_point' not in tables or 'test_case' not in tables:
+        return jsonify({
+            'total_cp': 0, 'total_tc': 0,
+            'open_tc': 0, 'coded_tc': 0, 'fail_tc': 0, 'pass_tc': 0,
+            'coverage': '0%'
+        })
+    
     # CP 统计
     cursor.execute('SELECT COUNT(*) FROM cover_point')
     total_cp = cursor.fetchone()[0]
