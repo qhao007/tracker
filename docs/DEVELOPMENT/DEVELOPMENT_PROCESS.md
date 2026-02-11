@@ -354,7 +354,7 @@ python3 scripts/data_manager.py clean
 1. 填写 BugLog 模板 (`/projects/management/feedbacks/new/BugLog_YYYYMMDD.md`)
 2. 提交到 feedbacks/new/ 目录
 3. 评审后标记为待修复
-4. 修复后更新 tracker_BUGLOG.md
+4. 修复后更新 BUGLOG/tracker_BUGLOG.md
 
 **BugLog 模板位置**: `/projects/management/feedbacks/new/BugLog_YYYYMMDD.md`
 
@@ -363,10 +363,10 @@ python3 scripts/data_manager.py clean
 测试完成后，必须按照测试报告模板发布结果：
 
 **报告要求**:
-1. 使用模板: `docs/dev/TEMPLATE_TEST_REPORT.md`
+1. 使用模板: `TEMPLATES/TEST_REPORT.md`
 2. 包含整体测试开始和完成时间
 3. 包含所有测试类型的通过/失败统计
-4. 发布到: `docs/dev/TRACKER_TEST_REPORT_v{version}_{YYYYMMDD}.md`
+4. 发布到: `ARCHIVE/REPORTS/TRACKER_TEST_REPORT_v{version}_{YYYYMMDD}.md`
 
 **报告模板结构**:
 ```
@@ -389,13 +389,13 @@ python3 scripts/data_manager.py clean
 **发布命令**:
 ```bash
 # 1. 复制测试报告模板
-cp docs/dev/TEMPLATE_TEST_REPORT.md \
-   docs/dev/TRACKER_TEST_REPORT_v0.6.0_20260208.md
+cp TEMPLATES/TEST_REPORT.md \
+   ARCHIVE/REPORTS/TRACKER_TEST_REPORT_v0.6.0_20260208.md
 
 # 2. 编辑测试报告，填写测试结果
 
 # 3. 提交测试报告
-git add docs/dev/TRACKER_TEST_REPORT_*.md
+git add ARCHIVE/REPORTS/TRACKER_TEST_REPORT_*.md
 git commit -m "docs: 添加 v0.6.0 测试报告"
 ```
 
