@@ -33,7 +33,6 @@ RESET = '\033[0m'
 
 REPO_ROOT = Path(__file__).parent.parent
 TEST_RESULTS_DIR = REPO_ROOT / "test-results" / "playwright-cli"
-OUTPUT_DIR = TEST_RESULTS_DIR
 BASE_URL = "http://localhost:8081"
 
 
@@ -55,7 +54,6 @@ def print_error(msg):
 
 def ensure_output_dir():
     """确保输出目录存在"""
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     TEST_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -80,6 +78,28 @@ def run_playwright_cli(args, description=None):
         return False, "", str(e)
 
 
+def move_output_files():
+    """将 .playwright-cli 目录中的文件移动到 TEST_RESULTS_DIR"""
+    source_dir = REPO_ROOT / ".playwright-cli"
+    if not source_dir.exists():
+        return
+    
+    moved = 0
+    for file in source_dir.iterdir():
+        if file.is_file():
+            dest_file = TEST_RESULTS_DIR / file.name
+            try:
+                if dest_file.exists():
+                    dest_file.unlink()
+                file.rename(dest_file)
+                moved += 1
+            except Exception:
+                pass
+    
+    if moved > 0:
+        print_ok(f"已移动 {moved} 个文件到 {TEST_RESULTS_DIR.name}")
+
+
 def cleanup_browser():
     """清理浏览器进程"""
     run_playwright_cli(["close"], "关闭浏览器")
@@ -87,7 +107,7 @@ def cleanup_browser():
 
 def save_test_result(name, passed, details=""):
     """保存测试结果到 JSON 文件"""
-    result_file = OUTPUT_DIR / f"{name}_result.json"
+    result_file = TEST_RESULTS_DIR / f"{name}_result.json"
     result = {
         "test": name,
         "passed": passed,
@@ -121,6 +141,9 @@ def smoke_test():
             print_error(f"{name} 失败: {stderr}")
             all_passed = False
 
+    # 移动输出文件
+    move_output_files()
+
     # 保存结果
     save_test_result("smoke", all_passed, json.dumps(results, indent=2))
 
@@ -135,32 +158,37 @@ def screenshot_test():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     tests = [
-        ("首页截图", ["open", BASE_URL], f"screenshot_homepage_{timestamp}.png"),
-        ("快照", ["snapshot"], None),
-        ("TC面板截图", ["goto", f"{BASE_URL}#tc"], f"screenshot_tc_{timestamp}.png"),
+        ("首页截图", ["open", BASE_URL]),
+        ("快照", ["snapshot"]),
+        ("TC面板截图", ["goto", f"{BASE_URL}#tc"]),
     ]
 
     all_passed = True
     results = []
 
-    for name, args, filename in tests:
+    for name, args in tests:
         passed, stdout, stderr = run_playwright_cli(args, name)
         results.append({"test": name, "passed": passed})
-
         if passed:
             print_ok(f"{name} 通过")
-            if filename:
-                # 重命名最新的截图
-                latest_png = max(OUTPUT_DIR.glob("page-*.png"), key=os.path.getmtime, default=None)
-                if latest_png and latest_png.exists():
-                    new_path = OUTPUT_DIR / filename
-                    if new_path.exists():
-                        new_path.unlink()
-                    latest_png.rename(new_path)
-                    print_ok(f"截图保存为: {filename}")
         else:
             print_error(f"{name} 失败: {stderr}")
             all_passed = False
+
+    # 截图
+    passed, stdout, stderr = run_playwright_cli(["screenshot"], "最终截图")
+    if passed:
+        # 重命名截图
+        latest_png = max(REPO_ROOT.glob(".playwright-cli/page-*.png"), key=os.path.getmtime, default=None)
+        if latest_png and latest_png.exists():
+            new_path = TEST_RESULTS_DIR / f"screenshot_test_{timestamp}.png"
+            if new_path.exists():
+                new_path.unlink()
+            latest_png.rename(new_path)
+            print_ok(f"截图保存为: screenshot_test_{timestamp}.png")
+
+    # 移动输出文件
+    move_output_files()
 
     # 保存结果
     save_test_result("screenshot", all_passed, json.dumps(results, indent=2))
@@ -185,6 +213,7 @@ def workflow_test():
     else:
         print_error(f"打开首页失败: {stderr}")
         cleanup_browser()
+        move_output_files()
         save_test_result("workflow", False, json.dumps(steps, indent=2))
         return False
 
@@ -201,10 +230,6 @@ def workflow_test():
     steps.append({"step": "首页截图", "passed": passed})
     if passed:
         print_ok("首页截图成功")
-        # 重命名截图
-        latest_png = max(OUTPUT_DIR.glob("page-*.png"), key=os.path.getmtime, default=None)
-        if latest_png and latest_png.exists():
-            latest_png.rename(OUTPUT_DIR / f"workflow_homepage_{timestamp}.png")
 
     # 4. 查看控制台日志
     passed, stdout, stderr = run_playwright_cli(["console"], "查看控制台")
@@ -219,9 +244,15 @@ def workflow_test():
     steps.append({"step": "完整页面截图", "passed": passed})
     if passed:
         print_ok("完整页面截图成功")
-        latest_png = max(OUTPUT_DIR.glob("page-*.png"), key=os.path.getmtime, default=None)
-        if latest_png and latest_png.exists():
-            latest_png.rename(OUTPUT_DIR / f"workflow_fullpage_{timestamp}.png")
+
+    # 移动输出文件
+    move_output_files()
+
+    # 重命名截图
+    latest_png = max(TEST_RESULTS_DIR.glob("page-*.png"), key=os.path.getmtime, default=None)
+    if latest_png and latest_png.exists():
+        latest_png.rename(TEST_RESULTS_DIR / f"workflow_screenshot_{timestamp}.png")
+        print_ok(f"截图保存为: workflow_screenshot_{timestamp}.png")
 
     # 关闭浏览器
     cleanup_browser()
@@ -270,7 +301,7 @@ def all_tests():
     print("=" * 60)
 
     # 保存汇总结果
-    summary_file = OUTPUT_DIR / "test_summary.json"
+    summary_file = TEST_RESULTS_DIR / "test_summary.json"
     summary = {
         "timestamp": datetime.now().isoformat(),
         "all_passed": all_passed,
@@ -280,7 +311,7 @@ def all_tests():
 
     if all_passed:
         print_ok("全部测试通过!")
-        print(f"\n结果保存在: {OUTPUT_DIR}")
+        print(f"\n结果保存在: {TEST_RESULTS_DIR}")
         return 0
     else:
         print_warn("部分测试失败")
