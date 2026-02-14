@@ -18,6 +18,7 @@ Tracker 兼容性测试脚本
 
 import sqlite3
 import glob
+from datetime import datetime
 import os
 import sys
 import json
@@ -89,7 +90,7 @@ def sync():
 
 
 def clean():
-    """删除 test_data 中的用户数据"""
+    """删除 test_data 中的测试数据（保留预置的原始数据）"""
     print_step("步骤 1: 清理测试数据")
     
     if not TEST_DATA_DIR.exists():
@@ -101,17 +102,88 @@ def clean():
         print_warn("未找到测试数据库文件")
         return True
     
+    # 预置的原始测试数据（这些是项目自带的，需要保留）
+    PRESERVED_NAMES = ["Debugware", "EX5", "TestProject"]
+    
+    # 记录将被删除的项目名称
+    deleted_names = []
+    
     deleted = 0
     for db_file in test_dbs:
-        # 保留原始测试数据（如果存在）
-        if "_Test" in db_file.name or "Debugware" in db_file.name or "EX5" in db_file.name:
-            print_warn(f"保留原始测试数据: {db_file.name}")
+        # 保留预置的原始测试数据
+        if any(preserved in db_file.name for preserved in PRESERVED_NAMES):
+            print_warn(f"保留预置原始数据: {db_file.name}")
             continue
+        
+        # 删除其他所有数据（sync 来的 + 测试创建的）
         os.remove(db_file)
         print_ok(f"删除: {db_file.name}")
+        
+        # 提取项目名称（去掉 .db 后缀）
+        project_name = db_file.stem
+        deleted_names.append(project_name)
         deleted += 1
     
     print_ok(f"完成! 删除了 {deleted} 个文件")
+    
+    # 同步更新 projects.json - 基于剩余的 .db 文件重建
+    print_step("步骤 2: 同步更新 projects.json")
+    projects_json = TEST_DATA_DIR / "projects.json"
+    
+    try:
+        # 先读取原 projects.json，建立 name -> (is_archived, version, created_at) 的映射
+        original_meta = {}
+        if projects_json.exists():
+            with open(projects_json, 'r', encoding='utf-8') as f:
+                original_projects = json.load(f)
+                for proj in original_projects:
+                    name = proj.get('name')
+                    original_meta[name] = {
+                        'is_archived': proj.get('is_archived', True),
+                        'version': proj.get('version', 'test'),
+                        'created_at': proj.get('created_at')
+                    }
+        
+        # 扫描剩余的 .db 文件（排除 projects.json 本身）
+        remaining_dbs = [f for f in TEST_DATA_DIR.iterdir() 
+                         if f.is_file() and f.suffix == '.db']
+        
+        # 为每个 .db 文件创建项目记录
+        remaining_projects = []
+        for i, db_file in enumerate(sorted(remaining_dbs), start=1):
+            project_name = db_file.stem  # 去掉 .db 后缀
+            
+            # 优先使用原 projects.json 中的元数据
+            meta = original_meta.get(project_name, {})
+            is_archived = meta.get('is_archived', True)
+            version = meta.get('version', 'test')
+            created_at = meta.get('created_at')
+            
+            # 如果原 projects.json 没有创建时间，则用文件修改时间
+            if not created_at:
+                mtime = db_file.stat().st_mtime
+                created_at = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
+            
+            project_record = {
+                "id": i,
+                "name": project_name,
+                "created_at": created_at,
+                "is_archived": is_archived,
+                "version": version
+            }
+            remaining_projects.append(project_record)
+            print_ok(f"保留项目: {project_name} (is_archived={is_archived}, version={version})")
+        
+        # 写回文件
+        with open(projects_json, 'w', encoding='utf-8') as f:
+            json.dump(remaining_projects, f, indent=2, ensure_ascii=False)
+        
+        print_ok(f"projects.json 重建完成: 共 {len(remaining_projects)} 个项目")
+        
+    except Exception as e:
+        print_error(f"更新 projects.json 失败: {e}")
+        return False
+    
     return True
 
 
