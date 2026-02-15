@@ -9,8 +9,8 @@ export class TCPage extends BasePage {
   readonly baseURL = 'http://localhost:8081';
 
   // 标签和导航
-  readonly tcTab = 'text=Test Cases';
-  readonly addTCBtn = 'text=添加 Test Case';
+  readonly tcTab = '.tabs button.tab:has-text("Test Cases")';
+  readonly addTCBtn = 'text=+ 添加 TC';
 
   // TC 表格
   readonly tcTable = 'table'; // 实际 HTML 中的表格元素
@@ -32,7 +32,7 @@ export class TCPage extends BasePage {
   readonly tcDvMilestone = '#tcDvMilestone';
   readonly tcTargetDate = '#tcTargetDate';
   readonly tcStatus = '.status-select'; // 状态选择器
-  readonly tcSubmitBtn = '#tcSubmitBtn';
+  readonly tcSubmitBtn = '#tcModal button[type="submit"]';
   readonly tcCancelBtn = '#tcCancelBtn';
   readonly modalClose = '#tcModal .modal-close';
 
@@ -65,8 +65,10 @@ export class TCPage extends BasePage {
    * 切换到 TC 标签页
    */
   async switchToTCTab(): Promise<void> {
-    await this.page.click(this.tcTab);
-    await this.page.waitForTimeout(500);
+    // 直接点击 TC 标签（Playwright 会处理重复点击的情况）
+    await this.page.click('button.tab:has-text("Test Cases")');
+    // 等待面板切换
+    await this.page.waitForTimeout(1000);
   }
 
   /**
@@ -99,6 +101,8 @@ export class TCPage extends BasePage {
   }): Promise<void> {
     await this.switchToTCTab();
     await this.openTCModal();
+    // 等待模态框中的 DV Milestone 选择器加载完成
+    await this.page.waitForSelector(this.tcDvMilestone, { state: 'visible' });
 
     await this.page.fill(this.tcTestbench, data.testbench);
     await this.page.fill(this.tcTestName, data.testName);
@@ -110,7 +114,7 @@ export class TCPage extends BasePage {
       await this.page.fill(this.tcOwner, data.owner);
     }
     if (data.category) {
-      await this.page.selectOption(this.tcCategory, data.category);
+      await this.page.fill(this.tcCategory, data.category);
     }
     if (data.dvMilestone) {
       await this.page.selectOption(this.tcDvMilestone, data.dvMilestone);
@@ -122,9 +126,9 @@ export class TCPage extends BasePage {
     await this.page.click(this.tcSubmitBtn);
     await this.page.waitForTimeout(500);
 
-    // 验证创建成功
+    // 验证创建成功（排除详情展开行）
     await expect(
-      this.page.locator(`${this.tcTableRows}:has-text("${data.testName}")`)
+      this.page.locator(`table tbody tr:not(.tc-detail-row):has-text("${data.testName}")`)
     ).toBeVisible();
   }
 
@@ -165,7 +169,7 @@ export class TCPage extends BasePage {
       await this.page.fill(this.tcOwner, updates.owner);
     }
     if (updates.category) {
-      await this.page.selectOption(this.tcCategory, updates.category);
+      await this.page.fill(this.tcCategory, updates.category);
     }
     if (updates.dvMilestone) {
       await this.page.selectOption(this.tcDvMilestone, updates.dvMilestone);

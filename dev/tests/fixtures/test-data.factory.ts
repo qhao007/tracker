@@ -84,23 +84,36 @@ export class TestDataFactory {
 
   /**
    * 生成 TC 测试数据
+   * 注意：返回格式与 TCPage.createTC() 期望的格式一致
    */
   static createTCData(overrides?: {
-    name?: string;
-    category?: string;
+    testbench?: string;
+    testName?: string;
+    scenario?: string;
     owner?: string;
+    category?: string;
     dvMilestone?: string;
+    targetDate?: string;
   }): {
-    name: string;
-    category: string;
-    owner: string;
-    dvMilestone: string;
+    testbench: string;
+    testName: string;
+    name: string; // 别名，与 testName 相同
+    scenario?: string;
+    owner?: string;
+    category?: string;
+    dvMilestone?: string;
+    targetDate?: string;
   } {
+    const tcName = overrides?.testName || this.generateTCName();
     return {
-      name: overrides?.name || this.generateTCName(),
-      category: overrides?.category || 'Functional',
+      testbench: overrides?.testbench || 'tb_' + tcName,
+      testName: tcName,
+      name: tcName, // 别名，兼容测试代码中使用的 tcData.name
+      scenario: overrides?.scenario || 'Test scenario for ' + tcName,
       owner: overrides?.owner || 'tester',
-      dvMilestone: overrides?.dvMilestone || 'RTL',
+      category: overrides?.category || 'Functional',
+      dvMilestone: overrides?.dvMilestone || 'DV1.0',
+      targetDate: overrides?.targetDate,
     };
   }
 

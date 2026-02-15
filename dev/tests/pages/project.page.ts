@@ -57,6 +57,20 @@ export class ProjectPage extends BasePage {
    * 切换到指定项目
    */
   async selectProject(projectName: string): Promise<void> {
+    // 等待下拉框可用并包含选项
+    const selector = this.page.locator(this.projectSelector);
+    await selector.waitFor({ state: 'visible' });
+    
+    // 等待特定项目出现在选项中
+    await this.page.waitForFunction(
+      (name) => {
+        const select = document.querySelector('#projectSelector') as HTMLSelectElement;
+        return select && Array.from(select.options).some(o => o.text.includes(name));
+      },
+      projectName,
+      { timeout: 10000 }
+    );
+    
     await this.page.selectOption(this.projectSelector, { label: projectName });
     await this.page.waitForTimeout(500);
   }

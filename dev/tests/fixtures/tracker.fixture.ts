@@ -1,12 +1,14 @@
 /**
  * Tracker 专用 Fixtures
  * 提供 Tracker 各个页面的 Page Objects
+ * 包含自动清理机制
  */
 
 import { test as base, TestInfo } from '@playwright/test';
 import { ProjectPage } from '../pages/project.page';
 import { CPPage } from '../pages/cp.page';
 import { TCPage } from '../pages/tc.page';
+import { cleanupTestData } from '../utils/cleanup';
 
 /**
  * Tracker 专用测试类型
@@ -42,6 +44,14 @@ export const test = base.extend<TrackerFixtures>({
    * CPPage fixture
    */
   cpPage: async ({ page }, use) => {
+    // 处理原生 confirm 对话框 - 忽略已处理的 dialog
+    page.on('dialog', async dialog => {
+      try {
+        await dialog.accept();
+      } catch (e) {
+        // 忽略 "already handled" 错误
+      }
+    });
     const cpPage = new CPPage(page);
     await use(cpPage);
   },
@@ -50,6 +60,14 @@ export const test = base.extend<TrackerFixtures>({
    * TCPage fixture
    */
   tcPage: async ({ page }, use) => {
+    // 处理原生 confirm 对话框 - 忽略已处理的 dialog
+    page.on('dialog', async dialog => {
+      try {
+        await dialog.accept();
+      } catch (e) {
+        // 忽略 "already handled" 错误
+      }
+    });
     const tcPage = new TCPage(page);
     await use(tcPage);
   },
@@ -84,6 +102,38 @@ export const test = base.extend<TrackerFixtures>({
     const name = `TestUI_TC_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
     await use(name);
   },
+});
+
+/**
+ * 自动清理机制
+ * 
+ * 在每个测试后自动清理测试数据
+ * 确保测试间不互相干扰
+ */
+
+// 注册全局 afterEach 钩子
+base.afterEach(async ({ page }, testInfo) => {
+  // 如果测试失败，截图保存
+  if (testInfo.status === 'failed') {
+    const screenshotDir = './test-results/screenshots';
+    try {
+      await page.screenshot({ 
+        path: `${screenshotDir}/${testInfo.title.replace(/\s+/g, '-')}-${Date.now()}.png`,
+        fullPage: true 
+      });
+    } catch (e) {
+      console.warn('截图失败:', e);
+    }
+  }
+  
+  // 清理测试数据
+  await cleanupTestData(page);
+});
+
+// 注册全局 afterAll 钩子
+base.afterAll(async ({ browser }) => {
+  // 关闭浏览器
+  await browser.close();
 });
 
 /**

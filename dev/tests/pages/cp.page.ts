@@ -9,7 +9,7 @@ export class CPPage extends BasePage {
   readonly baseURL = 'http://localhost:8081';
 
   // 标签和导航
-  readonly cpTab = 'text=Cover Points';
+  readonly cpTab = '.tabs button.tab:has-text("Cover Points")';
   readonly addCPBtn = 'button:has-text("+ 添加 CP")';
 
   // CP 表格
@@ -49,8 +49,10 @@ export class CPPage extends BasePage {
    * 切换到 CP 标签页
    */
   async switchToCPTab(): Promise<void> {
-    await this.page.click(this.cpTab);
-    await this.page.waitForTimeout(500);
+    // 直接点击 CP 标签（Playwright 会处理重复点击的情况）
+    await this.page.click('button.tab:has-text("Cover Points")');
+    // 等待面板切换
+    await this.page.waitForTimeout(1000);
   }
 
   /**
