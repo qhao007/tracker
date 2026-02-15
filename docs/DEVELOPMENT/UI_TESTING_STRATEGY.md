@@ -56,16 +56,30 @@
 
 ```
 tests/
-├── test_ui_project.spec.ts    # Playwright CLI (TypeScript) - 6 个测试
-├── test_ui_cp.spec.ts         # Playwright CLI (TypeScript) - 12 个测试
-├── test_ui_project.py          # Python pytest - 6 个测试
-├── test_ui_cp.py               # Python pytest - 13 个测试
-├── test_ui_tc.py               # Python pytest - TC 管理
-├── test_ui_boundary.py         # Python pytest - 边界测试
-├── test_ui_connection.py       # Python pytest - 连接测试
-├── test_ui_backup.py           # Python pytest - 备份测试
-├── test_ui_stats.py            # Python pytest - 统计测试
-└── tracker.spec.ts             # Playwright CLI - 验证测试
+├── test_ui/                    # Playwright CLI (TypeScript) 测试
+│   ├── specs/                  # 测试规格目录
+│   │   ├── smoke/              # 冒烟测试
+│   │   │   └── smoke.spec.ts   # 冒烟测试用例
+│   │   ├── integration/        # 集成测试
+│   │   │   ├── cp.spec.ts     # CP 集成测试
+│   │   │   ├── tc.spec.ts     # TC 集成测试
+│   │   │   └── connections.spec.ts  # 连接集成测试
+│   │   └── e2e/               # 端到端测试
+│   │       ├── full-workflow.spec.ts
+│   │       └── data-creation.spec.ts
+│   └── utils/                  # 测试工具
+│       ├── dialog-helper.ts    # Dialog 处理工具
+│       └── cleanup.ts          # 测试数据清理工具
+├── test_api/                   # Python pytest API 测试
+│   ├── test_api.py             # API 测试用例
+│   └── conftest.py             # pytest 配置
+├── test_ui_project.py          # Python pytest (已弃用) - 6 个测试
+├── test_ui_cp.py               # Python pytest (已弃用) - 13 个测试
+├── test_ui_tc.py               # Python pytest (已弃用) - TC 管理
+├── test_ui_boundary.py         # Python pytest (已弃用) - 边界测试
+├── test_ui_connection.py       # Python pytest (已弃用) - 连接测试
+├── test_ui_backup.py           # Python pytest (已弃用) - 备份测试
+└── test_ui_stats.py            # Python pytest (已弃用) - 统计测试
 ```
 
 ### 2.2 Playwright CLI 测试特点
@@ -986,25 +1000,35 @@ EOF
 cd /projects/management/tracker/dev
 
 # 运行所有 Playwright CLI 测试
-npx playwright test tests/test_ui_*.spec.ts --project=firefox
+npx playwright test tests/test_ui/ --project=firefox
+
+# 运行冒烟测试
+npx playwright test tests/test_ui/specs/smoke/smoke.spec.ts --project=firefox
+
+# 运行集成测试
+npx playwright test tests/test_ui/specs/integration/ --project=firefox
+
+# 运行 E2E 测试
+npx playwright test tests/test_ui/specs/e2e/ --project=firefox
 
 # 运行指定测试文件
-npx playwright test tests/test_ui_project.spec.ts --project=firefox
-npx playwright test tests/test_ui_cp.spec.ts --project=firefox
+npx playwright test tests/test_ui/specs/smoke/smoke.spec.ts --project=firefox
+npx playwright test tests/test_ui/specs/integration/cp.spec.ts --project=firefox
 
 # 运行并生成报告
-npx playwright test tests/test_ui_*.spec.ts --project=firefox --reporter=html
+npx playwright test tests/test_ui/specs/ --project=firefox --reporter=html
 
 # 调试模式（headed）
-npx playwright test tests/test_ui_project.spec.ts --project=firefox --headed
+npx playwright test tests/test_ui/specs/smoke/smoke.spec.ts --project=firefox --headed
 ```
 
 ### 测试文件位置
 
 | 类型 | 位置 | 状态 |
 |------|------|------|
-| Playwright CLI (TypeScript) | `dev/tests/test_ui_*.spec.ts` | ✅ **推荐使用** |
-| Python pytest | `dev/tests/test_ui_*.py` | ⚠️ **已弃用** |
+| Playwright CLI (TypeScript) | `dev/tests/test_ui/specs/` | ✅ **推荐使用** |
+| Python pytest API | `dev/tests/test_api/` | ✅ **推荐使用** |
+| Python pytest UI | `dev/tests/test_ui_*.py` | ⚠️ **已弃用** |
 
 ### 测试结果示例
 
