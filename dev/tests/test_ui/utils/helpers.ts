@@ -166,7 +166,7 @@ export async function setElementAttribute(
   value: string
 ): Promise<void> {
   await page.evaluate(
-    (sel, attr, val) => {
+    (sel: string, attr: string, val: string) => {
       const el = document.querySelector(sel);
       if (el) el.setAttribute(attr, val);
     },

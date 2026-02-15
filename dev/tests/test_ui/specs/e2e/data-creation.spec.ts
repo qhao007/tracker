@@ -95,11 +95,11 @@ test.describe('数据创建流程测试', () => {
     // 批量创建 TC
     for (let i = 0; i < batchSize; i++) {
       const tcData = TestDataFactory.createTCData({
-        name: `Batch_TC_${i}`,
+        testName: `Batch_TC_${i}`,
         category: i % 2 === 0 ? 'Functional' : 'Performance',
         dvMilestone: 'RTL'
       });
-      tcList.push(tcData.name);
+      tcList.push(tcData.testName);
       
       await tcPage.createTC(tcData);
       
@@ -144,7 +144,7 @@ test.describe('数据创建流程测试', () => {
     });
     
     const tcData = TestDataFactory.createTCData({
-      name: 'Consistency_TC',
+      testName: 'Consistency_TC',
       category: 'Functional',
       owner: 'test_user'
     });
@@ -156,7 +156,7 @@ test.describe('数据创建流程测试', () => {
     await tcPage.switchToTCTab();
     await tcPage.openTCModal();
     await tcPage.page.fill('#tcTestbench', 'Consistency_TB');
-    await tcPage.page.fill('#tcTestName', tcData.name);
+    await tcPage.page.fill('#tcTestName', tcData.testName);
     await tcPage.page.fill('#tcScenario', '数据一致性测试场景');
     
     // 关联到 CP
@@ -243,7 +243,7 @@ test.describe('数据创建流程测试 - 边界场景', () => {
     // 批量创建 TC
     for (let i = 0; i < tcCount; i++) {
       const tcData = TestDataFactory.createTCData({
-        name: `Large_TC_${i}`,
+        testName: `Large_TC_${i}`,
         category: i % 3 === 0 ? 'Functional' : i % 3 === 1 ? 'Performance' : 'Stress',
         dvMilestone: i % 2 === 0 ? 'RTL' : 'GATE'
       });

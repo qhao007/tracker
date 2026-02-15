@@ -20,7 +20,7 @@ const BASE_URL = process.env.TEST_URL || 'http://localhost:8081';
 const PROJECT_NAME = 'RegressionTest_1770514665';  // 回归测试专用项目（有数据）
 
 // 辅助函数：等待数据加载（替代 networkidle）
-async function waitForData(page) {
+async function waitForData(page: any) {
   await page.waitForTimeout(500);  // 简短等待
 }
 
@@ -392,11 +392,11 @@ test.describe('Tracker v0.3 功能测试', () => {
           const badge = badges.nth(i);
           const text = await badge.textContent();
 
-          if (text.includes('100%')) {
+          if (text?.includes('100%')) {
             await expect(badge).toHaveClass(/bg-green/);
-          } else if (text.includes('%') && !text.includes('0%')) {
+          } else if (text?.includes('%') && !text?.includes('0%')) {
             await expect(badge).toHaveClass(/bg-yellow/);
-          } else if (text.includes('0%')) {
+          } else if (text?.includes('0%')) {
             await expect(badge).toHaveClass(/bg-red/);
           }
         }

@@ -12,7 +12,7 @@
     "rootDir": "./tests",
     "declaration": false,
     "resolveJsonModule": true,
-    "types": ["@playwright/test"]
+    "types": ["@playwright/test", "node"]
   },
   "include": ["tests/**/*"],
   "exclude": ["node_modules"]

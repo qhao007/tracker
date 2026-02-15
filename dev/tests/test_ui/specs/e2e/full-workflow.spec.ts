@@ -135,10 +135,10 @@ test.describe('完整用户工作流测试', () => {
     const projectBName = TestDataFactory.generateProjectName('ProjectB');
     
     const cpDataA = TestDataFactory.createCPData({ feature: 'ProjectA_CP' });
-    const tcDataA = TestDataFactory.createTCData({ name: 'ProjectA_TC' });
+    const tcDataA = TestDataFactory.createTCData({ testName: 'ProjectA_TC' });
     
     const cpDataB = TestDataFactory.createCPData({ feature: 'ProjectB_CP' });
-    const tcDataB = TestDataFactory.createTCData({ name: 'ProjectB_TC' });
+    const tcDataB = TestDataFactory.createTCData({ testName: 'ProjectB_TC' });
     
     // 创建项目 A
     await projectPage.createProject(projectAName);
@@ -225,8 +225,8 @@ test.describe('完整用户工作流测试', () => {
     const tcList: string[] = [];
     
     for (let i = 0; i < tcCount; i++) {
-      const tcData = TestDataFactory.createTCData({ name: `Batch_TC_${i}` });
-      tcList.push(tcData.name);
+      const tcData = TestDataFactory.createTCData({ testName: `Batch_TC_${i}` });
+      tcList.push(tcData.testName);
       await tcPage.switchToTCTab();
       await tcPage.createTC(tcData);
     }
@@ -278,7 +278,7 @@ test.describe('完整用户工作流测试 - 异常处理', () => {
    */
   test('E2E-004: 页面刷新后状态恢复', async ({ cpPage, tcPage }) => {
     const cpData = TestDataFactory.createCPData({ feature: 'Refresh_Test' });
-    const tcData = TestDataFactory.createTCData({ name: 'Refresh_TC' });
+    const tcData = TestDataFactory.createTCData({ testName: 'Refresh_TC' });
     
     // 创建 CP 和 TC
     await cpPage.createCP(cpData);
