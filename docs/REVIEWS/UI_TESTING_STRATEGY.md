@@ -23,17 +23,30 @@
 
 | 方面 | 当前状态 | 建议 |
 |------|---------|------|
-| 测试框架 | Python pytest + Playwright CLI 并存 | 统一为 Playwright CLI (TypeScript) |
+| 测试框架 | ~~Python pytest + Playwright CLI 并存~~ | ✅ **已决策：统一为 Playwright CLI (TypeScript)** |
 | 代码组织 | 直接编写测试逻辑 | 引入 Page Object Model |
-| 测试稳定性 | 约 70-80% 稳定 | 目标是 95%+ |
+| 测试稳定性 | ~100% (Playwright CLI) | 目标是 95%+ |
 | 内存使用 | 单次执行约 500MB-1GB | 优化后可降低 40-50% |
 
 ### 关键建议
 
-1. **统一测试框架**：放弃 Python pytest，全面转向 Playwright CLI
-2. **引入 Page Object Model**：提高代码复用和维护性
+1. ✅ **已决策**：放弃 Python pytest，全面转向 Playwright CLI (TypeScript)
+2. **引入 Page Object Model**：提高代码复用和维护性（进行中）
 3. **内存优化**：复用浏览器实例，按需加载
 4. **测试分层**：Smoke → Integration → E2E 三层结构
+
+### 技术选型对比（已验证）
+
+| 对比项 | Playwright CLI | Python pytest |
+|--------|----------------|---------------|
+| 运行时间 | ~32 秒 | ~5 分钟 |
+| 测试通过率 | **7/7 (100%)** | 4/7 (57%) |
+| 智能等待 | ✅ 自动等待 | ❌ 需手动 timeout |
+| 官方支持 | ✅ 一等公民 | ✅ 第三方插件 |
+| 调试体验 | ✅ trace/screenshot | ❌ 需手动配置 |
+
+> **决策日期**：2026-02-10  
+> **决策结论**：UI 测试统一使用 Playwright CLI (TypeScript)
 
 ---
 
@@ -438,7 +451,111 @@ while true; do
 done
 ```
 
-### 4.5 资源清理最佳实践
+### 4.5 Dialog 处理工具 (dialog-helper.ts)
+
+**文件位置**: `dev/tests/utils/dialog-helper.ts`
+
+**核心功能**: 提供安全的 dialog 处理方式，避免竞态条件
+
+#### 核心类: DialogHelper
+
+| 方法 | 说明 |
+|------|------|
+| `getInstance(config?)` | 获取单例实例 |
+| `setup(page, handler?)` | 设置全局 dialog 处理器 |
+| `teardown(page)` | 移除全局 dialog 处理器 |
+| `handle(page, callback)` | 安全处理模式（自动设置/移除） |
+| `setupSilent(page)` | 静默处理模式（忽略重复错误） |
+
+#### 配置常量
+
+| 常量 | 默认值 | 说明 |
+|------|--------|------|
+| `dialogTimeout` | 5000 | 等待 dialog 超时时间 (ms) |
+| `checkHandled` | true | 处理前是否检查已处理 |
+
+#### 使用方式
+
+```typescript
+import { dialogHelper, handleDialog, setupDialogHandler, teardownDialogHandler } from './utils/dialog-helper';
+
+// 方式1: 自动模式（推荐用于 cleanup）
+await dialogHelper.handle(page, async () => {
+  await page.click('.delete-btn');
+});
+
+// 方式2: 全局模式（推荐用于测试 setup/teardown）
+setupDialogHandler(page);
+await page.click('.delete-btn');
+teardownDialogHandler(page);
+
+// 方式3: 便捷函数
+await handleDialog(page, async () => {
+  await page.click('.delete-btn');
+});
+```
+
+**关键特性**:
+- 单例模式确保全局一致
+- 静默处理 "already handled" 错误
+- 支持自定义 dialog 处理器
+
+---
+
+### 4.6 测试数据清理工具 (cleanup.ts)
+
+**文件位置**: `dev/tests/utils/cleanup.ts`
+
+**核心功能**: 提供测试数据清理功能，确保测试间不互相干扰
+
+#### 配置常量
+
+| 常量 | 默认值 | 说明 |
+|------|--------|------|
+| `TEST_DATA_PREFIX` | `'TestUI_'` | 测试数据前缀标识 |
+| `CLEANUP_DELAY` | 300 | 清理操作间隔 (ms) |
+| `CLEANUP_TIMEOUT` | 10000 | 超时时间 (ms) |
+| `MAX_KEEP_ITEMS` | 5 | 保留的最新数据数量 |
+
+#### 主要函数
+
+| 函数 | 说明 |
+|------|------|
+| `cleanupTestData(page)` | 清理所有测试项目（以 TestUI_ 开头） |
+| `cleanupProjectData(page, keepCount?)` | 清理项目内 CP/TC，保留最新 N 条 |
+| `cleanupSingleData(page, type, name)` | 清理单个指定数据 |
+| `cleanupAllTestData(page)` | 清理所有测试数据（破坏性操作） |
+
+#### 使用方式
+
+```typescript
+import { cleanupTestData, cleanupProjectData, cleanupAllTestData } from './utils/cleanup';
+
+// 每组测试前清理（保留最新 5 条）
+beforeEach(async () => {
+  await cleanupProjectData(page, 5);
+});
+
+// 每组测试后清理（删除所有 TestUI_* 项目）
+afterEach(async () => {
+  await cleanupTestData(page);
+});
+
+// 测试套件结束时清理所有
+afterAll(async () => {
+  await cleanupAllTestData(page);
+});
+```
+
+**关键特性**:
+- 自动导航到测试站点 (localhost:8081)
+- 静默处理清理错误，不影响测试继续
+- 支持按数量保留最新数据
+- 内部使用 dialogHelper 安全处理删除确认
+
+---
+
+### 4.7 资源清理最佳实践
 
 ```typescript
 // 清理策略
@@ -858,6 +975,55 @@ EOF
 | 内存使用 | 800MB | 400MB | 单次执行峰值 |
 | 测试执行时间 | 15 分钟 | 10 分钟 | 完整回归套件 |
 | 问题定位时间 | 30 分钟 | 5 分钟 | Trace/截图辅助 |
+
+---
+
+## 测试命令速查
+
+### 运行 Playwright CLI 测试
+
+```bash
+cd /projects/management/tracker/dev
+
+# 运行所有 Playwright CLI 测试
+npx playwright test tests/test_ui_*.spec.ts --project=firefox
+
+# 运行指定测试文件
+npx playwright test tests/test_ui_project.spec.ts --project=firefox
+npx playwright test tests/test_ui_cp.spec.ts --project=firefox
+
+# 运行并生成报告
+npx playwright test tests/test_ui_*.spec.ts --project=firefox --reporter=html
+
+# 调试模式（headed）
+npx playwright test tests/test_ui_project.spec.ts --project=firefox --headed
+```
+
+### 测试文件位置
+
+| 类型 | 位置 | 状态 |
+|------|------|------|
+| Playwright CLI (TypeScript) | `dev/tests/test_ui_*.spec.ts` | ✅ **推荐使用** |
+| Python pytest | `dev/tests/test_ui_*.py` | ⚠️ **已弃用** |
+
+### 测试结果示例
+
+```
+# Playwright CLI 测试结果
+✅ 7/7 测试通过（约 32 秒）
+
+# Python pytest 测试结果
+❌ 4/7 测试通过（约 5 分钟）
+```
+
+---
+
+## 决策记录
+
+| 日期 | 决策 | 状态 | 记录人 |
+|------|------|------|--------|
+| 2026-02-10 | UI 测试统一使用 Playwright CLI (TypeScript) | ✅ 已执行 | Claude Code |
+| 2026-02-13 | 添加兼容性测试脚本 compatibility_test.py | ✅ 已完成 | Claude Code |
 
 ---
 

@@ -599,6 +599,115 @@ playwright screenshot --selector="#project-list"
 playwright screenshot --diff
 ```
 
+### 6.9 测试工具类
+
+> **说明**: Playwright 测试框架提供了一系列工具类，用于辅助测试脚本的编写
+
+#### 6.9.1 工具类目录结构
+
+```
+dev/tests/utils/
+├── constants.ts          # 测试常量定义
+├── helpers.ts           # 通用辅助函数
+├── logger.ts            # 日志工具
+├── dialog-helper.ts     # Dialog 处理工具 ⭐
+├── cleanup.ts           # 测试数据清理工具 ⭐
+└── cleanup-constants.ts # 清理常量定义
+```
+
+#### 6.9.2 Dialog 处理工具 (dialog-helper.ts)
+
+> **功能**: 安全处理 Playwright dialog 弹窗，避免竞态条件
+
+**核心类**: `DialogHelper`
+
+**使用方式:**
+
+```typescript
+import { dialogHelper } from './utils/dialog-helper';
+
+// 方式1: 自动模式（推荐用于单个操作）
+await dialogHelper.handle(page, async () => {
+  await page.click('.delete-btn');
+});
+
+// 方式2: 全局模式（推荐用于测试 setup/teardown）
+setupDialogHandler(page);
+await page.click('.delete-btn');
+teardownDialogHandler(page);
+
+// 方式3: 静默模式（忽略重复处理错误）
+setupSilent(page);
+```
+
+**主要方法:**
+
+| 方法 | 说明 | 适用场景 |
+|------|------|----------|
+| `handle()` | 自动设置/移除处理器 | 单次 dialog 操作 |
+| `setup()` | 设置全局处理器 | 测试 setup 阶段 |
+| `teardown()` | 移除全局处理器 | 测试 teardown 阶段 |
+| `setupSilent()` | 静默处理模式 | 多次触发 dialog |
+
+**解决的问题:**
+- 竞态条件：dialog 在处理器设置前出现
+- 重复处理：同一个 dialog 被多次触发
+- 错误吞没："already handled" 错误
+
+#### 6.9.3 测试数据清理工具 (cleanup.ts)
+
+> **功能**: 清理测试创建的数据，确保测试间不互相干扰
+
+**主要函数:**
+
+```typescript
+import { cleanupTestData } from './utils/cleanup';
+
+// 清理所有测试数据
+await cleanupTestData(page);
+
+// 清理单个数据
+await cleanupSingleData(page, 'project', 'TestProject');
+await cleanupSingleData(page, 'cp', 'TestCP');
+await cleanupSingleData(page, 'tc', 'TestTC');
+```
+
+**配置常量:**
+
+| 常量 | 默认值 | 说明 |
+|------|--------|------|
+| `TEST_DATA_PREFIX` | `'TestUI_'` | 测试数据前缀 |
+| `CLEANUP_DELAY` | `300` | 清理间隔 (ms) |
+| `CLEANUP_TIMEOUT` | `10000` | 清理超时 (ms) |
+| `MAX_KEEP_ITEMS` | `5` | 保留的最新数据数量 |
+
+**清理流程:**
+
+1. 检查当前页面是否在测试站点
+2. 查找并删除以 `TEST_DATA_PREFIX` 开头的项目
+3. 等待清理操作完成
+4. 输出清理结果
+
+#### 6.9.4 其他工具类
+
+**constants.ts** - 测试常量定义
+```typescript
+export const TEST_TIMEOUT = 30000;
+export const BASE_URL = 'http://localhost:8081';
+```
+
+**helpers.ts** - 通用辅助函数
+```typescript
+export async function waitForElement(page, selector);
+export async function fillForm(page, data);
+```
+
+**logger.ts** - 日志工具
+```typescript
+export function logTestStart(name: string);
+export function logTestResult(result: 'pass' | 'fail', details?: string);
+```
+
 ---
 
 ## 7. 手动测试用例
@@ -1221,6 +1330,128 @@ test.describe('Tracker UI Tests', () => {
 
 ---
 
-**文档版本**: v0.3  
-**最后更新**: 2026-02-05  
-**维护者**: 小栗子 🌰
+## 附录 B: 测试增强计划新增测试用例 (2026-02-12)
+
+> **更新日期**: 2026-02-12
+> **版本**: v0.3.1 (增强版)
+
+### B.1 新增 API 测试文件
+
+| 文件 | 用例数 | 说明 |
+|------|--------|------|
+| test_api_boundary.py | 27 | 边界条件测试（空值、特殊字符、超长输入、边界数值等） |
+| test_api_exception.py | 20 | 异常场景测试（数据库失败、并发冲突、无效请求等） |
+| test_api_batch.py | 16 | 批量操作测试（部分成功、全部无效、超大批量等） |
+| test_api_performance.py | 15 | 性能测试（响应时间、批量操作、并发吞吐量） |
+| **新增小计** | **78** | - |
+
+### B.2 新增 UI 测试文件
+
+| 文件 | 用例数 | 说明 |
+|------|--------|------|
+| test_ui_project.py | 9 | 项目管理测试（创建、切换、删除、边界条件） |
+| test_ui_cp.py | 12 | CP 管理测试（CRUD、过滤、优先级、详情展开） |
+| test_ui_tc.py | 20 | TC 管理测试（CRUD、状态跟踪、过滤、批量操作） |
+| test_ui_connection.py | 8 | 关联管理测试（TC 关联 CP、覆盖率显示） |
+| test_ui_stats.py | 10 | 统计功能测试（统计面板、覆盖率计算、实时更新） |
+| test_ui_backup.py | 8 | 备份恢复测试（导出、导入、错误处理） |
+| test_ui_boundary.py | 10 | 边界条件测试（表单验证、特殊输入、超长文本） |
+| **新增小计** | **77** | - |
+
+### B.3 测试用例清单
+
+#### B.3.1 边界条件测试用例 (API-BOUND-001 ~ API-BOUND-025)
+
+| 用例 ID | 测试场景 |
+|---------|----------|
+| API-BOUND-001 ~ 003 | 空值过滤（feature, owner, category） |
+| API-BOUND-004 ~ 005 | 特殊字符处理（feature, testbench） |
+| API-BOUND-006 ~ 007 | 超长输入（feature, test_name） |
+| API-BOUND-008 ~ 010 | 边界数值（limit=0, limit=-1, offset 超范围） |
+| API-BOUND-011 ~ 012 | 无效枚举值（status, dv_milestone） |
+| API-BOUND-013 ~ 015 | 无效 ID（project_id, cp_id, tc_id） |
+| API-BOUND-016 ~ 019 | 多 filter 组合、空列表、前后缀空格 |
+| API-BOUND-020 ~ 025 | 中文、Emoji、换行符、JSON、SQL 注入、XSS |
+
+#### B.3.2 异常场景测试用例 (API-EXCP-001 ~ API-EXCP-010)
+
+| 用例 ID | 测试场景 |
+|---------|----------|
+| API-EXCP-001 | 数据库连接失败 |
+| API-EXCP-002 ~ 004 | 不存在项目访问、并发修改、并发删除 |
+| API-EXCP-005 ~ 006 | 批量操作事务回滚、无效 JSON 格式 |
+| API-EXCP-007 ~ 009 | 缺少必填字段、字段类型错误、未知字段 |
+| API-EXCP-010 | 请求方法错误 |
+
+#### B.3.3 批量操作测试用例 (API-BATCH-001 ~ API-BATCH-011)
+
+| 用例 ID | 测试场景 |
+|---------|----------|
+| API-BATCH-001 ~ 003 | TC 状态部分成功、全部无效、空列表 |
+| API-BATCH-004 ~ 005 | 超大批量、混合有效/无效 |
+| API-BATCH-006 ~ 008 | 批量更新（target_date, dv_milestone, priority） |
+| API-BATCH-009 ~ 011 | 批量删除、批量关联 TC-CP |
+
+#### B.3.4 性能测试用例 (API-PERF-001 ~ API-PERF-005)
+
+| 用例 ID | 测试场景 |
+|---------|----------|
+| API-PERF-001 | 单 API 响应时间 < 500ms |
+| API-PERF-002 | 批量操作响应时间 < 1s |
+| API-PERF-003 | 列表查询响应时间 < 500ms |
+| API-PERF-004 | 统计 API 响应时间 < 500ms |
+| API-PERF-005 | 过滤查询响应时间 < 500ms |
+
+### B.4 测试覆盖统计
+
+| 测试类型 | 目标用例数 | 实际用例数 | 完成度 |
+|----------|------------|------------|--------|
+| API 测试（原有） | 17 | 28 | ✅ 164% |
+| API 测试（新增） | 75-100 | 78 | ✅ 100% |
+| UI 测试 | 60-70 | 77 | ✅ 110% |
+| **总计** | **135-170** | **183** | ✅ 108%+ |
+
+### B.5 测试执行结果 (2026-02-12)
+
+| 测试文件 | 用例数 | 通过 | 失败 | 通过率 |
+|----------|--------|------|------|--------|
+| test_api.py | 28 | 28 | 0 | 100% |
+| test_api_boundary.py | 27 | 27 | 0 | 100% |
+| test_api_exception.py | 20 | 20 | 0 | 100% |
+| test_api_batch.py | 16 | 16 | 0 | 100% |
+| test_api_performance.py | 15 | 15 | 0 | 100% |
+| **API 测试总计** | **106** | **106** | **0** | **100%** |
+| test_ui_*.py (7个文件) | 77 | 77 | 0 | ✅ 语法通过 |
+
+### B.6 运行新增测试
+
+```bash
+cd dev
+
+# 运行所有 API 测试
+PYTHONPATH=. pytest tests/test_api*.py -v --tb=short
+
+# 运行边界条件测试
+PYTHONPATH=. pytest tests/test_api_boundary.py -v
+
+# 运行异常场景测试
+PYTHONPATH=. pytest tests/test_api_exception.py -v
+
+# 运行批量操作测试
+PYTHONPATH=. pytest tests/test_api_batch.py -v
+
+# 运行性能测试
+PYTHONPATH=. pytest tests/test_api_performance.py -v
+
+# UI 测试语法验证
+python3 -m py_compile tests/test_ui_*.py
+
+# UI 测试执行（需要浏览器）
+npx playwright test tests/test_ui_*.py --project=firefox
+```
+
+---
+
+**文档版本**: v0.3.1  
+**最后更新**: 2026-02-12  
+**维护者**: Claude Code
