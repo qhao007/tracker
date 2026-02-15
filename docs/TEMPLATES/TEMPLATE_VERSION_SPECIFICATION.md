@@ -210,7 +210,7 @@ Content-Type: application/json
 |------|------|
 | 需求文档 | `/projects/management/feedbacks/` |
 | 开发规范 | `docs/DEVELOPMENT/DEVELOPMENT_PROCESS.md` |
-| 测试计划 | `docs/REPORTS/tracker_TEST_PLAN.md` |
+| 测试计划 | `docs/DEVELOPMENT/UI_TESTING_STRATEGY.md`<br>`docs/DEVELOPMENT/API_TESTING_STRATEGY.md`<br>`docs/DEVELOPMENT/TEST_EXECUTION_PLAN.md` |
 | BugLog | `docs/BUGLOG/tracker_BUGLOG.md` |
 
 ---

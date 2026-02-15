@@ -533,7 +533,7 @@ sudo systemctl restart tracker
 | 类型 | 文件名 | 说明 |
 |------|--------|------|
 | 规格书 | `tracker_SPECIFICATION.md` | 功能定义、架构设计 |
-| 测试计划 | `tracker_TEST_PLAN.md` | 测试策略、用例 |
+| 测试计划 | `docs/DEVELOPMENT/UI_TESTING_STRATEGY.md`<br>`docs/DEVELOPMENT/API_TESTING_STRATEGY.md`<br>`docs/DEVELOPMENT/TEST_EXECUTION_PLAN.md` | 测试策略、用例 |
 | 发布报告 | `TRACKER_TEST_REPORT_*.md` | 测试结果 |
 | 功能需求 | `FEATURE_*.md` | 新功能详细定义 |
 | 开发规范 | `DEVELOPMENT_PROCESS.md` | 本文档 |
@@ -542,10 +542,11 @@ sudo systemctl restart tracker
 
 ```
 /projects/management/tracker/docs/
-├── dev/                  # 开发相关文档
-│   ├── tracker_SPECIFICATION.md
-│   ├── tracker_TEST_PLAN.md
+├── DEVELOPMENT/           # 开发相关文档
 │   ├── DEVELOPMENT_PROCESS.md
+│   ├── UI_TESTING_STRATEGY.md
+│   ├── API_TESTING_STRATEGY.md
+│   ├── TEST_EXECUTION_PLAN.md
 │   ├── TEMPLATE_FEATURE_REQUEST.md
 │   └── TEMPLATE_RELEASE_NOTES.md
 │

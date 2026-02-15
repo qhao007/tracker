@@ -113,7 +113,7 @@ python3 scripts/release.py --rollback --force
 ## 相关资源
 
 - **规格书**: `docs/SPECIFICATIONS/tracker_OVERALL_SPECS.md`
-- **测试计划**: `docs/REPORTS/tracker_TEST_PLAN.md`
+- **测试计划**: `docs/DEVELOPMENT/UI_TESTING_STRATEGY.md`, `docs/DEVELOPMENT/API_TESTING_STRATEGY.md`, `docs/DEVELOPMENT/TEST_EXECUTION_PLAN.md`
 - **Git 分支策略**: 规格书 6.1 章节
 
 ---
