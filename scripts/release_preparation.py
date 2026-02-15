@@ -248,8 +248,8 @@ def run_api_tests(dry_run=False):
         time.sleep(3)
         print("Dev 服务器已启动")
 
-    # 运行 API 测试
-    cmd = f"PYTHONPATH={dev_dir} python3 -m pytest {dev_dir}/tests/test_api.py -v"
+    # 运行 API 测试 (tests/test_api/)
+    cmd = f"PYTHONPATH={dev_dir} python3 -m pytest {dev_dir}/tests/test_api/ -v"
     success, output = run_command(cmd, "API 测试", cwd=repo_root)
 
     # 停止 dev 服务器
@@ -260,9 +260,9 @@ def run_api_tests(dry_run=False):
     if not success:
         return False
 
-    # 检查测试通过数 (v0.6.0: 17 + 4 = 21 个 API 测试)
-    if "21 passed" in output or "passed" in output:
-        print(GREEN + "✓ API 测试全部通过 (21 tests)" + RESET)
+    # 检查测试通过数 (v0.6.2: 29 个 API 测试)
+    if "29 passed" in output or "passed" in output:
+        print(GREEN + "✓ API 测试全部通过 (29 tests)" + RESET)
         return True
     else:
         print(RED + "✗ API 测试未全部通过" + RESET)
@@ -284,16 +284,16 @@ def run_smoke_tests(dry_run=False):
         import time
         time.sleep(3)
 
-    # 运行冒烟测试
-    cmd = f"cd {dev_dir} && npx playwright test tests/test_smoke.spec.ts --project=firefox --timeout=60000"
+    # 运行冒烟测试 (tests/test_ui/specs/smoke/)
+    cmd = f"cd {dev_dir} && npx playwright test tests/test_ui/specs/smoke/smoke.spec.ts --project=firefox --timeout=60000"
     success, output = run_command(cmd, "冒烟测试", cwd=repo_root)
 
     if not success:
         return False
 
-    # 检查测试通过数 (v0.6.0: 6 + 6 = 12 个冒烟测试)
-    if "12 passed" in output or "passed" in output:
-        print(GREEN + "✓ 冒烟测试全部通过 (12 tests)" + RESET)
+    # 检查测试通过数 (v0.6.2: 10 个冒烟测试)
+    if "10 passed" in output or "passed" in output:
+        print(GREEN + "✓ 冒烟测试全部通过 (10 tests)" + RESET)
         return True
     else:
         print(RED + "✗ 冒烟测试未全部通过" + RESET)
