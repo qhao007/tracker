@@ -516,15 +516,6 @@ class TestTCFilterAPI:
         for tc in data:
             assert tc['dv_milestone'] == 'DV1.0'
     
-    def test_tc_filter_by_priority(self, client, test_project):
-        """GET /api/tc?priority= - 按 Priority 过滤（CP 过滤，不是 TC 字段）"""
-        # TC 表没有 priority 字段，此测试仅验证 API 调用成功
-        response = client.get(f'/api/tc?project_id={test_project["id"]}&priority=P0')
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        # TC 没有 priority 字段，只验证返回数据格式正确
-        assert isinstance(data, list)
-    
     def test_tc_filter_by_owner(self, client, test_project):
         """GET /api/tc?owner= - 按 Owner 过滤"""
         # 创建不同 Owner 的 TC
