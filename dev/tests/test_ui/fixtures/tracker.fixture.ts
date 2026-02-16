@@ -130,11 +130,9 @@ base.afterEach(async ({ page }, testInfo) => {
   await cleanupTestData(page);
 });
 
-// 注册全局 afterAll 钩子
-base.afterAll(async ({ browser }) => {
-  // 关闭浏览器
-  await browser.close();
-});
+// ⚠️ 注意：不要在 afterAll 中关闭 browser！
+// Playwright 会自动管理 browser 的生命周期
+// 多个测试文件共享同一个 browser，关闭会导致后续测试失败
 
 /**
  * 导出 fixtures 以便在其他文件中使用
