@@ -1,7 +1,7 @@
 """
 Tracker API 路由 - v0.3 独立数据库版本
 """
-from flask import Blueprint, request, jsonify, send_from_directory, current_app, g
+from flask import Blueprint, request, jsonify, send_from_directory, send_file, current_app, g
 from datetime import datetime
 import json
 import os
@@ -1535,43 +1535,31 @@ def import_data():
         return jsonify({'error': '项目不存在'}), 404
     
     try:
+        import io as io_module
         # 解码 base64 文件内容
         file_content = base64.b64decode(file_data)
         
         # 根据文件内容判断类型（检查 BOM 或内容）
-        content_str = file_content[:20].decode('utf-8', errors='ignore')
-        
-        # 检查是否为 CSV（以逗号开头或包含常见的 CSV 特征）
-        is_csv = ',' in content_str[:100] or '\n' in content_str
+        # Excel 文件以 PK 开头（ZIP 格式），CSV 文件是纯文本
+        is_csv = not file_content[:2] == b'PK'
         
         if is_csv:
-            # 使用 csv 模块读取
+            # 使用 csv 模块读取（需要文本模式）
             import csv
-            import io as io_module
-            csv_reader = csv.reader(io_module.BytesIO(file_content))
+            # file_content 已经是 base64 解码后的 bytes，转为 string
+            csv_reader = csv.reader(io.StringIO(file_content.decode('utf-8')))
             rows = list(csv_reader)
             if not rows:
                 return jsonify({'error': 'CSV 文件为空'}), 400
             headers = rows[0] if rows else []
-            # 创建一个类似 worksheet 的对象
-            class CSVWorksheet:
-                def __init__(self, rows):
-                    self.rows = rows
-                    self.max_row = len(rows)
-                def __iter__(self):
-                    for row in self.rows:
-                        yield row
-                def cell(self, row, col):
-                    if row <= len(self.rows) and col <= len(self.rows[row-1]):
-                        return type('obj', (object,), {'value': self.rows[row-1][col-1]})()
-                    return type('obj', (object,), {'value': None})()
-            ws = CSVWorksheet(rows[1:]) if len(rows) > 1 else CSVWorksheet([])
-            # 单独保存 headers
+            # 传递整个 rows（包含 header），在 import_cp/import_tc 中处理
+            csv_data = rows
             csv_headers = headers
         else:
             # 使用 openpyxl 读取 Excel
-            wb = Workbook(io_module.BytesIO(file_content))
+            wb = Workbook(io.BytesIO(file_content))
             ws = wb.active
+            csv_data = None
             csv_headers = None
             
         # 获取表头
@@ -1581,14 +1569,14 @@ def import_data():
             headers = [cell.value for cell in ws[1]]
         
         if import_type == 'cp':
-            return import_cp(project, ws, headers, is_csv)
+            return import_cp(project, ws if not is_csv else None, headers, is_csv, csv_data)
         else:
-            return import_tc(project, ws, headers, is_csv)
+            return import_tc(project, ws if not is_csv else None, headers, is_csv, csv_data)
             
     except Exception as e:
         return jsonify({'error': f'导入失败: {str(e)}'}), 400
 
-def import_cp(project, ws, headers, is_csv=False):
+def import_cp(project, ws, headers, is_csv=False, csv_data=None):
     """导入 CP 数据"""
     conn = get_db(project['name'])
     cursor = conn.cursor()
@@ -1597,7 +1585,7 @@ def import_cp(project, ws, headers, is_csv=False):
     header_map = {}
     for idx, header in enumerate(headers):
         if header:
-            header_map[header.strip()] = idx + 1
+            header_map[header.strip()] = idx  # 0-based 索引
     
     # 检查必填字段
     required_fields = ['Feature', 'Cover Point']
@@ -1609,13 +1597,12 @@ def import_cp(project, ws, headers, is_csv=False):
     errors = []
     
     # 根据类型选择读取方式
-    if is_csv:
-        # CSV: ws 是行列表
-        start_row = 1 if headers == ws.rows[0] else 0
-        for row_idx, row in enumerate(ws.rows[start_row:], start=2):
+    if is_csv and csv_data:
+        # CSV: csv_data 是所有行的列表，第一行是 header
+        for row_idx, row in enumerate(csv_data[1:], start=2):  # 跳过 header
             try:
-                feature = row[header_map.get('Feature', 1) - 1] if header_map.get('Feature', 0) <= len(row) else None
-                cover_point = row[header_map.get('Cover Point', 2) - 1] if header_map.get('Cover Point', 0) <= len(row) else None
+                feature = row[header_map.get('Feature', 0)] if header_map.get('Feature', 0) < len(row) else None
+                cover_point = row[header_map.get('Cover Point', 2)] if header_map.get('Cover Point', 0) < len(row) else None
                 
                 if not feature or not cover_point:
                     errors.append(f'第{row_idx}行: 必填字段缺失')
@@ -1628,9 +1615,9 @@ def import_cp(project, ws, headers, is_csv=False):
                     continue
                 
                 # 获取其他字段
-                sub_feature = row[header_map.get('Sub-Feature', 3) - 1] if header_map.get('Sub-Feature', 0) <= len(row) else ''
-                cover_point_details = row[header_map.get('Cover Point Details', 4) - 1] if header_map.get('Cover Point Details', 0) <= len(row) else ''
-                comments = row[header_map.get('Comments', 5) - 1] if header_map.get('Comments', 0) <= len(row) else ''
+                sub_feature = row[header_map.get('Sub-Feature', 1)] if header_map.get('Sub-Feature', 1) < len(row) else ''
+                cover_point_details = row[header_map.get('Cover Point Details', 3)] if header_map.get('Cover Point Details', 3) < len(row) else ''
+                comments = row[header_map.get('Comments', 4)] if header_map.get('Comments', 4) < len(row) else ''
                 
                 cursor.execute('''
                     INSERT INTO cover_point (project_id, feature, sub_feature, cover_point, cover_point_details, comments, priority, created_at)
@@ -1681,7 +1668,7 @@ def import_cp(project, ws, headers, is_csv=False):
         'errors': errors
     })
 
-def import_tc(project, ws, headers, is_csv=False):
+def import_tc(project, ws, headers, is_csv=False, csv_data=None):
     """导入 TC 数据"""
     conn = get_db(project['name'])
     cursor = conn.cursor()
@@ -1690,7 +1677,7 @@ def import_tc(project, ws, headers, is_csv=False):
     header_map = {}
     for idx, header in enumerate(headers):
         if header:
-            header_map[header.strip()] = idx + 1
+            header_map[header.strip()] = idx  # 0-based 索引
     
     # 检查必填字段
     required_fields = ['TestBench', 'Test Name']
@@ -1702,9 +1689,45 @@ def import_tc(project, ws, headers, is_csv=False):
     errors = []
     
     # 根据类型选择读取方式
-    if is_csv:
-        # CSV: ws 是行列表
-        start_row = 1 if headers == ws.rows[0] else 0
+    if is_csv and csv_data:
+        # CSV: csv_data 是所有行的列表，第一行是 header
+        for row_idx, row in enumerate(csv_data[1:], start=2):  # 跳过 header
+            try:
+                testbench = row[header_map.get('TestBench', 0)] if header_map.get('TestBench', 0) < len(row) else None
+                test_name = row[header_map.get('Test Name', 3)] if header_map.get('Test Name', 3) < len(row) else None
+                
+                if not testbench or not test_name:
+                    errors.append(f'第{row_idx}行: 必填字段缺失')
+                    continue
+                
+                # 检查重名
+                cursor.execute('SELECT id FROM test_case WHERE test_name=?', (test_name,))
+                if cursor.fetchone():
+                    errors.append(f'第{row_idx}行: Test Name "{test_name}" 已存在')
+                    continue
+                
+                # 获取其他字段
+                category = row[header_map.get('Category', 1)] if header_map.get('Category', 1) < len(row) else ''
+                owner = row[header_map.get('Owner', 2)] if header_map.get('Owner', 2) < len(row) else ''
+                scenario_details = row[header_map.get('Scenario Details', 4)] if header_map.get('Scenario Details', 4) < len(row) else ''
+                checker_details = row[header_map.get('Checker Details', 5)] if header_map.get('Checker Details', 5) < len(row) else ''
+                coverage_details = row[header_map.get('Coverage Details', 6)] if header_map.get('Coverage Details', 6) < len(row) else ''
+                comments = row[header_map.get('Comments', 7)] if header_map.get('Comments', 7) < len(row) else ''
+                
+                cursor.execute('''
+                    INSERT INTO test_case (
+                        project_id, dv_milestone, testbench, category, owner, test_name,
+                        scenario_details, checker_details, coverage_details, comments,
+                        priority, status, created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?)
+                ''', (project['id'], 'DV1.0', testbench, category, owner, test_name,
+                      scenario_details, checker_details, coverage_details, comments,
+                      'P0', datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+                
+                imported += 1
+            except Exception as e:
+                errors.append(f'第{row_idx}行: {str(e)}')
         for row_idx, row in enumerate(ws.rows[start_row:], start=2):
             try:
                 testbench = row[header_map.get('TestBench', 1) - 1] if header_map.get('TestBench', 0) <= len(row) else None

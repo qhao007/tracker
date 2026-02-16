@@ -75,35 +75,72 @@
 
 ## 发现的问题
 
-### 测试代码问题
-
-| 问题 ID | 类型 | 描述 | 涉及用例 | 修复建议 |
-|---------|------|------|----------|----------|
-| TEST-001 | 测试环境 | browser context 意外关闭导致测试失败 | TC-001 | 增加重试机制或检查 browser 状态 |
-
 ### 问题分析
 
 **TC-001 失败原因**: `browser.newContext: Target page, context or browser has been closed`
 
-这是一个测试环境问题，不是代码功能问题。Browser context 在测试执行过程中意外关闭，可能由于：
-1. 测试执行时间过长
-2. 内存不足
-3. Firefox 进程异常
+### 深入调查
 
-后续测试 (TC-002 ~ TC-011) 均正常执行并通过，证明实际功能没有问题。
+经过分析，发现问题的**根本原因**：
+
+在 `tracker.fixture.ts` 中定义了全局 `afterAll` 钩子：
+
+```typescript
+// 注册全局 afterAll 钩子
+base.afterAll(async ({ browser }) => {
+  // 关闭浏览器
+  await browser.close();
+});
+```
+
+当运行集成测试套件时，Playwright 按顺序执行多个测试文件：
+1. `connections.spec.ts` → 执行完毕后触发 `afterAll` → **关闭 browser**
+2. `cp.spec.ts` → 继续执行
+3. `tc.spec.ts` → **browser 已关闭** → TC-001 失败
+
+这就是为什么：
+- ✅ 单独跑 TC-001 能 pass（browser 还没被关闭）
+- ❌ 和别的测试集放在一起跑就会 fail（browser 被前面的测试文件关闭了）
+
+### 修复方案
+
+移除 `afterAll` 中的手动 `browser.close()`，让 Playwright 自动管理浏览器生命周期：
+
+```typescript
+// ⚠️ 注意：不要在 afterAll 中关闭 browser！
+// Playwright 会自动管理 browser 的生命周期
+// 多个测试文件共享同一个 browser，关闭会导致后续测试失败
+```
+
+### 修复后验证
+
+修复后重新运行集成测试，结果：
+
+```
+24 passed, 1 skipped, 0 failed
+```
+
+所有测试（包括 TC-001）现在都能正常运行。
+
+### 测试代码问题（更新后）
+
+| 问题 ID | 类型 | 描述 | 涉及用例 | 状态 |
+|---------|------|------|----------|------|
+| TEST-001 | 测试环境 | browser context 意外关闭导致测试失败 | TC-001 | ✅ 已修复 |
 
 ## 结论
 
 - **API 测试**: ✅ 100% 通过
-- **集成测试**: ⚠️ 92% 通过 (1 failed, 1 skipped)
-- **代码功能**: ✅ 正常（TC-001 失败为测试环境问题）
+- **集成测试**: ✅ 修复后 100% 通过 (24 passed, 1 skipped)
+- **代码功能**: ✅ 正常
 
 ## 后续建议
 
-1. 调查 TC-001 失败原因（测试环境问题）
-2. 考虑添加测试重试机制
-3. 功能代码无需修改
+1. ✅ TC-001 问题已修复
+2. ✅ 移除不必要的 browser.close() 调用
+3. 考虑添加测试重试机制（可选）
 
 ---
 
-**报告生成时间**: 2026-02-16 09:15 UTC
+**报告生成时间**: 2026-02-16 09:15 UTC  
+**修复完成时间**: 2026-02-16 09:38 UTC
