@@ -1467,7 +1467,7 @@ def get_stats():
 
 import base64
 import io
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment
 
 @api.route('/api/import/template', methods=['GET'])
@@ -1556,11 +1556,20 @@ def import_data():
             csv_data = rows
             csv_headers = headers
         else:
-            # 使用 openpyxl 读取 Excel
-            wb = Workbook(io.BytesIO(file_content))
-            ws = wb.active
-            csv_data = None
-            csv_headers = None
+            # 使用 openpyxl 读取 Excel (使用临时文件方式解决 BytesIO 问题)
+            import tempfile
+            import os
+            with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
+                tmp.write(file_content)
+                tmp_path = tmp.name
+            
+            try:
+                wb = load_workbook(tmp_path)
+                ws = wb.active
+                csv_data = None
+                csv_headers = None
+            finally:
+                os.unlink(tmp_path)  # 清理临时文件
             
         # 获取表头
         if csv_headers is not None:
@@ -1628,11 +1637,11 @@ def import_cp(project, ws, headers, is_csv=False, csv_data=None):
             except Exception as e:
                 errors.append(f'第{row_idx}行: {str(e)}')
     else:
-        # Excel: 使用 ws.cell()
+        # Excel: 使用 ws.cell() (1-based 索引)
         for row_idx in range(2, ws.max_row + 1):
             try:
-                feature = ws.cell(row_idx, header_map.get('Feature', 0)).value
-                cover_point = ws.cell(row_idx, header_map.get('Cover Point', 0)).value
+                feature = ws.cell(row_idx, header_map.get('Feature', 0) + 1).value
+                cover_point = ws.cell(row_idx, header_map.get('Cover Point', 0) + 1).value
                 
                 if not feature or not cover_point:
                     errors.append(f'第{row_idx}行: 必填字段缺失')
@@ -1645,9 +1654,9 @@ def import_cp(project, ws, headers, is_csv=False, csv_data=None):
                     continue
                 
                 # 获取其他字段
-                sub_feature = ws.cell(row_idx, header_map.get('Sub-Feature', 0)).value or ''
-                cover_point_details = ws.cell(row_idx, header_map.get('Cover Point Details', 0)).value or ''
-                comments = ws.cell(row_idx, header_map.get('Comments', 0)).value or ''
+                sub_feature = ws.cell(row_idx, header_map.get('Sub-Feature', 0) + 1).value or ''
+                cover_point_details = ws.cell(row_idx, header_map.get('Cover Point Details', 0) + 1).value or ''
+                comments = ws.cell(row_idx, header_map.get('Comments', 0) + 1).value or ''
                 
                 cursor.execute('''
                     INSERT INTO cover_point (project_id, feature, sub_feature, cover_point, cover_point_details, comments, priority, created_at)
@@ -1728,49 +1737,12 @@ def import_tc(project, ws, headers, is_csv=False, csv_data=None):
                 imported += 1
             except Exception as e:
                 errors.append(f'第{row_idx}行: {str(e)}')
-        for row_idx, row in enumerate(ws.rows[start_row:], start=2):
-            try:
-                testbench = row[header_map.get('TestBench', 1) - 1] if header_map.get('TestBench', 0) <= len(row) else None
-                test_name = row[header_map.get('Test Name', 4) - 1] if header_map.get('Test Name', 0) <= len(row) else None
-                
-                if not testbench or not test_name:
-                    errors.append(f'第{row_idx}行: 必填字段缺失')
-                    continue
-                
-                # 检查重名
-                cursor.execute('SELECT id FROM test_case WHERE test_name=?', (test_name,))
-                if cursor.fetchone():
-                    errors.append(f'第{row_idx}行: Test Name "{test_name}" 已存在')
-                    continue
-                
-                # 获取其他字段
-                category = row[header_map.get('Category', 2) - 1] if header_map.get('Category', 0) <= len(row) else ''
-                owner = row[header_map.get('Owner', 3) - 1] if header_map.get('Owner', 0) <= len(row) else ''
-                scenario_details = row[header_map.get('Scenario Details', 5) - 1] if header_map.get('Scenario Details', 0) <= len(row) else ''
-                checker_details = row[header_map.get('Checker Details', 6) - 1] if header_map.get('Checker Details', 0) <= len(row) else ''
-                coverage_details = row[header_map.get('Coverage Details', 7) - 1] if header_map.get('Coverage Details', 0) <= len(row) else ''
-                comments = row[header_map.get('Comments', 8) - 1] if header_map.get('Comments', 0) <= len(row) else ''
-                
-                cursor.execute('''
-                    INSERT INTO test_case (
-                        project_id, dv_milestone, testbench, category, owner, test_name,
-                        scenario_details, checker_details, coverage_details, comments,
-                        priority, status, created_at
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?)
-                ''', (project['id'], 'DV1.0', testbench, category, owner, test_name,
-                      scenario_details, checker_details, coverage_details, comments,
-                      'P0', datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-                
-                imported += 1
-            except Exception as e:
-                errors.append(f'第{row_idx}行: {str(e)}')
     else:
-        # Excel: 使用 ws.cell()
+        # Excel: 使用 ws.cell() (1-based 索引)
         for row_idx in range(2, ws.max_row + 1):
             try:
-                testbench = ws.cell(row_idx, header_map.get('TestBench', 0)).value
-                test_name = ws.cell(row_idx, header_map.get('Test Name', 0)).value
+                testbench = ws.cell(row_idx, header_map.get('TestBench', 0) + 1).value
+                test_name = ws.cell(row_idx, header_map.get('Test Name', 0) + 1).value
                 
                 if not testbench or not test_name:
                     errors.append(f'第{row_idx}行: 必填字段缺失')
@@ -1783,12 +1755,12 @@ def import_tc(project, ws, headers, is_csv=False, csv_data=None):
                     continue
                 
                 # 获取其他字段
-                category = ws.cell(row_idx, header_map.get('Category', 0)).value or ''
-                owner = ws.cell(row_idx, header_map.get('Owner', 0)).value or ''
-                scenario_details = ws.cell(row_idx, header_map.get('Scenario Details', 0)).value or ''
-                checker_details = ws.cell(row_idx, header_map.get('Checker Details', 0)).value or ''
-                coverage_details = ws.cell(row_idx, header_map.get('Coverage Details', 0)).value or ''
-                comments = ws.cell(row_idx, header_map.get('Comments', 0)).value or ''
+                category = ws.cell(row_idx, header_map.get('Category', 0) + 1).value or ''
+                owner = ws.cell(row_idx, header_map.get('Owner', 0) + 1).value or ''
+                scenario_details = ws.cell(row_idx, header_map.get('Scenario Details', 0) + 1).value or ''
+                checker_details = ws.cell(row_idx, header_map.get('Checker Details', 0) + 1).value or ''
+                coverage_details = ws.cell(row_idx, header_map.get('Coverage Details', 0) + 1).value or ''
+                comments = ws.cell(row_idx, header_map.get('Comments', 0) + 1).value or ''
                 
                 cursor.execute('''
                     INSERT INTO test_case (

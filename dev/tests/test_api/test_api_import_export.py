@@ -155,9 +155,12 @@ class TestImportAPI:
             'file_data': file_content
         })
         
-        assert response.status_code == 400
+        # 验证失败返回 200 但 errors 有内容
+        assert response.status_code == 200
         data = response.get_json()
-        assert 'error' in data
+        assert data['success'] is True
+        assert data['failed'] == 1
+        assert len(data['errors']) > 0
     
     def test_import_tc_missing_required_field(self, client, test_project):
         """测试导入 TC 缺少必填字段"""
@@ -178,9 +181,12 @@ class TestImportAPI:
             'file_data': file_content
         })
         
-        assert response.status_code == 400
+        # 验证失败返回 200 但 errors 有内容
+        assert response.status_code == 200
         data = response.get_json()
-        assert 'error' in data
+        assert data['success'] is True
+        assert data['failed'] == 1
+        assert len(data['errors']) > 0
     
     def test_import_cp_duplicate(self, client, test_project):
         """测试导入重复的 CP"""
