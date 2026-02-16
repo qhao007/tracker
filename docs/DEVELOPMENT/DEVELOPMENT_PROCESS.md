@@ -41,7 +41,7 @@
 
 ### 2.1 分支结构
 
-```
+
 main (稳定代码，对应 /release/tracker/current)
 │
 ├── develop (开发主分支，存放 dev/ 代码)
@@ -50,7 +50,7 @@ main (稳定代码，对应 /release/tracker/current)
 │   └── hotfix/* (紧急修复分支)
 │
 └── tags (在 main 分支上创建)
-```
+
 
 ### 2.2 分支说明
 
@@ -82,7 +82,7 @@ git tag -a v0.4.0 -m "Release v0.4.0"
 
 # 查看提交历史
 git log --oneline --graph --all
-```
+
 
 ---
 
@@ -98,7 +98,8 @@ git log --oneline --graph --all
 
 ### 3.2 需求提交流程
 
-```
+
+
 ┌─────────────────────────────────────────────────────────────────┐
 │                        需求提交流程                               │
 ├─────────────────────────────────────────────────────────────────┤
@@ -110,40 +111,123 @@ git log --oneline --graph --all
 │     └── 小栗子细化 → 评估工作量 → 确定优先级                    │
 │                                                                  │
 │  3️⃣ 需求确认                                                    │
-│     └── 生成正式文档 → 用户确认 → 进入开发                      │
+│     └── 生成正式文档 → 用户确认                                 │
 │                                                                  │
-│  4️⃣ 开发实现                                                    │
+│  4️⃣ 创建版本规格书                                              │
+│     └── 基于需求文档 → 定义功能规格 → 验收标准                  │
+│                                                                  │
+│  5️⃣ 创建测试计划                                                │
+│     └── 基于规格书 → 定义测试用例 → 任务分解                    │
+│                                                                  │
+│  6️⃣ 开发实现                                                    │
 │     └── Git 分支 → 编码 → 测试 → 提交                          │
 │                                                                  │
-│  5️⃣ 发布上线                                                    │
+│  7️⃣ 发布上线                                                    │
 │     └── 执行 release.py → 切换版本 → 重启服务                   │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
-```
 
-### 3.3 需求模板
 
-#### 3.3.1 单个详细需求
+
+
+### 3.3 版本规格书与测试计划创建流程
+
+> **重要**：每次需求确认后，必须先创建版本规格书，然后基于规格书创建测试计划，才能进入开发阶段。
+
+#### 3.3.1 版本规格书创建
+
+**触发条件**：需求确认后（3️⃣ 步骤完成）
+
+**创建步骤**：
+1. 复制规格书模板
+2. 基于已确认的需求文档填写功能规格
+3. 定义验收标准
+4. 保存到 `docs/SPECIFICATIONS/tracker_SPECS_vX.X.X.md`
+
+**模板位置**：`docs/TEMPLATES/TEMPLATE_VERSION_SPECIFICATION.md`
+
+**示例**：
+```bash
+# 复制规格书模板
+cp docs/TEMPLATES/TEMPLATE_VERSION_SPECIFICATION.md \
+   docs/SPECIFICATIONS/tracker_SPECS_v0.7.0.md
+
+
+#### 3.3.2 测试计划创建
+
+**触发条件**：版本规格书创建完成后（4️⃣ 步骤完成）
+
+**创建步骤**：
+1. 复制测试计划模板
+2. 基于版本规格书定义测试用例
+3. 分解测试开发任务
+4. 保存到 `docs/PLANS/TRACKER_TEST_PLAN_vX.X.X.md`
+
+**模板位置**：`docs/TEMPLATES/TEMPLATE_TEST_PLAN.md`
+
+**示例**：
+```bash
+# 复制测试计划模板
+cp docs/TEMPLATES/TEMPLATE_TEST_PLAN.md \
+   docs/PLANS/TRACKER_TEST_PLAN_v0.7.0.md
+
+
+#### 3.3.3 文档目录规范
+
+| 文档类型 | 目录 | 示例 |
+|----------|------|------|
+| 版本规格书 | `docs/SPECIFICATIONS/` | `tracker_SPECS_v0.7.0.md` |
+| 测试计划 | `docs/PLANS/` | `TRACKER_TEST_PLAN_v0.7.0.md` |
+| 测试报告 | `docs/REPORTS/` | `TRACKER_TEST_REPORT_v0.7.0_20260216.md` |
+
+#### 3.3.4 版本规格书内容要求
+
+版本规格书必须包含以下内容：
+
+| 章节 | 说明 |
+|------|------|
+| 需求清单 | 列出本版本所有功能需求 |
+| 功能详情 | 每个功能的详细描述 |
+| API 接口 | API 设计（如有） |
+| 验收标准 | 功能完成的判定条件 |
+
+#### 3.3.5 测试计划内容要求
+
+测试计划必须包含以下内容：
+
+| 章节 | 说明 |
+|------|------|
+| 版本概述 | 对应规格书、目标功能 |
+| API 测试计划 | 基于规格书的 API 测试用例 |
+| UI 测试计划 | 基于规格书的 UI 测试用例 |
+| 任务分解 | 测试开发任务分配 |
+| 验收标准 | 测试完成的判定条件 |
+
+
+### 3.4 需求模板
+
+
+#### 3.4.1 单个详细需求
 
 ```bash
 # 使用模板
 cp /projects/management/feedbacks/new/TEMPLATE_FEATURE_REQUEST.md \
    /projects/management/feedbacks/new/功能名称_YYYYMMDD.md
-```
+
 
 **模板位置**: `/projects/management/feedbacks/new/TEMPLATE_FEATURE_REQUEST.md`
 
-#### 3.3.2 批量简单需求
+#### 3.4.2 批量简单需求
 
 ```bash
 # 使用批量模板
 cp /projects/management/feedbacks/new/BATCH_REQUESTS_TEMPLATE.md \
    /projects/management/feedbacks/new/REQUESTS_YYYYMMDD.md
-```
+
 
 **模板位置**: `/projects/management/feedbacks/new/BATCH_REQUESTS_TEMPLATE.md`
 
-### 3.4 需求处理流程
+### 3.5 需求处理流程
 
 ```mermaid
 graph TD
@@ -157,9 +241,9 @@ graph TD
     G --> H[生成正式 Feature Request]
     H --> I[用户确认]
     I --> J[进入开发]
-```
 
-### 3.5 需求存放位置
+
+### 3.6 需求存放位置
 
 | 类型 | 目录 |
 |------|------|
@@ -206,7 +290,7 @@ git merge feature/功能名称 --no-ff -m "merge: 合并功能名称"
 
 # 8. 推送
 git push origin develop
-```
+
 
 **⚠️ 重要**: 
 - 步骤 4（开发测试）是必需的，所有测试必须通过后才能执行步骤 5（提交代码）。
@@ -225,13 +309,13 @@ git push origin develop
 
 #### 4.3.1 提交信息规范
 
-```
+
 <type>: <subject>
 
 <body>
 
 <footer>
-```
+
 
 **Type 类型**:
 
@@ -265,10 +349,10 @@ git push origin develop
 # 在项目根目录执行
 cd /projects/management/tracker/dev
 bash check_frontent.sh
-```
+
 
 **检查输出示例**:
-```
+
 === Tracker 前端代码检查 ===
 
 1. ESLint 检查...
@@ -284,13 +368,13 @@ bash check_frontent.sh
    ✅ API 端点定义完整
 
 === 检查通过 ✅ ===
-```
+
 
 **CI 集成**: 在 `.github/workflows/` 或等价 CI 系统中添加步骤：
 ```yaml
 - name: Frontend Code Check
   run: cd dev && bash check_frontent.sh
-```
+
 
 **失败处理**: ESLint 检查失败时，禁止合并代码，必须修复后才能提交。
 
@@ -346,7 +430,7 @@ python3 scripts/compatibility_test.py check
 python3 scripts/compatibility_test.py test
 # 清理测试数据
 python3 scripts/compatibility_test.py clean
-```
+
 
 ### 5.3 Bug 处理流程
 
@@ -371,7 +455,7 @@ python3 scripts/compatibility_test.py clean
 4. 发布到: `ARCHIVE/REPORTS/TRACKER_TEST_REPORT_v{version}_{YYYYMMDD}.md`
 
 **报告模板结构**:
-```
+
 ## 测试摘要
 | 测试类型 | 总数 | 通过 | 失败 | 通过率 |
 
@@ -386,7 +470,7 @@ python3 scripts/compatibility_test.py clean
 
 ## 兼容性测试结果
 ...
-```
+
 
 **发布命令**:
 ```bash
@@ -399,7 +483,7 @@ cp TEMPLATES/TEST_REPORT.md \
 # 3. 提交测试报告
 git add ARCHIVE/REPORTS/TRACKER_TEST_REPORT_*.md
 git commit -m "docs: 添加 v0.6.0 测试报告"
-```
+
 
 ### 5.5 测试数据
 
@@ -424,7 +508,7 @@ A: 补充测试数据：
 ```bash
 # 创建测试项目
 python3 scripts/data_manager.py create
-```
+
 
 **Q: 如何测试用户数据兼容性？**
 
@@ -434,7 +518,7 @@ cd /projects/management/tracker
 python3 scripts/data_manager.py sync  # 复制用户数据
 # 在 http://localhost:8081 测试
 python3 scripts/data_manager.py clean # 清理
-```
+
 
 ---
 
@@ -443,7 +527,7 @@ python3 scripts/data_manager.py clean # 清理
 > **重要**: 只有发布准备脚本成功完成后，才可以执行发布脚本。
 
 **发布流程**:
-```
+
 1. 执行发布准备脚本
    ├── API 测试
    ├── 冒烟测试
@@ -453,7 +537,7 @@ python3 scripts/data_manager.py clean # 清理
    └── Merge 和 Tag ← 自动
 
 2. 执行发布脚本
-```
+
 
 ### 6.1 执行发布准备脚本
 
@@ -465,7 +549,7 @@ python3 scripts/release_preparation.py --dry-run --version v0.6.0
 
 # 执行完整发布准备
 python3 scripts/release_preparation.py --version v0.6.0
-```
+
 
 **发布准备脚本执行内容**:
 | 步骤 | 内容 | 失败处理 |
@@ -499,7 +583,7 @@ python3 scripts/release.py --dry-run
 
 # 实际发布
 python3 scripts/release.py --version v0.5.0 --force
-```
+
 
 ### 6.3 发布后验证
 
@@ -509,7 +593,7 @@ sudo systemctl status tracker
 
 # 验证 API
 curl http://localhost:8080/api/version
-```
+
 
 ### 6.4 回滚
 
@@ -522,7 +606,7 @@ python3 scripts/release.py --rollback --force
 sudo rm /release/tracker/current
 sudo ln -s /release/tracker/v0.3.x /release/tracker/current
 sudo systemctl restart tracker
-```
+
 
 ---
 
@@ -540,7 +624,7 @@ sudo systemctl restart tracker
 
 ### 7.2 文档存放位置
 
-```
+
 /projects/management/tracker/docs/
 ├── DEVELOPMENT/           # 开发相关文档
 │   ├── DEVELOPMENT_PROCESS.md
@@ -552,7 +636,7 @@ sudo systemctl restart tracker
 │
 └── user/                  # 用户文档
     └── user_manual.md
-```
+
 
 ### 7.3 版本历史
 
@@ -579,7 +663,7 @@ git push origin develop
 # 标签操作
 git tag -a v0.4.0 -m "Release v0.4.0"
 git push origin main --tags
-```
+
 
 ### 发布命令速查
 
@@ -592,7 +676,7 @@ python3 scripts/release.py --version v0.4.0 --force
 
 # 回滚
 python3 scripts/release.py --rollback --force
-```
+
 
 ### 服务管理
 
@@ -605,7 +689,7 @@ sudo systemctl status tracker
 
 # 查看日志
 journalctl -u tracker -f
-```
+
 
 ---
 
