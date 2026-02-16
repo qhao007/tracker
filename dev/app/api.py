@@ -1463,6 +1463,442 @@ def get_stats():
         'coverage': f'{coverage}%'
     })
 
+# ============ 导入导出功能 ============
+
+import base64
+import io
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment
+
+@api.route('/api/import/template', methods=['GET'])
+def get_import_template():
+    """下载导入模板"""
+    template_type = request.args.get('type', 'cp')
+    
+    wb = Workbook()
+    ws = wb.active
+    
+    if template_type == 'cp':
+        # CP 模板
+        headers = ['Feature', 'Sub-Feature', 'Cover Point', 'Cover Point Details', 'Comments']
+        ws.append(headers)
+    else:
+        # TC 模板
+        headers = ['TestBench', 'Category', 'Owner', 'Test Name', 'Scenario Details', 'Checker Details', 'Coverage Details', 'Comments']
+        ws.append(headers)
+    
+    # 设置表头样式
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(horizontal='center')
+    
+    # 设置列宽
+    for col in ws.columns:
+        max_length = 0
+        column = col[0].column_letter
+        for cell in col:
+            if cell.value:
+                max_length = max(max_length, len(str(cell.value)))
+        ws.column_dimensions[column].width = max_length + 2
+    
+    # 保存到内存
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    filename = f"{template_type.upper()}_import_template.xlsx"
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=filename,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
+@api.route('/api/import', methods=['POST'])
+def import_data():
+    """执行导入"""
+    data = request.json
+    project_id = data.get('project_id')
+    import_type = data.get('type')  # 'cp' or 'tc'
+    file_data = data.get('file_data')  # base64 encoded
+    
+    if not project_id or not import_type or not file_data:
+        return jsonify({'error': '缺少必要参数'}), 400
+    
+    if import_type not in ['cp', 'tc']:
+        return jsonify({'error': '无效的导入类型'}), 400
+    
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    try:
+        # 解码 base64 文件内容
+        file_content = base64.b64decode(file_data)
+        
+        # 根据文件内容判断类型（检查 BOM 或内容）
+        content_str = file_content[:20].decode('utf-8', errors='ignore')
+        
+        # 检查是否为 CSV（以逗号开头或包含常见的 CSV 特征）
+        is_csv = ',' in content_str[:100] or '\n' in content_str
+        
+        if is_csv:
+            # 使用 csv 模块读取
+            import csv
+            import io as io_module
+            csv_reader = csv.reader(io_module.BytesIO(file_content))
+            rows = list(csv_reader)
+            if not rows:
+                return jsonify({'error': 'CSV 文件为空'}), 400
+            headers = rows[0] if rows else []
+            # 创建一个类似 worksheet 的对象
+            class CSVWorksheet:
+                def __init__(self, rows):
+                    self.rows = rows
+                    self.max_row = len(rows)
+                def __iter__(self):
+                    for row in self.rows:
+                        yield row
+                def cell(self, row, col):
+                    if row <= len(self.rows) and col <= len(self.rows[row-1]):
+                        return type('obj', (object,), {'value': self.rows[row-1][col-1]})()
+                    return type('obj', (object,), {'value': None})()
+            ws = CSVWorksheet(rows[1:]) if len(rows) > 1 else CSVWorksheet([])
+            # 单独保存 headers
+            csv_headers = headers
+        else:
+            # 使用 openpyxl 读取 Excel
+            wb = Workbook(io_module.BytesIO(file_content))
+            ws = wb.active
+            csv_headers = None
+            
+        # 获取表头
+        if csv_headers is not None:
+            headers = csv_headers
+        else:
+            headers = [cell.value for cell in ws[1]]
+        
+        if import_type == 'cp':
+            return import_cp(project, ws, headers, is_csv)
+        else:
+            return import_tc(project, ws, headers, is_csv)
+            
+    except Exception as e:
+        return jsonify({'error': f'导入失败: {str(e)}'}), 400
+
+def import_cp(project, ws, headers, is_csv=False):
+    """导入 CP 数据"""
+    conn = get_db(project['name'])
+    cursor = conn.cursor()
+    
+    # 解析表头
+    header_map = {}
+    for idx, header in enumerate(headers):
+        if header:
+            header_map[header.strip()] = idx + 1
+    
+    # 检查必填字段
+    required_fields = ['Feature', 'Cover Point']
+    for field in required_fields:
+        if field not in header_map:
+            return jsonify({'error': f'缺少必填字段: {field}'}), 400
+    
+    imported = 0
+    errors = []
+    
+    # 根据类型选择读取方式
+    if is_csv:
+        # CSV: ws 是行列表
+        start_row = 1 if headers == ws.rows[0] else 0
+        for row_idx, row in enumerate(ws.rows[start_row:], start=2):
+            try:
+                feature = row[header_map.get('Feature', 1) - 1] if header_map.get('Feature', 0) <= len(row) else None
+                cover_point = row[header_map.get('Cover Point', 2) - 1] if header_map.get('Cover Point', 0) <= len(row) else None
+                
+                if not feature or not cover_point:
+                    errors.append(f'第{row_idx}行: 必填字段缺失')
+                    continue
+                
+                # 检查重名
+                cursor.execute('SELECT id FROM cover_point WHERE cover_point=?', (cover_point,))
+                if cursor.fetchone():
+                    errors.append(f'第{row_idx}行: Cover Point "{cover_point}" 已存在')
+                    continue
+                
+                # 获取其他字段
+                sub_feature = row[header_map.get('Sub-Feature', 3) - 1] if header_map.get('Sub-Feature', 0) <= len(row) else ''
+                cover_point_details = row[header_map.get('Cover Point Details', 4) - 1] if header_map.get('Cover Point Details', 0) <= len(row) else ''
+                comments = row[header_map.get('Comments', 5) - 1] if header_map.get('Comments', 0) <= len(row) else ''
+                
+                cursor.execute('''
+                    INSERT INTO cover_point (project_id, feature, sub_feature, cover_point, cover_point_details, comments, priority, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (project['id'], feature, sub_feature, cover_point, cover_point_details, comments, 'P0', datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+                
+                imported += 1
+            except Exception as e:
+                errors.append(f'第{row_idx}行: {str(e)}')
+    else:
+        # Excel: 使用 ws.cell()
+        for row_idx in range(2, ws.max_row + 1):
+            try:
+                feature = ws.cell(row_idx, header_map.get('Feature', 0)).value
+                cover_point = ws.cell(row_idx, header_map.get('Cover Point', 0)).value
+                
+                if not feature or not cover_point:
+                    errors.append(f'第{row_idx}行: 必填字段缺失')
+                    continue
+                
+                # 检查重名
+                cursor.execute('SELECT id FROM cover_point WHERE cover_point=?', (cover_point,))
+                if cursor.fetchone():
+                    errors.append(f'第{row_idx}行: Cover Point "{cover_point}" 已存在')
+                    continue
+                
+                # 获取其他字段
+                sub_feature = ws.cell(row_idx, header_map.get('Sub-Feature', 0)).value or ''
+                cover_point_details = ws.cell(row_idx, header_map.get('Cover Point Details', 0)).value or ''
+                comments = ws.cell(row_idx, header_map.get('Comments', 0)).value or ''
+                
+                cursor.execute('''
+                    INSERT INTO cover_point (project_id, feature, sub_feature, cover_point, cover_point_details, comments, priority, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (project['id'], feature, sub_feature, cover_point, cover_point_details, comments, 'P0', datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+                
+                imported += 1
+            except Exception as e:
+                errors.append(f'第{row_idx}行: {str(e)}')
+    
+    if imported > 0:
+        conn.commit()
+    
+    return jsonify({
+        'success': True,
+        'imported': imported,
+        'failed': len(errors),
+        'errors': errors
+    })
+
+def import_tc(project, ws, headers, is_csv=False):
+    """导入 TC 数据"""
+    conn = get_db(project['name'])
+    cursor = conn.cursor()
+    
+    # 解析表头
+    header_map = {}
+    for idx, header in enumerate(headers):
+        if header:
+            header_map[header.strip()] = idx + 1
+    
+    # 检查必填字段
+    required_fields = ['TestBench', 'Test Name']
+    for field in required_fields:
+        if field not in header_map:
+            return jsonify({'error': f'缺少必填字段: {field}'}), 400
+    
+    imported = 0
+    errors = []
+    
+    # 根据类型选择读取方式
+    if is_csv:
+        # CSV: ws 是行列表
+        start_row = 1 if headers == ws.rows[0] else 0
+        for row_idx, row in enumerate(ws.rows[start_row:], start=2):
+            try:
+                testbench = row[header_map.get('TestBench', 1) - 1] if header_map.get('TestBench', 0) <= len(row) else None
+                test_name = row[header_map.get('Test Name', 4) - 1] if header_map.get('Test Name', 0) <= len(row) else None
+                
+                if not testbench or not test_name:
+                    errors.append(f'第{row_idx}行: 必填字段缺失')
+                    continue
+                
+                # 检查重名
+                cursor.execute('SELECT id FROM test_case WHERE test_name=?', (test_name,))
+                if cursor.fetchone():
+                    errors.append(f'第{row_idx}行: Test Name "{test_name}" 已存在')
+                    continue
+                
+                # 获取其他字段
+                category = row[header_map.get('Category', 2) - 1] if header_map.get('Category', 0) <= len(row) else ''
+                owner = row[header_map.get('Owner', 3) - 1] if header_map.get('Owner', 0) <= len(row) else ''
+                scenario_details = row[header_map.get('Scenario Details', 5) - 1] if header_map.get('Scenario Details', 0) <= len(row) else ''
+                checker_details = row[header_map.get('Checker Details', 6) - 1] if header_map.get('Checker Details', 0) <= len(row) else ''
+                coverage_details = row[header_map.get('Coverage Details', 7) - 1] if header_map.get('Coverage Details', 0) <= len(row) else ''
+                comments = row[header_map.get('Comments', 8) - 1] if header_map.get('Comments', 0) <= len(row) else ''
+                
+                cursor.execute('''
+                    INSERT INTO test_case (
+                        project_id, dv_milestone, testbench, category, owner, test_name,
+                        scenario_details, checker_details, coverage_details, comments,
+                        priority, status, created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?)
+                ''', (project['id'], 'DV1.0', testbench, category, owner, test_name,
+                      scenario_details, checker_details, coverage_details, comments,
+                      'P0', datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+                
+                imported += 1
+            except Exception as e:
+                errors.append(f'第{row_idx}行: {str(e)}')
+    else:
+        # Excel: 使用 ws.cell()
+        for row_idx in range(2, ws.max_row + 1):
+            try:
+                testbench = ws.cell(row_idx, header_map.get('TestBench', 0)).value
+                test_name = ws.cell(row_idx, header_map.get('Test Name', 0)).value
+                
+                if not testbench or not test_name:
+                    errors.append(f'第{row_idx}行: 必填字段缺失')
+                    continue
+                
+                # 检查重名
+                cursor.execute('SELECT id FROM test_case WHERE test_name=?', (test_name,))
+                if cursor.fetchone():
+                    errors.append(f'第{row_idx}行: Test Name "{test_name}" 已存在')
+                    continue
+                
+                # 获取其他字段
+                category = ws.cell(row_idx, header_map.get('Category', 0)).value or ''
+                owner = ws.cell(row_idx, header_map.get('Owner', 0)).value or ''
+                scenario_details = ws.cell(row_idx, header_map.get('Scenario Details', 0)).value or ''
+                checker_details = ws.cell(row_idx, header_map.get('Checker Details', 0)).value or ''
+                coverage_details = ws.cell(row_idx, header_map.get('Coverage Details', 0)).value or ''
+                comments = ws.cell(row_idx, header_map.get('Comments', 0)).value or ''
+                
+                cursor.execute('''
+                    INSERT INTO test_case (
+                        project_id, dv_milestone, testbench, category, owner, test_name,
+                        scenario_details, checker_details, coverage_details, comments,
+                        priority, status, created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?)
+                ''', (project['id'], 'DV1.0', testbench, category, owner, test_name,
+                      scenario_details, checker_details, coverage_details, comments,
+                      'P0', datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+                
+                imported += 1
+            except Exception as e:
+                errors.append(f'第{row_idx}行: {str(e)}')
+    
+    if imported > 0:
+        conn.commit()
+    
+    return jsonify({
+        'success': True,
+        'imported': imported,
+        'failed': len(errors),
+        'errors': errors
+    })
+
+@api.route('/api/export', methods=['GET'])
+def export_data():
+    """导出数据"""
+    project_id = request.args.get('project_id', type=int)
+    export_type = request.args.get('type')  # 'cp' or 'tc'
+    export_format = request.args.get('format', 'xlsx')  # 'xlsx' or 'csv'
+    
+    if not project_id or not export_type:
+        return jsonify({'error': '缺少必要参数'}), 400
+    
+    if export_type not in ['cp', 'tc']:
+        return jsonify({'error': '无效的导出类型'}), 400
+    
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    
+    if not project:
+        return jsonify({'error': '项目不存在'}), 404
+    
+    conn = get_db(project['name'])
+    cursor = conn.cursor()
+    
+    if export_type == 'cp':
+        cursor.execute('SELECT * FROM cover_point ORDER BY id')
+        rows = cursor.fetchall()
+        
+        # CP 导出字段
+        export_headers = ['Feature', 'Sub-Feature', 'Cover Point', 'Cover Point Details', 'Priority', 'Comments', 'Created At']
+        export_fields = ['feature', 'sub_feature', 'cover_point', 'cover_point_details', 'priority', 'comments', 'created_at']
+    else:
+        cursor.execute('SELECT * FROM test_case ORDER BY id')
+        rows = cursor.fetchall()
+        
+        # TC 导出字段
+        export_headers = ['ID', 'DV Milestone', 'TestBench', 'Category', 'Owner', 'Test Name', 'Scenario Details', 'Checker Details', 'Coverage Details', 'Status', 'Comments', 'Created At', 'Coded Date', 'Fail Date', 'Pass Date', 'Removed Date', 'Target Date']
+        export_fields = ['id', 'dv_milestone', 'testbench', 'category', 'owner', 'test_name', 'scenario_details', 'checker_details', 'coverage_details', 'status', 'comments', 'created_at', 'coded_date', 'fail_date', 'pass_date', 'removed_date', 'target_date']
+    
+    if export_format == 'xlsx':
+        # 导出为 Excel
+        wb = Workbook()
+        ws = wb.active
+        
+        # 写入表头
+        ws.append(export_headers)
+        
+        # 设置表头样式
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+            cell.alignment = Alignment(horizontal='center')
+        
+        # 写入数据
+        for row in rows:
+            row_data = []
+            for field in export_fields:
+                row_data.append(row[field] or '')
+            ws.append(row_data)
+        
+        # 设置列宽
+        for col in ws.columns:
+            max_length = 0
+            column = col[0].column_letter
+            for cell in col:
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
+            ws.column_dimensions[column].width = min(max_length + 2, 50)
+        
+        # 保存到内存
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        filename = f"{project['name']}_{export_type.upper()}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+    else:
+        # 导出为 CSV
+        import csv
+        
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # 写入表头
+        writer.writerow(export_headers)
+        
+        # 写入数据
+        for row in rows:
+            row_data = []
+            for field in export_fields:
+                row_data.append(str(row[field] or ''))
+            writer.writerow(row_data)
+        
+        output.seek(0)
+        
+        filename = f"{project['name']}_{export_type.upper()}_{datetime.now().strftime('%Y%m%d')}.csv"
+        
+        # 返回 CSV
+        from flask import Response
+        return Response(
+            output.getvalue(),
+            mimetype='text/csv;charset=utf-8',
+            headers={'Content-Disposition': f'attachment; filename={filename}'}
+        )
+
 # ============ 静态文件 ============
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
