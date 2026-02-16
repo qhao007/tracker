@@ -963,9 +963,10 @@ function loadTCFilterOptions() {
 | 属性 | 值 |
 |------|-----|
 | **严重性** | High |
-| **状态** | 🔄 修复中 |
+| **状态** | ✅ 已修复 |
 | **发现日期** | 2026-02-16 |
 | **报告人** | 小栗子 |
+| **修复日期** | 2026-02-16 |
 | **修复人** | 小栗子 |
 
 **描述**: 导入 Excel (.xlsx) 文件时报错 `'NoneType' object is not subscriptable`。
@@ -974,14 +975,11 @@ function loadTCFilterOptions() {
 
 **修复方案**: 
 1. 使用 `load_workbook` 配合临时文件方式加载 Excel
-2. 统一使用 0-based 索引读取 header_map
+2. 统一使用 0-based 索引读取 header_map，然后 +1 转换为 Excel 的 1-based 索引
 
-**当前状态**: CP Excel 导入已修复，TC Excel 导入部分代码有问题（重复代码块）
+**验证**: CP/TC Excel 导入功能正常工作。
 
-**相关测试**:
-- `test_import_cp_success` ✅ 通过
-- `test_import_tc_success` ❌ 失败 (代码问题)
-- `test_import_cp_csv` ✅ 通过
+**Git 提交**: `5f4b37e fix: 修复导入导出功能所有bug`
 
 ---
 
@@ -990,15 +988,19 @@ function loadTCFilterOptions() {
 | 属性 | 值 |
 |------|-----|
 | **严重性** | High |
-| **状态** | 🔄 修复中 |
+| **状态** | ✅ 已修复 |
 | **发现日期** | 2026-02-16 |
 | **报告人** | 小栗子 |
+| **修复日期** | 2026-02-16 |
+| **修复人** | 小栗子 |
 
 **描述**: `import_tc` 函数中存在重复的代码块，导致逻辑混乱。
 
-**原因**: 代码重构时没有完全删除旧代码块。
+**修复方案**: 重写整个 `import_tc` 函数，删除重复代码块，统一处理逻辑。
 
----
+**验证**: TC 导入功能正常工作。
+
+**Git 提交**: `5f4b37e fix: 修复导入导出功能所有bug`
 
 ## 3. 测试用例
 
