@@ -138,40 +138,24 @@ cd /projects/management/tracker/dev
 PYTHONPATH=. pytest tests/test_api/ -v --tb=short
 ```
 
+**测试用例数量**: 130 个
+
 **测试用例清单**:
 
-| 分类 | 用例 ID | 说明 |
-|------|---------|------|
-| 项目 | test_get_version | 获取版本 |
-| 项目 | test_get_projects | 获取项目列表 |
-| 项目 | test_create_project | 创建项目 |
-| 项目 | test_create_duplicate_project | 重复创建项目 |
-| 项目 | test_get_archive_list | 获取归档列表 |
-| CP | test_get_cp_list | 获取 CP 列表 |
-| CP | test_create_cp | 创建 CP |
-| CP | test_update_cp | 更新 CP |
-| CP | test_delete_cp | 删除 CP |
-| TC | test_get_tc_list | 获取 TC 列表 |
-| TC | test_create_tc | 创建 TC |
-| TC | test_update_tc | 更新 TC |
-| TC | test_delete_tc | 删除 TC |
-| TC | test_update_tc_status | 更新 TC 状态 |
-| TC | test_tc_with_status_filter | 按状态过滤 TC |
-| TC | test_tc_with_sort | TC 排序 |
-| TC | test_batch_update_status | 批量更新状态 |
-| TC | test_batch_update_status_empty_list | 批量更新空列表 |
-| TC | test_batch_update_target_date | 批量更新目标日期 |
-| TC | test_batch_update_dv_milestone | 批量更新 DV 里程碑 |
-| TC | test_batch_update_priority | 批量更新优先级 |
-| 连接 | test_get_cp_tcs | 获取 CP 关联的 TC |
-| 连接 | test_get_cp_tcs_not_found | 获取不存在的 CP 的 TC |
-| 过滤 | test_tc_filter_by_dv_milestone | 按 DV 里程碑过滤 |
-| 过滤 | test_tc_filter_by_owner | 按负责人过滤 |
-| 过滤 | test_tc_filter_by_category | 按类别过滤 |
-| 过滤 | test_tc_filter_combined | 组合过滤 |
-| 统计 | test_get_stats | 获取统计数据 |
+| 分类 | 用例数量 | 说明 |
+|------|----------|------|
+| 项目管理 | 6 | 版本、列表、创建、重复、归档 |
+| CP 管理 | 5 | 列表、创建、更新、删除 |
+| TC 管理 | 5 | 列表、创建、更新、删除、状态 |
+| 批量操作 | 14 | 批量更新状态、目标日期、DV里程碑、优先级 |
+| 过滤排序 | 15 | 按 DV/Owner/Category 过滤、组合过滤、排序 |
+| 导入功能 | 16 | 模板下载、CP/TC 导入、CSV 导入 |
+| 导出功能 | 9 | CP/TC Excel/CSV 导出、默认格式 |
+| 边界条件 | 25 | 必填字段、重复检测、无效参数 |
+| 异常处理 | 16 | 无效项目ID、无效类型、空项目 |
+| 性能测试 | 24 | 响应时间、吞吐量、过滤查询 |
 
-**通过标准**: 29/29 用例通过
+**通过标准**: 130/130 用例通过
 
 ---
 
@@ -183,7 +167,28 @@ cd /projects/management/tracker/dev
 npx playwright test tests/test_ui/specs/integration/ --project=firefox --timeout=60000
 ```
 
+**测试用例数量**: 约 40+ 个
+
 **测试用例清单**:
+
+##### 导入导出集成测试 (import-export.spec.ts) - v0.7.0 新增
+
+| 用例 ID | 说明 |
+|---------|------|
+| IMP-001 | CP 导入按钮存在 |
+| IMP-002 | CP 导入对话框打开 |
+| IMP-003 | TC 导入按钮存在 |
+| IMP-004 | TC 导入对话框打开 |
+| EXP-001 | CP 导出按钮存在 |
+| EXP-002 | CP 导出对话框打开 |
+| EXP-003 | CP 导出对话框显示项目信息 |
+| EXP-004 | TC 导出按钮存在 |
+| EXP-005 | TC 导出对话框打开 |
+| EXP-007 | CP CSV 导出触发下载 |
+| EXP-008 | TC CSV 导出触发下载 |
+| TMPL-001 | CP 模板下载 |
+| DLG-001 | 导入对话框关闭 |
+| DLG-002 | 导出对话框关闭 |
 
 ##### CP 集成测试 (cp.spec.ts)
 
@@ -517,6 +522,7 @@ cd /projects/management/tracker/dev && python3 server.py
 
 ---
 
-**文档版本**: v1.0  
+**文档版本**: v1.1  
 **创建日期**: 2026-02-15  
+**更新日期**: 2026-02-18  
 **维护者**: 小栗子 🌰
