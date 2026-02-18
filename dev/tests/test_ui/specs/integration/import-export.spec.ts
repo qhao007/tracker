@@ -204,4 +204,51 @@ test.describe('导入导出功能测试', () => {
     await page.click('#exportModal button:has-text("取消")');
     await page.waitForSelector('#exportModal', { state: 'hidden' });
   });
+
+  /**
+   * CSV 导出功能测试 - BUG-046 修复验证
+   */
+  test('EXP-007: CP CSV 导出触发下载', async ({ page }) => {
+    // 切换到 CP 面板
+    await page.click('button.tab:has-text("Cover Points")');
+    await page.waitForSelector('#cpPanel', { state: 'visible' });
+    
+    // 点击导出按钮
+    await page.click('button:has-text("导出 CP")');
+    await page.waitForSelector('#exportModal', { state: 'visible', timeout: 5000 });
+    
+    // 选择 CSV 格式
+    await page.check('input[name="exportFormat"][value="csv"]');
+    
+    // 点击确定导出
+    const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
+    await page.click('#exportModal button.btn-primary:has-text("确定")');
+    
+    // 验证下载事件触发
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toContain('CP');
+    expect(download.suggestedFilename()).toContain('.csv');
+  });
+
+  test('EXP-006: TC CSV 导出触发下载', async ({ page }) => {
+    // 切换到 TC 面板
+    await page.click('button.tab:has-text("Test Cases")');
+    await page.waitForSelector('#tcPanel', { state: 'visible' });
+    
+    // 点击导出按钮
+    await page.click('button:has-text("导出 TC")');
+    await page.waitForSelector('#exportModal', { state: 'visible', timeout: 5000 });
+    
+    // 选择 CSV 格式
+    await page.check('input[name="exportFormat"][value="csv"]');
+    
+    // 点击确定导出
+    const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
+    await page.click('#exportModal button.btn-primary:has-text("确定")');
+    
+    // 验证下载事件触发
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toContain('TC');
+    expect(download.suggestedFilename()).toContain('.csv');
+  });
 });
