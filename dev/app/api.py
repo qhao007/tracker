@@ -4,6 +4,7 @@ Tracker API 路由 - v0.3 独立数据库版本
 
 from flask import Blueprint, request, jsonify, send_from_directory, send_file, current_app, g
 from datetime import datetime
+from urllib.parse import quote
 import json
 import os
 import sqlite3
@@ -2011,7 +2012,7 @@ def import_tc(project, ws, headers, is_csv=False, csv_data=None):
 
 @api.route("/api/export", methods=["GET"])
 def export_data():
-    """导出数据"""
+    """导出数据 - 必须在静态文件路由之前定义"""
     project_id = request.args.get("project_id", type=int)
     export_type = request.args.get("type")  # 'cp' or 'tc'
     export_format = request.args.get("format", "xlsx")  # 'xlsx' or 'csv'
@@ -2164,17 +2165,17 @@ def export_data():
             f"{project['name']}_{export_type.upper()}_{datetime.now().strftime('%Y%m%d')}.csv"
         )
 
-        # 返回 CSV
+        # 返回 CSV - 对文件名进行 URL 编码以支持中文
         from flask import Response
 
         return Response(
             output.getvalue(),
             mimetype="text/csv;charset=utf-8",
-            headers={"Content-Disposition": f"attachment; filename={filename}"},
+            headers={"Content-Disposition": f"attachment; filename={quote(filename)}"},
         )
 
 
-# ============ 静态文件 ============
+# ============ 静态文件路由 - 必须放在所有 API 路由之后 ============
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -2186,4 +2187,7 @@ def index():
 
 @api.route("/<path:path>")
 def static_files(path):
+    # 跳过 API 路由
+    if path.startswith("api/"):
+        return jsonify({"error": "Not found"}), 404
     return send_from_directory(BASE_DIR, path)
