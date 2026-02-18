@@ -1002,6 +1002,35 @@ function loadTCFilterOptions() {
 
 **Git 提交**: `5f4b37e fix: 修复导入导出功能所有bug`
 
+### BUG-046: CSV 导出返回 502 Bad Gateway
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-18 |
+| **报告人** | 独立第三方测试 |
+| **修复日期** | 2026-02-18 |
+| **修复人** | 小栗子 |
+
+**描述**: 调用 `/api/export?project_id=130&type=cp&format=csv` 或 `tc&format=csv` 返回 502 Bad Gateway 错误。
+
+**根因分析**:
+1. HTTP Header `Content-Disposition` 中的中文文件名未进行 URL 编码
+2. gunicorn 无法解析包含中文的 HTTP Header，返回 502
+3. `static_files` catch-all 路由覆盖了 `/api/export` 路由
+
+**修复方案**:
+1. 添加 `from urllib.parse import quote` 导入
+2. 修改 CSV Header: `filename={quote(filename)}` 进行 URL 编码
+3. 修复 `static_files` 路由，排除 `/api/` 路径
+
+**验证**:
+- project_id=2, 130 CP/TC CSV 导出均返回 200
+- API 测试 130/130 通过
+
+**Git 提交**: `15ca1e2 fix: 修复 CSV 导出 HTTP Header 中文编码问题`
+
 ## 3. 测试用例
 
 ### 测试覆盖矩阵

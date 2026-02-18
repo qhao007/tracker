@@ -222,7 +222,7 @@ test.describe('导入导出功能测试', () => {
     
     // 点击确定导出
     const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
-    await page.click('#exportModal button.btn-primary:has-text("确定")');
+    await page.click('#exportModal button.btn-primary:has-text("导出")');
     
     // 验证下载事件触发
     const download = await downloadPromise;
@@ -230,7 +230,7 @@ test.describe('导入导出功能测试', () => {
     expect(download.suggestedFilename()).toContain('.csv');
   });
 
-  test('EXP-006: TC CSV 导出触发下载', async ({ page }) => {
+  test('EXP-008: TC CSV 导出触发下载', async ({ page }) => {
     // 切换到 TC 面板
     await page.click('button.tab:has-text("Test Cases")');
     await page.waitForSelector('#tcPanel', { state: 'visible' });
@@ -244,7 +244,7 @@ test.describe('导入导出功能测试', () => {
     
     // 点击确定导出
     const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
-    await page.click('#exportModal button.btn-primary:has-text("确定")');
+    await page.click('#exportModal button.btn-primary:has-text("导出")');
     
     // 验证下载事件触发
     const download = await downloadPromise;
