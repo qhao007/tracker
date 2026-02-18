@@ -374,5 +374,5 @@ async function updateStatus(tcId, newStatus) {
 ## 7. 相关文档
 
 - 需求文档: `/projects/management/feedbacks/reviewed/tracker_FEATURE_REQUESTS_v0.6.0_20260207.md`
-- 开发规范: `docs/dev/DEVELOPMENT_PROCESS.md`
-- 测试计划: `docs/dev/tracker_TEST_PLAN.md`
+- 开发规范: `docs/DEVELOPMENT/DEVELOPMENT_PROCESS.md`
+- 测试计划: `docs/DEVELOPMENT/UI_TESTING_STRATEGY.md`, `docs/DEVELOPMENT/API_TESTING_STRATEGY.md`, `docs/DEVELOPMENT/TEST_EXECUTION_PLAN.md`

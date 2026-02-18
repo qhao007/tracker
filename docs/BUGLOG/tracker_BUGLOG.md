@@ -885,6 +885,152 @@ function loadTCFilterOptions() {
 
 ---
 
+### BUG-041: 导入模板下载缺少 send_file 导入
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-16 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-02-16 |
+| **修复人** | 小栗子 |
+
+**描述**: 访问 `/api/import/template` 端点时返回 500 错误，提示 `NameError: name 'send_file' is not defined`。
+
+**原因**: `app/api.py` 中使用了 `send_file` 函数但未在文件头部导入。
+
+**修复方案**:
+在 `from flask import` 语句中添加 `send_file` 导入。
+
+**验证**: 模板下载 API 正常返回 Excel 文件。
+
+**Git 提交**: `dc221a7 fix: 修复导入导出功能多个bug`
+
+---
+
+### BUG-042: CSV 导入编码问题
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-16 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-02-16 |
+| **修复人** | 小栗子 |
+
+**描述**: 导入 CSV 文件时失败，错误信息 `iterator should return strings, not bytes`。
+
+**原因**: 使用 `csv.reader(io_module.BytesIO(file_content))` 时 BytesIO 不支持文本模式。
+
+**修复方案**:
+1. 先将 base64 解码后的 bytes 转为 string: `file_content.decode('utf-8')`
+2. 使用 `csv.reader(io.StringIO(...))` 处理文本
+
+**验证**: CSV 导入功能正常工作。
+
+**Git 提交**: `dc221a7 fix: 修复导入导出功能多个bug`
+
+---
+
+### BUG-043: CSV 导入行索引错误
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-16 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-02-16 |
+| **修复人** | 小栗子 |
+
+**描述**: CSV 导入时报错 `list index out of range`。
+
+**原因**: header_map 使用 0-based 索引，但代码中混用了 0-based 和 1-based 索引。
+
+**修复方案**:
+统一使用 0-based 索引：`header_map[header.strip()] = idx`（不再 +1）
+
+**验证**: CSV 多行导入正常。
+
+**Git 提交**: `dc221a7 fix: 修复导入导出功能多个bug`
+
+---
+
+### BUG-044: Excel 导入报错 'NoneType' object is not subscriptable
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-16 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-02-16 |
+| **修复人** | 小栗子 |
+
+**描述**: 导入 Excel (.xlsx) 文件时报错 `'NoneType' object is not subscriptable`。
+
+**原因**: openpyxl 版本兼容性问题，`Workbook(io.BytesIO(...))` 不能正确加载 Excel 文件。
+
+**修复方案**: 
+1. 使用 `load_workbook` 配合临时文件方式加载 Excel
+2. 统一使用 0-based 索引读取 header_map，然后 +1 转换为 Excel 的 1-based 索引
+
+**验证**: CP/TC Excel 导入功能正常工作。
+
+**Git 提交**: `5f4b37e fix: 修复导入导出功能所有bug`
+
+---
+
+### BUG-045: TC 导入代码有重复块
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-16 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-02-16 |
+| **修复人** | 小栗子 |
+
+**描述**: `import_tc` 函数中存在重复的代码块，导致逻辑混乱。
+
+**修复方案**: 重写整个 `import_tc` 函数，删除重复代码块，统一处理逻辑。
+
+**验证**: TC 导入功能正常工作。
+
+**Git 提交**: `5f4b37e fix: 修复导入导出功能所有bug`
+
+### BUG-046: CSV 导出返回 502 Bad Gateway
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-18 |
+| **报告人** | 独立第三方测试 |
+| **修复日期** | 2026-02-18 |
+| **修复人** | 小栗子 |
+
+**描述**: 调用 `/api/export?project_id=130&type=cp&format=csv` 或 `tc&format=csv` 返回 502 Bad Gateway 错误。
+
+**根因分析**:
+1. HTTP Header `Content-Disposition` 中的中文文件名未进行 URL 编码
+2. gunicorn 无法解析包含中文的 HTTP Header，返回 502
+3. `static_files` catch-all 路由覆盖了 `/api/export` 路由
+
+**修复方案**:
+1. 添加 `from urllib.parse import quote` 导入
+2. 修改 CSV Header: `filename={quote(filename)}` 进行 URL 编码
+3. 修复 `static_files` 路由，排除 `/api/` 路径
+
+**验证**:
+- project_id=2, 130 CP/TC CSV 导出均返回 200
+- API 测试 130/130 通过
+
+**Git 提交**: `15ca1e2 fix: 修复 CSV 导出 HTTP Header 中文编码问题`
+
 ## 3. 测试用例
 
 ### 测试覆盖矩阵
@@ -1003,3 +1149,4 @@ cd dev && npx playwright test tests/tracker.spec.ts --project=firefox
 | v1.8 | 2026-02-08 | 修复 BUG-021 备份功能失败；添加 FEAT-002 备份恢复自定义路径 |
 | v1.9 | 2026-02-09 | 修复 BUG-022 CP列表显示批量操作按钮 |
 | v2.0 | 2026-02-10 | 修复 BUG-026 VERSION 文件读取失败 |
+| v2.1 | 2026-02-16 | 修复 v0.7.0 导入导出功能 bug (BUEG-041~044) |

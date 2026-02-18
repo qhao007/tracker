@@ -355,7 +355,7 @@ sudo systemctl restart tracker
 - **Tracker 目录**: {RELEASE_BASE}
 - **当前版本**: {RELEASE_CURRENT}
 - **Git 仓库**: /projects/management/tracker
-- **规格书**: /projects/management/tracker/docs/dev/tracker_规格书_v0.3.md
+- **规格书**: /projects/management/tracker/docs/SPECIFICATIONS/tracker_OVERALL_SPECS.md
 
 ---
 

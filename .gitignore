@@ -52,3 +52,4 @@ stable/backup_*/
 
 # ========== Node.js ==========
 node_modules/
+.playwright-cli/
