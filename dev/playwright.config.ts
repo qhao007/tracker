@@ -4,6 +4,9 @@ export default defineConfig({
   // 测试目录
   testDir: './tests',
 
+  // 测试输出目录
+  outputDir: './test-results/playwright-output',
+
   // 全局超时
   timeout: 60000,
 
@@ -23,8 +26,8 @@ export default defineConfig({
 
   // 报告配置
   reporter: [
-    ['html', { outputFolder: 'test-results/report-html' }],
-    ['json', { outputFile: 'test-results/report/results.json' }],
+    ['html', { outputFolder: 'test-results/playwright-html' }],
+    ['json', { outputFile: 'test-results/playwright-json/report.json' }],
     ['list']
   ],
 
