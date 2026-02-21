@@ -209,8 +209,8 @@ def get_version():
 
 # ============ 项目管理 ============
 
-
 @api.route("/api/projects", methods=["GET"])
+@login_required
 def get_projects():
     """获取项目列表"""
     projects = load_projects()
@@ -293,6 +293,7 @@ def get_project(project_id):
 
 
 @api.route("/api/projects", methods=["POST"])
+@admin_required
 def create_project():
     """创建新项目"""
     data = request.json
@@ -581,6 +582,7 @@ def restore_project_upload():
 
 
 @api.route("/api/projects/<int:project_id>", methods=["DELETE"])
+@admin_required
 def delete_project(project_id):
     """删除项目"""
     projects = load_projects()
@@ -681,6 +683,7 @@ def get_coverpoints():
 
 
 @api.route("/api/cp", methods=["POST"])
+@guest_required
 def create_coverpoint():
     """创建 CP"""
     data = request.json
@@ -1082,6 +1085,7 @@ def get_testcase(tc_id):
 
 
 @api.route("/api/tc", methods=["POST"])
+@guest_required
 def create_testcase():
     """创建 TC"""
     data = request.json
