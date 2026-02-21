@@ -39,7 +39,8 @@ def create_app(testing=False):
     # 初始化认证系统
     from . import auth
     if not testing:
-        auth.init_auth()
+        with app.app_context():
+            auth.init_auth()
 
     # 清理数据库连接
     @app.teardown_appcontext
