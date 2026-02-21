@@ -2485,9 +2485,5 @@ def index():
     return send_from_directory(BASE_DIR, "index.html")
 
 
-@api.route("/<path:path>")
-def static_files(path):
-    # 跳过 API 路由
-    if path.startswith("api/"):
-        return jsonify({"error": "Not found"}), 404
-    return send_from_directory(BASE_DIR, path)
+# 注意：这个路由必须放在所有 API 路由之后
+# 它使用 path 变量，会匹配其他未匹配的路由
