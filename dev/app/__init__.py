@@ -1,9 +1,10 @@
 """
-Tracker Flask 应用 - v0.3 独立数据库版本
+Tracker Flask 应用 - v0.7.1 用户认证版本
 """
 from flask import Flask, g
 from .api import api
 import os
+import secrets
 
 
 def create_app(testing=False):
@@ -15,6 +16,15 @@ def create_app(testing=False):
     app.config['TESTING'] = testing
     app.config['BASE_DIR'] = base_dir
     app.config['DATA_DIR'] = data_dir
+    
+    # Session 配置
+    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    # 注意：生产环境需要配置 HTTPS，设置 SESSION_COOKIE_SECURE = True
+    
+    # 配置文件上传大小限制 (16MB)
+    app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
     # 确保数据目录存在
     os.makedirs(data_dir, exist_ok=True)
@@ -25,6 +35,11 @@ def create_app(testing=False):
 
     # 注册蓝图
     app.register_blueprint(api, url_prefix='/')
+
+    # 初始化认证系统
+    from . import auth
+    if not testing:
+        auth.init_auth()
 
     # 清理数据库连接
     @app.teardown_appcontext

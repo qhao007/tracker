@@ -51,6 +51,17 @@
 | **建议方案** | 1. 拆分超长 SQL 语句（主要是 INSERT 语句）<br>2. 清理尾部空格<br>3. 考虑调整 flake8 配置或使用 black 的默认行长度 |
 | **详细说明** | 问题类型：<br>- E501 行太长：约 8 处（主要是 SQL INSERT 语句）<br>- W291 尾部空格：约 25 处<br>- E402 动态 import：4 处<br>这些是代码风格问题，不影响功能，建议后续迭代时逐步修复 |
 
+### ISSUE-004
+
+| 属性 | 内容 |
+|------|------|
+| **发现日期** | 2026-02-21 |
+| **优先级** | P2 |
+| **状态** | 待处理 |
+| **问题描述** | 生产环境需要支持 HTTPS 访问，当前 Session Cookie 的 SECURE 选项为 False |
+| **建议方案** | 1. 购买域名并配置 SSL 证书（推荐 Let's Encrypt，免费）<br>2. 使用 Nginx 反向代理配置 HTTPS<br>3. 将 SESSION_COOKIE_SECURE 设为 True |
+| **详细说明** | 当前配置为宽松模式（HTTP 可用），适用于内网/开发环境。外网访问建议配置 HTTPS。<br><br>**配置步骤**：<br>1. 购买域名（腾讯云）<br>2. 安装 Nginx + Certbot<br>3. 获取 SSL 证书<br>4. 配置 Nginx 反向代理<br><br>**相关配置**：<br>- SESSION_COOKIE_SECURE = True（需 HTTPS）<br>- SESSION_COOKIE_HTTPONLY = True<br>- SESSION_COOKIE_SAMESITE = 'Lax' |
+
 ---
 
 ## 定期 Review

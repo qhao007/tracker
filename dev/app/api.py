@@ -2,17 +2,63 @@
 Tracker API 路由 - v0.3 独立数据库版本
 """
 
-from flask import Blueprint, request, jsonify, send_from_directory, send_file, current_app, g
+from flask import Blueprint, request, jsonify, send_from_directory, send_file, current_app, g, session
 from datetime import datetime
 from urllib.parse import quote
+from functools import wraps
 import json
 import os
 import sqlite3
 
 api = Blueprint("api", __name__)
+auth_api = Blueprint("auth_api", __name__)
+
+# 导入认证模块
+from . import auth
 
 # 项目列表文件
 PROJECTS_FILE = "data/projects.json"
+
+# Session 配置
+SESSION_USER_KEY = "user_id"
+SESSION_USERNAME_KEY = "username"
+SESSION_ROLE_KEY = "role"
+
+
+# ============ 访问控制装饰器 ============
+
+def login_required(f):
+    """要求登录的装饰器"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if SESSION_USER_KEY not in session:
+            return jsonify({"error": "Unauthorized", "message": "请先登录"}), 401
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def admin_required(f):
+    """要求管理员权限的装饰器"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if SESSION_USER_KEY not in session:
+            return jsonify({"error": "Unauthorized", "message": "请先登录"}), 401
+        if session.get(SESSION_ROLE_KEY) != 'admin':
+            return jsonify({"error": "Forbidden", "message": "需要管理员权限"}), 403
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def guest_required(f):
+    """禁止访客访问的装饰器"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if SESSION_USER_KEY not in session:
+            return jsonify({"error": "Unauthorized", "message": "请先登录"}), 401
+        if session.get(SESSION_ROLE_KEY) == 'guest':
+            return jsonify({"error": "Forbidden", "message": "访客无权限执行此操作"}), 403
+        return f(*args, **kwargs)
+    return decorated_function
 
 
 def get_projects_file():
@@ -2173,6 +2219,260 @@ def export_data():
             mimetype="text/csv;charset=utf-8",
             headers={"Content-Disposition": f"attachment; filename={quote(filename)}"},
         )
+
+
+# ============ 认证 API ============
+
+@api.route("/api/auth/login", methods=["POST"])
+def login():
+    """用户登录"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({"error": "Bad Request", "message": "无效的请求数据"}), 400
+    
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
+    
+    if not username or not password:
+        return jsonify({"error": "Bad Request", "message": "用户名和密码不能为空"}), 400
+    
+    # 检查暴力破解
+    allowed, message = auth.check_login_attempts(username)
+    if not allowed:
+        return jsonify({"error": "Too Many Requests", "message": message}), 429
+    
+    # 获取用户
+    user = auth.get_user_by_username(username)
+    
+    if not user:
+        auth.record_failed_login(username)
+        return jsonify({"error": "Unauthorized", "message": "用户名或密码错误"}), 401
+    
+    # 检查用户是否启用
+    if not user.get("is_active"):
+        return jsonify({"error": "Forbidden", "message": "账户已被禁用"}), 403
+    
+    # 验证密码
+    if not auth.verify_password(password, user.get("password_hash")):
+        auth.record_failed_login(username)
+        return jsonify({"error": "Unauthorized", "message": "用户名或密码错误"}), 401
+    
+    # 登录成功，清除失败记录
+    auth.clear_login_attempts(username)
+    
+    # 更新最后登录时间
+    auth.update_user(user["id"], last_login=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    
+    # 设置 Session
+    session[SESSION_USER_KEY] = user["id"]
+    session[SESSION_USERNAME_KEY] = user["username"]
+    session[SESSION_ROLE_KEY] = user["role"]
+    session.permanent = True
+    
+    return jsonify({
+        "success": True,
+        "user": {
+            "id": user["id"],
+            "username": user["username"],
+            "role": user["role"],
+            "must_change_password": user.get("must_change_password", 0) == 1
+        }
+    })
+
+
+@api.route("/api/auth/guest-login", methods=["POST"])
+def guest_login():
+    """访客登录"""
+    # 检查暴力破解
+    allowed, message = auth.check_login_attempts("guest")
+    if not allowed:
+        return jsonify({"error": "Too Many Requests", "message": message}), 429
+    
+    # 获取 guest 用户
+    user = auth.get_user_by_username("guest")
+    
+    if not user:
+        return jsonify({"error": "Not Found", "message": "访客账户未配置"}), 404
+    
+    # 检查用户是否启用
+    if not user.get("is_active"):
+        return jsonify({"error": "Forbidden", "message": "访客登录已禁用"}), 403
+    
+    # 登录成功
+    auth.clear_login_attempts("guest")
+    
+    # 更新最后登录时间
+    auth.update_user(user["id"], last_login=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    
+    # 设置 Session
+    session[SESSION_USER_KEY] = user["id"]
+    session[SESSION_USERNAME_KEY] = user["username"]
+    session[SESSION_ROLE_KEY] = user["role"]
+    session.permanent = True
+    
+    return jsonify({
+        "success": True,
+        "user": {
+            "id": user["id"],
+            "username": user["username"],
+            "role": user["role"]
+        }
+    })
+
+
+@api.route("/api/auth/logout", methods=["POST"])
+@login_required
+def logout():
+    """退出登录"""
+    session.clear()
+    return jsonify({"success": True, "message": "已退出登录"})
+
+
+@api.route("/api/auth/me", methods=["GET"])
+@login_required
+def get_current_user():
+    """获取当前用户信息"""
+    user_id = session.get(SESSION_USER_KEY)
+    user = auth.get_user_by_id(user_id)
+    
+    if not user:
+        session.clear()
+        return jsonify({"error": "Unauthorized", "message": "用户不存在"}), 401
+    
+    return jsonify({
+        "id": user["id"],
+        "username": user["username"],
+        "role": user["role"],
+        "must_change_password": user.get("must_change_password", 0) == 1
+    })
+
+
+# ============ 用户管理 API ============
+
+@api.route("/api/users", methods=["GET"])
+@admin_required
+def get_users():
+    """获取用户列表（仅管理员）"""
+    users = auth.get_all_users()
+    return jsonify(users)
+
+
+@api.route("/api/users", methods=["POST"])
+@admin_required
+def create_user():
+    """创建用户（仅管理员）"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({"error": "Bad Request", "message": "无效的请求数据"}), 400
+    
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
+    role = data.get("role", "user")
+    
+    if not username:
+        return jsonify({"error": "Bad Request", "message": "用户名不能为空"}), 400
+    
+    if role not in ['user', 'guest']:
+        return jsonify({"error": "Bad Request", "message": "无效的角色"}), 400
+    
+    # guest 账户不能有密码
+    if role == 'guest' and password:
+        return jsonify({"error": "Bad Request", "message": "访客账户不能设置密码"}), 400
+    
+    # 检查用户名是否已存在
+    existing = auth.get_user_by_username(username)
+    if existing:
+        return jsonify({"error": "Conflict", "message": "用户名已存在"}), 409
+    
+    try:
+        user_id = auth.create_user(username, password, role)
+        return jsonify({"success": True, "id": user_id, "username": username, "role": role}), 201
+    except Exception as e:
+        return jsonify({"error": "Internal Error", "message": str(e)}), 500
+
+
+@api.route("/api/users/<int:user_id>", methods=["PATCH"])
+@admin_required
+def update_user(user_id):
+    """更新用户（仅管理员）"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({"error": "Bad Request", "message": "无效的请求数据"}), 400
+    
+    # 获取现有用户
+    user = auth.get_user_by_id(user_id)
+    if not user:
+        return jsonify({"error": "Not Found", "message": "用户不存在"}), 404
+    
+    # 不能修改 admin 和 guest 的角色
+    if user["username"] in ['admin', 'guest']:
+        if "role" in data:
+            return jsonify({"error": "Forbidden", "message": "不能修改系统用户的角色"}), 403
+    
+    # 构建更新字段
+    updates = {}
+    if "is_active" in data:
+        updates["is_active"] = 1 if data["is_active"] else 0
+    
+    if updates:
+        auth.update_user(user_id, **updates)
+    
+    return jsonify({"success": True})
+
+
+@api.route("/api/users/<int:user_id>", methods=["DELETE"])
+@admin_required
+def delete_user(user_id):
+    """删除用户（仅管理员）"""
+    # 获取现有用户
+    user = auth.get_user_by_id(user_id)
+    if not user:
+        return jsonify({"error": "Not Found", "message": "用户不存在"}), 404
+    
+    # 不能删除 admin 和 guest
+    if user["username"] in ['admin', 'guest']:
+        return jsonify({"error": "Forbidden", "message": "无法删除系统用户"}), 403
+    
+    # 不能删除自己
+    current_user_id = session.get(SESSION_USER_KEY)
+    if current_user_id == user_id:
+        return jsonify({"error": "Forbidden", "message": "不能删除自己"}), 403
+    
+    success, message = auth.delete_user(user_id)
+    
+    if not success:
+        return jsonify({"error": "Forbidden", "message": message}), 403
+    
+    return jsonify({"success": True, "message": message})
+
+
+@api.route("/api/users/<int:user_id>/reset-password", methods=["POST"])
+@admin_required
+def reset_password(user_id):
+    """重置用户密码（仅管理员）"""
+    data = request.get_json()
+    new_password = data.get("new_password", "") if data else ""
+    
+    # 获取现有用户
+    user = auth.get_user_by_id(user_id)
+    if not user:
+        return jsonify({"error": "Not Found", "message": "用户不存在"}), 404
+    
+    # guest 账户不能重置密码
+    if user["role"] == "guest":
+        return jsonify({"error": "Forbidden", "message": "访客账户无密码"}), 403
+    
+    if not new_password:
+        return jsonify({"error": "Bad Request", "message": "密码不能为空"}), 400
+    
+    # 重置密码
+    password_hash = auth.hash_password(new_password)
+    auth.update_user(user_id, password_hash=password_hash, must_change_password=0)
+    
+    return jsonify({"success": True, "message": "密码已重置"})
 
 
 # ============ 静态文件路由 - 必须放在所有 API 路由之后 ============
