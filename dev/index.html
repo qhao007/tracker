@@ -213,6 +213,7 @@
             <button class="header-btn" id="loginHeaderBtn" onclick="showLoginModal()">🔑 登录</button>
             <div class="header-user-info" id="userInfo" style="display: none;">
                 <span class="header-user-name" id="currentUsername"></span>
+                <button class="header-btn" id="userManageBtn" onclick="showUserManageModal()">👥 用户管理</button>
                 <button class="header-btn" onclick="logout()">退出</button>
             </div>
         </div>
@@ -399,6 +400,19 @@
                     <div id="uploadStatus" style="margin-bottom: 10px;"></div>
                 </div>
                 <div class="form-group"><label>或从默认目录选择</label><div class="project-list" id="archiveList"></div></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- User Management Modal -->
+    <div class="modal" id="userManageModal">
+        <div class="modal-content" style="width: 700px;">
+            <div class="modal-header"><span>用户管理</span><button class="modal-close" onclick="closeModal('userManageModal')">&times;</button></div>
+            <div class="modal-body">
+                <div style="margin-bottom: 15px;">
+                    <button class="btn btn-primary" id="addUserBtn" onclick="showAddUserForm()">➕ 添加用户</button>
+                </div>
+                <div id="userList"></div>
             </div>
         </div>
     </div>
@@ -1453,6 +1467,132 @@
         function showArchiveModal() {
             loadArchives();
             document.getElementById('archiveModal').classList.add('active');
+        }
+        
+        // ============ 用户管理 ============
+        async function showUserManageModal() {
+            await loadUserList();
+            document.getElementById('userManageModal').classList.add('active');
+        }
+        
+        async function loadUserList() {
+            try {
+                const res = await fetch(`${API_BASE}/users`, { credentials: 'include' });
+                if (!res.ok) throw new Error('无法获取用户列表');
+                const users = await res.json();
+                
+                const html = `<table style="width: 100%; border-collapse: collapse;">
+                    <thead><tr style="background: #f5f5f5;">
+                        <th style="padding: 8px; text-align: left;">用户名</th>
+                        <th style="padding: 8px; text-align: left;">角色</th>
+                        <th style="padding: 8px; text-align: left;">状态</th>
+                        <th style="padding: 8px; text-align: left;">操作</th>
+                    </tr></thead>
+                    <tbody>
+                    ${users.map(u => `<tr style="border-bottom: 1px solid #eee;">
+                        <td style="padding: 8px;">${escapeHtml(u.username)}</td>
+                        <td style="padding: 8px;">${u.role === 'admin' ? '管理员' : u.role === 'user' ? '普通用户' : '访客'}</td>
+                        <td style="padding: 8px;">${u.is_active ? '✅ 启用' : '❌ 禁用'}</td>
+                        <td style="padding: 8px;">
+                            ${u.username !== 'admin' ? `<button class="btn" style="padding: 3px 8px; margin-right: 5px;" onclick="toggleUserStatus(${u.id}, ${!u.is_active})">${u.is_active ? '禁用' : '启用'}</button>` : ''}
+                            ${u.username !== 'admin' && u.username !== 'guest' ? `<button class="btn" style="padding: 3px 8px; margin-right: 5px;" onclick="resetUserPassword(${u.id})">重置密码</button>` : ''}
+                            ${u.username !== 'admin' && u.username !== 'guest' ? `<button class="btn" style="padding: 3px 8px; color: red;" onclick="deleteUser(${u.id})">删除</button>` : ''}
+                        </td>
+                    </tr>`).join('')}
+                    </tbody>
+                </table>`;
+                document.getElementById('userList').innerHTML = html;
+            } catch (e) {
+                document.getElementById('userList').innerHTML = `<p style="color: red;">${e.message}</p>`;
+            }
+        }
+        
+        async function showAddUserForm() {
+            const username = prompt('请输入用户名:');
+            if (!username) return;
+            
+            const role = confirm('创建普通用户点击确定，创建访客点击取消') ? 'user' : 'guest';
+            
+            try {
+                const res = await fetch(`${API_BASE}/users`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ username, role })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('用户创建成功！');
+                    await loadUserList();
+                } else {
+                    alert(data.message || '创建失败');
+                }
+            } catch (e) {
+                alert('创建失败: ' + e.message);
+            }
+        }
+        
+        async function toggleUserStatus(userId, enable) {
+            if (!confirm(enable ? '确定启用该用户？' : '确定禁用该用户？')) return;
+            
+            try {
+                const res = await fetch(`${API_BASE}/users/${userId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ is_active: enable })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    await loadUserList();
+                } else {
+                    alert(data.message || '操作失败');
+                }
+            } catch (e) {
+                alert('操作失败: ' + e.message);
+            }
+        }
+        
+        async function resetUserPassword(userId) {
+            const newPassword = prompt('请输入新密码:');
+            if (!newPassword) return;
+            
+            try {
+                const res = await fetch(`${API_BASE}/users/${userId}/reset-password`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ new_password: newPassword })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('密码重置成功！');
+                } else {
+                    alert(data.message || '重置失败');
+                }
+            } catch (e) {
+                alert('重置失败: ' + e.message);
+            }
+        }
+        
+        async function deleteUser(userId) {
+            if (!confirm('确定删除该用户？此操作不可恢复。')) return;
+            
+            try {
+                const res = await fetch(`${API_BASE}/users/${userId}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('用户已删除');
+                    await loadUserList();
+                } else {
+                    alert(data.message || '删除失败');
+                }
+            } catch (e) {
+                alert('删除失败: ' + e.message);
+            }
         }
         
         function showVersionInfo() {

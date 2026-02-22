@@ -58,9 +58,9 @@ export default defineConfig({
 
   // WebServer 配置（可选）
   webServer: {
-    command: 'cd /projects/management/tracker/dev && python3 server.py',
-    url: 'http://localhost:8081',
-    reuseExistingServer: true,
+    command: 'cd /projects/management/tracker/dev && gunicorn --workers 2 --bind 0.0.0.0:8082 wsgi:app',
+    url: 'http://localhost:8082',
+    reuseExistingServer: !process.env.CI,
     timeout: 30000,
   },
 });
