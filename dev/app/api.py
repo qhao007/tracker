@@ -792,6 +792,7 @@ def get_coverpoint(cp_id):
 
 
 @api.route("/api/cp/<int:cp_id>", methods=["PUT"])
+@guest_required
 def update_coverpoint(cp_id):
     """更新 CP"""
     data = request.json
@@ -839,6 +840,7 @@ def update_coverpoint(cp_id):
 
 
 @api.route("/api/cp/<int:cp_id>", methods=["DELETE"])
+@guest_required
 def delete_coverpoint(cp_id):
     """删除 CP"""
     project_id = request.args.get("project_id", type=int)
@@ -1201,6 +1203,7 @@ def create_testcase():
 
 
 @api.route("/api/tc/<int:tc_id>", methods=["PUT"])
+@guest_required
 def update_testcase(tc_id):
     """更新 TC"""
     data = request.json
@@ -1265,6 +1268,7 @@ def update_testcase(tc_id):
 
 
 @api.route("/api/tc/<int:tc_id>", methods=["DELETE"])
+@guest_required
 def delete_testcase(tc_id):
     """删除 TC"""
     project_id = request.args.get("project_id", type=int)

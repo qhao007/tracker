@@ -613,6 +613,12 @@
             document.getElementById('loginHeaderBtn').style.display = 'none';
             document.getElementById('userInfo').style.display = 'flex';
             document.getElementById('currentUsername').textContent = currentUser.username;
+            
+            // 根据角色控制用户管理按钮显示（仅 admin 可见）
+            const userManageBtn = document.getElementById('userManageBtn');
+            if (userManageBtn) {
+                userManageBtn.style.display = currentUser.role === 'admin' ? 'inline-block' : 'none';
+            }
         }
         
         function updateUIForLoggedOut() {
