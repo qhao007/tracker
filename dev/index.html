@@ -417,6 +417,36 @@
         </div>
     </div>
     
+    <!-- Add User Modal -->
+    <div class="modal" id="addUserModal">
+        <div class="modal-content" style="width: 400px;">
+            <div class="modal-header"><span>添加用户</span><button class="modal-close" onclick="closeModal('addUserModal')">&times;</button></div>
+            <div class="modal-body">
+                <form id="addUserForm" onsubmit="saveUser(event)">
+                    <div class="form-group">
+                        <label>用户名 *</label>
+                        <input type="text" id="newUsername" class="form-control" required placeholder="请输入用户名">
+                    </div>
+                    <div class="form-group">
+                        <label>初始密码 *</label>
+                        <input type="password" id="newPassword" class="form-control" required placeholder="请输入初始密码">
+                    </div>
+                    <div class="form-group">
+                        <label>角色 *</label>
+                        <select id="newUserRole" class="form-control">
+                            <option value="user">普通用户</option>
+                            <option value="guest">访客</option>
+                        </select>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn" onclick="closeModal('addUserModal')">取消</button>
+                        <button type="submit" class="btn btn-primary">创建</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
     <!-- Batch Status Modal -->
     <div class="modal" id="batchStatusModal">
         <div class="modal-content" style="width: 400px;">
@@ -1568,21 +1598,38 @@
         }
         
         async function showAddUserForm() {
-            const username = prompt('请输入用户名:');
-            if (!username) return;
+            // 清空表单
+            document.getElementById('newUsername').value = '';
+            document.getElementById('newPassword').value = '';
+            document.getElementById('newUserRole').value = 'user';
             
-            const role = confirm('创建普通用户点击确定，创建访客点击取消') ? 'user' : 'guest';
+            // 打开模态框
+            document.getElementById('addUserModal').classList.add('active');
+        }
+        
+        async function saveUser(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('newUsername').value.trim();
+            const password = document.getElementById('newPassword').value;
+            const role = document.getElementById('newUserRole').value;
+            
+            if (!username || !password) {
+                alert('用户名和密码不能为空');
+                return;
+            }
             
             try {
                 const res = await fetch(`${API_BASE}/users`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'include',
-                    body: JSON.stringify({ username, role })
+                    body: JSON.stringify({ username, password, role })
                 });
                 const data = await res.json();
                 if (data.success) {
                     alert('用户创建成功！');
+                    closeModal('addUserModal');
                     await loadUserList();
                 } else {
                     alert(data.message || '创建失败');
