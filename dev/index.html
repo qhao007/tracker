@@ -1186,8 +1186,33 @@
             try { const res = await fetch(`/api/tc${id ? '/'+id : ''}`, { method: id ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }); const result = await res.json(); if (result.success) { closeModal('tcModal'); await Promise.all([loadTC(), loadStats()]); } else { alert(result.error || '保存失败'); } } catch (err) { alert('保存失败: ' + err); }
         }
         
-        async function deleteCP(id) { if (!currentProject) return; if (!confirm('确定删除?')) return; try { await fetch(`/api/cp/${id}?project_id=${currentProject.id}`, { method: 'DELETE' }); await loadCP(); } catch (e) { alert('删除失败'); } }
-        async function deleteTC(id) { if (!currentProject) return; if (!confirm('确定删除?')) return; try { await fetch(`/api/tc/${id}?project_id=${currentProject.id}`, { method: 'DELETE' }); await Promise.all([loadTC(), loadStats()]); } catch (e) { alert('删除失败'); } }
+        async function deleteCP(id) { 
+            if (!currentProject) return; 
+            if (!confirm('确定删除?')) return; 
+            try { 
+                const res = await fetch(`/api/cp/${id}?project_id=${currentProject.id}`, { method: 'DELETE' });
+                if (!res.ok) {
+                    const data = await res.json();
+                    alert(data.message || '删除失败');
+                    return;
+                }
+                await loadCP(); 
+            } catch (e) { alert('删除失败'); } 
+        }
+        
+        async function deleteTC(id) { 
+            if (!currentProject) return; 
+            if (!confirm('确定删除?')) return; 
+            try { 
+                const res = await fetch(`/api/tc/${id}?project_id=${currentProject.id}`, { method: 'DELETE' });
+                if (!res.ok) {
+                    const data = await res.json();
+                    alert(data.message || '删除失败');
+                    return;
+                }
+                await Promise.all([loadTC(), loadStats()]); 
+            } catch (e) { alert('删除失败'); } 
+        }
         async function updateTCStatus(id, newStatus) {
             if (!currentProject) return;
             
