@@ -1351,3 +1351,30 @@ const res = await fetch(`/api/cp${id ? '/'+id : ''}`, {
    - 避免多进程 session 共享问题
 
 **Git 提交**: 78f8a52
+
+---
+
+## BUG-056: 前端 fetch 请求缺少 credentials 导致 session 丢失
+**日期**: 2026-02-22
+**版本**: v0.7.1
+**状态**: ✅ 已修复
+
+**问题描述**: 登录后刷新页面，偶尔会退出登录需要重新登录
+
+**根本原因**: 
+1. checkAuth 函数 fetch 请求缺少 credentials: 'include'
+2. 其他多个 API 调用也缺少 credentials
+
+**修复方案**: 
+添加全局 fetch 包装器，确保所有请求自动包含 credentials：
+```javascript
+const originalFetch = window.fetch;
+window.fetch = async function(url, options = {}) {
+    if (!options.credentials) {
+        options.credentials = 'include';
+    }
+    return originalFetch(url, options);
+};
+```
+
+**Git 提交**: 75fabb5

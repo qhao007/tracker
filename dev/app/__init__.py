@@ -17,8 +17,9 @@ def create_app(testing=False):
     app.config['BASE_DIR'] = base_dir
     app.config['DATA_DIR'] = data_dir
     
-    # Session 配置
-    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
+    # Session 配置 - 使用固定的 SECRET_KEY 确保 session 持久化
+    # 生产环境应使用环境变量设置
+    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'tracker-dev-secret-key-v071')
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
     # 使用文件系统存储 session，支持多 worker
