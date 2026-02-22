@@ -1330,3 +1330,23 @@ const res = await fetch(`/api/cp${id ? '/'+id : ''}`, {
 ```
 
 **Git 提交**: dc429b2
+
+---
+
+## BUG-055: 刷新页面间歇性 401 错误
+**日期**: 2026-02-22
+**版本**: v0.7.1
+**状态**: ✅ 已修复
+
+**问题描述**: 快速刷新浏览器时，偶尔出现项目无法加载的问题，需要再次刷新才能恢复
+
+**根本原因**: Flask 默认 session 存储在进程内存中，多 worker 时请求分发到不同 worker，导致 session 丢失
+
+**修复方案**: 
+使用 Flask-Session 文件存储，所有 worker 共享 session 文件：
+```python
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SESSION_FILE_DIR'] = 'data/sessions'
+```
+
+**Git 提交**: be654df
