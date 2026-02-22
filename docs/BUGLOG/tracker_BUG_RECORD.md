@@ -1284,3 +1284,49 @@ cd dev && npx playwright test tests/tracker.spec.ts --project=firefox
 **验证**: 2/2 前端权限测试通过。
 
 **Git 提交**: `ddeecf3 fix: 添加 RBAC 权限控制`
+
+---
+
+## BUG-053: guest 删除操作无错误提示
+**日期**: 2026-02-22
+**版本**: v0.7.1
+**状态**: ✅ 已修复
+
+**问题描述**: guest 用户点击删除按钮时，无法删除但没有弹出错误提示（不像编辑操作会显示 forbidden 对话框）
+
+**根本原因**: 前端 deleteTC/deleteCP 函数未处理 403 响应
+
+**修复方案**: 
+```javascript
+// 添加 res.ok 检查
+const res = await fetch(...);
+if (!res.ok) {
+    const data = await res.json();
+    alert(data.message || '删除失败');
+    return;
+}
+```
+
+---
+
+## BUG-054: user 角色无法创建 TC/CP
+**日期**: 2026-02-22
+**版本**: v0.7.1
+**状态**: ✅ 已修复
+
+**问题描述**: user 角色登录后，点击添加 TC/CP，弹出 "unauthorized" 错误
+
+**根本原因**: 前端 saveCP/saveTC 的 fetch 请求缺少 `credentials: 'include'`，导致 cookie 未发送，服务器认为是未登录状态
+
+**修复方案**: 
+```javascript
+// 添加 credentials: 'include'
+const res = await fetch(`/api/cp${id ? '/'+id : ''}`, { 
+    method: id ? 'PUT' : 'POST', 
+    headers: {'Content-Type': 'application/json'}, 
+    body: JSON.stringify(data), 
+    credentials: 'include'  // 添加这行
+});
+```
+
+**Git 提交**: dc429b2
