@@ -6,7 +6,7 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('API 权限控制', () => {
-  const BASE_URL = 'http://localhost:8082';
+  const BASE_URL = 'http://localhost:8081';
   
   test('1. guest 用户更新 TC 应返回 403', async ({ request }) => {
     // guest 登录

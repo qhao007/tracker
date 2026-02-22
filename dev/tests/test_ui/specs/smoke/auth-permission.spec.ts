@@ -6,7 +6,7 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('访问控制 API', () => {
-  const BASE_URL = 'http://localhost:8082';
+  const BASE_URL = 'http://localhost:8081';
   
   // 使用 test.beforeEach 确保每个测试独立
   test('1. 未登录访问项目列表应被拒绝', async ({ request, baseURL }) => {

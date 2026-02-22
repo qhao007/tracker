@@ -6,7 +6,7 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('用户管理', () => {
-  const BASE_URL = 'http://localhost:8082';
+  const BASE_URL = 'http://localhost:8081';
   
   test('1. 管理员登录后应看到用户管理入口', async ({ page }) => {
     await page.goto(BASE_URL);

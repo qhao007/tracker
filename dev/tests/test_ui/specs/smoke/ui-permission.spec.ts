@@ -6,7 +6,7 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('前端权限控制', () => {
-  const BASE_URL = 'http://localhost:8082';
+  const BASE_URL = 'http://localhost:8081';
   
   test('1. guest 登录后应有用户管理入口', async ({ page }) => {
     await page.goto(BASE_URL);
