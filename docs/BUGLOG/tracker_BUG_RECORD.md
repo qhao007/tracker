@@ -1340,13 +1340,14 @@ const res = await fetch(`/api/cp${id ? '/'+id : ''}`, {
 
 **问题描述**: 快速刷新浏览器时，偶尔出现项目无法加载的问题，需要再次刷新才能恢复
 
-**根本原因**: Flask 默认 session 存储在进程内存中，多 worker 时请求分发到不同 worker，导致 session 丢失
+**根本原因**: 
+1. Flask 默认 session 存储在进程内存中，多 worker 时请求分发到不同 worker
+2. Flask-Session 文件存储在多进程环境下仍有竞态条件
 
 **修复方案**: 
-使用 Flask-Session 文件存储，所有 worker 共享 session 文件：
-```python
-app.config['SESSION_TYPE'] = 'filesystem'
-app.config['SESSION_FILE_DIR'] = 'data/sessions'
-```
+1. 使用 Flask-Session 文件存储（作为基础）
+2. 使用 gevent worker 替代 sync worker（核心修复）
+   - gevent 是协程模型，所有请求在同一进程处理
+   - 避免多进程 session 共享问题
 
-**Git 提交**: be654df
+**Git 提交**: 78f8a52

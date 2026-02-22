@@ -574,6 +574,15 @@
         let currentUser = null;
         const API_BASE = '/api';
         
+        // 全局 fetch 包装，确保所有请求发送 credentials
+        const originalFetch = window.fetch;
+        window.fetch = async function(url, options = {}) {
+            if (!options.credentials) {
+                options.credentials = 'include';
+            }
+            return originalFetch(url, options);
+        };
+        
         document.addEventListener('DOMContentLoaded', async () => { 
             await checkAuth();
             await loadVersion(); 
@@ -584,7 +593,7 @@
         
         async function checkAuth() {
             try {
-                const res = await fetch(`${API_BASE}/auth/me`);
+                const res = await fetch(`${API_BASE}/auth/me`, { credentials: 'include' });
                 if (res.ok) {
                     currentUser = await res.json();
                     updateUIForLoggedIn();
