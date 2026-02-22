@@ -1351,3 +1351,63 @@ const res = await fetch(`/api/cp${id ? '/'+id : ''}`, {
 4. 添加全局 fetch 包装器自动发送 credentials
 
 **Git 提交**: 660d030
+
+---
+
+## BUG-057: guest 角色可以使用导入/导出/批量操作功能
+**日期**: 2026-02-22
+**版本**: v0.7.1
+**状态**: ✅ 已修复
+
+**问题描述**: guest 角色可以使用导入、导出、批量操作功能，但需求规格书要求禁止
+
+**根本原因**: 
+1. 后端：导入/导出/批量操作 API 缺少 @guest_required 装饰器
+2. 前端：相关按钮没有根据角色隐藏
+
+**修复方案**: 
+1. 后端：为以下 API 添加 @guest_required 装饰器
+   - /api/tc/batch/status
+   - /api/tc/batch/target_date
+   - /api/tc/batch/dv_milestone
+   - /api/cp/batch/priority
+   - /api/import/template
+   - /api/import
+   - /api/export
+
+2. 前端：隐藏 guest 角色的导入/导出/批量操作按钮
+
+**Git 提交**: 6342d8f
+
+---
+
+## BUG-058: CP/TC 详情 API 未返回 created_by 字段
+**日期**: 2026-02-22
+**版本**: v0.7.1
+**状态**: ✅ 已修复
+
+**问题描述**: 查看 CP/TC 详情时，未返回 created_by 字段
+
+**根本原因**: 
+1. sqlite3.Row 不支持 .get() 方法，导致代码异常
+2. created_by 字段未正确从数据库传递到响应
+
+**修复方案**: 
+```python
+# 将 sqlite3.Row 转换为字典
+cp_dict = dict(cp)
+created_by = cp_dict.get("created_by", "") or ""
+```
+
+---
+
+## BUG-059: sqlite3.Row 访问字段方式错误
+**日期**: 2026-02-22
+**版本**: v0.7.1
+**状态**: ✅ 已修复（与 BUG-058 同一修复）
+
+**问题描述**: sqlite3.Row 对象不支持 .get() 方法，导致访问 created_by 时报错
+
+**根本原因**: 使用了 cp.get("created_by") 而非 dict(cp).get("created_by")
+
+**修复方案**: 先将 sqlite3.Row 转换为字典再访问字段

@@ -776,17 +776,24 @@ def get_coverpoint(cp_id):
     if not cp:
         return jsonify({"error": "Cover Point 不存在"}), 404
 
+    # 将 sqlite3.Row 转换为字典
+    cp_dict = dict(cp)
+
+    # 处理 created_by 字段（可能不存在于旧数据中）
+    created_by = cp_dict.get("created_by", "") or ""
+
     return jsonify(
         {
-            "id": cp["id"],
-            "project_id": cp["project_id"],
-            "feature": cp["feature"],
-            "sub_feature": cp["sub_feature"],
-            "cover_point": cp["cover_point"],
-            "cover_point_details": cp["cover_point_details"],
-            "comments": cp["comments"],
-            "priority": cp["priority"],
-            "created_at": cp["created_at"],
+            "id": cp_dict["id"],
+            "project_id": cp_dict["project_id"],
+            "feature": cp_dict["feature"],
+            "sub_feature": cp_dict["sub_feature"],
+            "cover_point": cp_dict["cover_point"],
+            "cover_point_details": cp_dict["cover_point_details"],
+            "comments": cp_dict["comments"],
+            "priority": cp_dict["priority"],
+            "created_at": cp_dict["created_at"],
+            "created_by": created_by,
         }
     )
 
@@ -1065,6 +1072,9 @@ def get_testcase(tc_id):
     if not tc:
         return jsonify({"error": "Test Case 不存在"}), 404
 
+    # 将 sqlite3.Row 转换为字典
+    tc_dict = dict(tc)
+
     # 获取关联的 CP
     cursor.execute(
         """
@@ -1076,27 +1086,31 @@ def get_testcase(tc_id):
     )
     connected_cps = [row["id"] for row in cursor.fetchall()]
 
+    # 处理 created_by 字段（可能不存在于旧数据中）
+    created_by = tc_dict.get("created_by", "") or ""
+
     return jsonify(
         {
-            "id": tc["id"],
-            "project_id": tc["project_id"],
-            "dv_milestone": tc["dv_milestone"],
-            "testbench": tc["testbench"],
-            "category": tc["category"],
-            "owner": tc["owner"],
-            "test_name": tc["test_name"],
-            "scenario_details": tc["scenario_details"],
-            "checker_details": tc["checker_details"],
-            "coverage_details": tc["coverage_details"],
-            "comments": tc["comments"],
-            "status": tc["status"],
-            "created_at": tc["created_at"],
-            "coded_date": tc["coded_date"],
-            "fail_date": tc["fail_date"],
-            "pass_date": tc["pass_date"],
-            "removed_date": tc["removed_date"],
-            "target_date": tc["target_date"],
+            "id": tc_dict["id"],
+            "project_id": tc_dict["project_id"],
+            "dv_milestone": tc_dict["dv_milestone"],
+            "testbench": tc_dict["testbench"],
+            "category": tc_dict["category"],
+            "owner": tc_dict["owner"],
+            "test_name": tc_dict["test_name"],
+            "scenario_details": tc_dict["scenario_details"],
+            "checker_details": tc_dict["checker_details"],
+            "coverage_details": tc_dict["coverage_details"],
+            "comments": tc_dict["comments"],
+            "status": tc_dict["status"],
+            "created_at": tc_dict["created_at"],
+            "coded_date": tc_dict["coded_date"],
+            "fail_date": tc_dict["fail_date"],
+            "pass_date": tc_dict["pass_date"],
+            "removed_date": tc_dict["removed_date"],
+            "target_date": tc_dict["target_date"],
             "connected_cps": connected_cps,
+            "created_by": created_by,
         }
     )
 

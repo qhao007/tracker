@@ -763,10 +763,8 @@ class TestImportExportPermission:
         # 导出 TC
         response = client.get(f'/api/export?project_id={test_project_with_data}&type=tc&format=json')
 
-        # 根据需求规格书，guest 不应能导出
-        # 当前实现没有权限控制，返回 200，但预期行为应该是 403
-        # 这里测试当前实际行为
-        assert response.status_code == 200  # TODO: 等后端实现 guest_required 后应改为 403
+        # guest 不应能导出，返回 403
+        assert response.status_code == 403
 
     def test_admin_can_import(self, client, test_project_with_data):
         """管理员应能导入数据"""
@@ -859,3 +857,128 @@ class TestProjectDelete:
         # 当前实现只标记 is_archived，没有创建 JSON 备份
         # TODO: 需要后端实现自动归档功能
         assert response.status_code == 200
+
+
+class TestCreatedBy:
+    """created_by 字段测试"""
+
+    @pytest.fixture
+    def project_for_created_by(self, client):
+        """创建测试项目"""
+        # 用 admin 登录
+        client.post('/api/auth/login',
+            data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+            content_type='application/json')
+
+        # 创建项目
+        unique_name = f"testcb_project_{int(time.time())}"
+        client.post('/api/projects',
+            data=json.dumps({'name': unique_name}),
+            content_type='application/json')
+
+        # 获取项目 ID
+        projects_resp = client.get('/api/projects')
+        projects = projects_resp.get_json()
+        project = next((p for p in projects if p['name'] == unique_name), None)
+
+        return project['id']
+
+    def test_create_cp_has_created_by(self, client, project_for_created_by):
+        """创建 CP 时应自动填充 created_by"""
+        # 用 admin 登录
+        client.post('/api/auth/login',
+            data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+            content_type='application/json')
+
+        # 创建 CP
+        response = client.post('/api/cp',
+            data=json.dumps({
+                'project_id': project_for_created_by,
+                'feature': 'TestFeature',
+                'sub_feature': 'TestSubFeature',
+                'cover_point': 'TestCP',
+                'priority': 'P1'
+            }),
+            content_type='application/json')
+
+        assert response.status_code == 200
+        data = response.get_json()
+        cp_id = data.get('item', {}).get('id')
+
+        # 获取 CP 详情，验证 created_by
+        get_resp = client.get(f'/api/cp/{cp_id}?project_id={project_for_created_by}')
+        cp_data = get_resp.get_json()
+
+        assert cp_data is not None
+        assert 'created_by' in cp_data
+        assert cp_data['created_by'] == 'admin'
+
+    def test_create_tc_has_created_by(self, client, project_for_created_by):
+        """创建 TC 时应自动填充 created_by"""
+        # 用 admin 登录
+        client.post('/api/auth/login',
+            data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+            content_type='application/json')
+
+        # 创建 TC
+        response = client.post('/api/tc',
+            data=json.dumps({
+                'project_id': project_for_created_by,
+                'testbench': 'TB1',
+                'category': 'Category1',
+                'owner': 'Owner1',
+                'test_name': 'TestTC',
+                'status': 'OPEN'
+            }),
+            content_type='application/json')
+
+        assert response.status_code == 200
+        data = response.get_json()
+        tc_id = data.get('item', {}).get('id')
+
+        # 获取 TC 详情，验证 created_by
+        get_resp = client.get(f'/api/tc/{tc_id}?project_id={project_for_created_by}')
+        tc_data = get_resp.get_json()
+
+        assert tc_data is not None
+        assert 'created_by' in tc_data
+        assert tc_data['created_by'] == 'admin'
+
+    def test_user_created_by(self, client, project_for_created_by):
+        """普通用户创建的 CP 应记录用户名"""
+        # 先创建普通用户并登录
+        client.post('/api/auth/login',
+            data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+            content_type='application/json')
+
+        unique_name = f"testuser_cb_{int(time.time())}"
+        client.post('/api/users',
+            data=json.dumps({'username': unique_name, 'password': 'test123', 'role': 'user'}),
+            content_type='application/json')
+
+        client.post('/api/auth/logout')
+        client.post('/api/auth/login',
+            data=json.dumps({'username': unique_name, 'password': 'test123'}),
+            content_type='application/json')
+
+        # 创建 CP
+        response = client.post('/api/cp',
+            data=json.dumps({
+                'project_id': project_for_created_by,
+                'feature': 'UserFeature',
+                'sub_feature': 'UserSubFeature',
+                'cover_point': 'UserCP',
+                'priority': 'P2'
+            }),
+            content_type='application/json')
+
+        assert response.status_code == 200
+        data = response.get_json()
+        cp_id = data.get('item', {}).get('id')
+
+        # 获取 CP 详情，验证 created_by 为创建者用户名
+        get_resp = client.get(f'/api/cp/{cp_id}?project_id={project_for_created_by}')
+        cp_data = get_resp.get_json()
+
+        assert cp_data is not None
+        assert cp_data['created_by'] == unique_name
