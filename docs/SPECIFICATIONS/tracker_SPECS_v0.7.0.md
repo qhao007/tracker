@@ -389,5 +389,5 @@ const value = obj?.nested?.prop;
 
 **相关文档**:
 - 总体规格: `SPECIFICATIONS/tracker_OVERALL_SPECS.md`
-- Bug 追踪: `../BUGLOG/tracker_BUGLOG.md`
+- Bug 追踪: `../BUGLOG/tracker_BUG_RECORD.md`
 - 需求来源: `/projects/management/feedbacks/reviewed/tracker_FEATURE_REQUESTS_v0.6.0_20260207.md`
