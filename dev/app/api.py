@@ -311,7 +311,7 @@ def create_project():
 
     # 添加到项目列表
     project = {
-        "id": len(projects) + 1,
+        "id": max([p["id"] for p in projects], default=0) + 1,
         "name": name,
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "is_archived": False,
@@ -466,7 +466,7 @@ def restore_project():
 
     # 添加到项目列表
     project = {
-        "id": len(projects) + 1,
+        "id": max([p["id"] for p in projects], default=0) + 1,
         "name": project_name,
         "created_at": project_data.get("created_at", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
         "is_archived": False,
@@ -569,7 +569,7 @@ def restore_project_upload():
 
     # 添加到项目列表
     project = {
-        "id": len(projects) + 1,
+        "id": max([p["id"] for p in projects], default=0) + 1,
         "name": project_name,
         "created_at": project_data.get("created_at", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
         "is_archived": False,
@@ -674,6 +674,7 @@ def get_coverpoints():
                 "comments": row["comments"],
                 "priority": row["priority"],
                 "created_at": row["created_at"],
+                "created_by": row.get("created_by", ""),
                 "coverage": coverage,
                 "coverage_detail": f"{passed}/{total}",
             }
@@ -698,13 +699,24 @@ def create_coverpoint():
     if not project:
         return jsonify({"error": "项目不存在"}), 404
 
+    # 获取当前登录用户
+    current_username = session.get(SESSION_USERNAME_KEY, "anonymous")
+
     conn = get_db(project["name"])
     cursor = conn.cursor()
 
+    # 确保 created_by 列存在
+    try:
+        cursor.execute("ALTER TABLE cover_point ADD COLUMN created_by TEXT")
+    except sqlite3.OperationalError:
+        pass  # 列已存在
+
+    today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     cursor.execute(
         """
-        INSERT INTO cover_point (project_id, feature, sub_feature, cover_point, cover_point_details, comments, priority, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO cover_point (project_id, feature, sub_feature, cover_point, cover_point_details, comments, priority, created_at, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     """,
         (
             project_id,
@@ -714,7 +726,8 @@ def create_coverpoint():
             data.get("cover_point_details", ""),
             data.get("comments", ""),
             data.get("priority", "P0"),
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            today,
+            current_username,
         ),
     )
 
@@ -733,7 +746,8 @@ def create_coverpoint():
                 "cover_point_details": data.get("cover_point_details", ""),
                 "comments": data.get("comments", ""),
                 "priority": data.get("priority", "P0"),
-                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "created_at": today,
+                "created_by": current_username,
             },
         }
     )
@@ -1018,6 +1032,7 @@ def get_testcases():
                 "pass_date": row["pass_date"],
                 "removed_date": row["removed_date"],
                 "target_date": row["target_date"],
+                "created_by": row.get("created_by", ""),
                 "connected_cps": connected_cps,
             }
         )
@@ -1100,8 +1115,17 @@ def create_testcase():
     if not project:
         return jsonify({"error": "项目不存在"}), 404
 
+    # 获取当前登录用户
+    current_username = session.get(SESSION_USERNAME_KEY, "anonymous")
+
     conn = get_db(project["name"])
     cursor = conn.cursor()
+
+    # 确保 created_by 列存在
+    try:
+        cursor.execute("ALTER TABLE test_case ADD COLUMN created_by TEXT")
+    except sqlite3.OperationalError:
+        pass  # 列已存在
 
     today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -1110,9 +1134,9 @@ def create_testcase():
         INSERT INTO test_case (
             project_id, dv_milestone, testbench, category, owner, test_name, 
             scenario_details, checker_details, coverage_details, comments, priority,
-            status, created_at, coded_date, fail_date, pass_date, removed_date, target_date
+            status, created_at, coded_date, fail_date, pass_date, removed_date, target_date, created_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, NULL, NULL, NULL, NULL, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, NULL, NULL, NULL, NULL, ?, ?)
     """,
         (
             project_id,
@@ -1128,6 +1152,7 @@ def create_testcase():
             data.get("priority", "P0"),
             today,
             data.get("target_date", ""),
+            current_username,
         ),
     )
 
@@ -1169,6 +1194,7 @@ def create_testcase():
                 "removed_date": None,
                 "target_date": data.get("target_date", ""),
                 "connected_cps": data.get("connections", []),
+                "created_by": current_username,
             },
         }
     )
