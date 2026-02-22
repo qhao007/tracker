@@ -1031,6 +1031,45 @@ function loadTCFilterOptions() {
 
 **Git 提交**: `15ca1e2 fix: 修复 CSV 导出 HTTP Header 中文编码问题`
 
+### BUG-047: 项目 ID 生成逻辑错误导致数据冲突
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Critical |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-22 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-02-22 |
+| **修复人** | 小栗子 |
+
+**描述**: 创建项目时使用 `len(projects) + 1` 作为新项目 ID，而非 `max(id) + 1`，导致多项目共享同一 ID。2026-02-21 23:03 在生产环境创建了名为 "test" 的项目，错误地使用了 ID=3，与已有的 EX5 项目（ID=3）产生冲突。
+
+**影响范围**: 
+- 生产环境 `user_data/projects.json` 包含重复 ID
+- API 返回冲突的项目列表
+- 数据完整性受损
+
+**根因分析**:
+- `create_project()` 函数位于 `dev/app/api.py`
+- ID 生成逻辑: `"id": len(projects) + 1`
+- 当 projects 列表长度为 2 时，新项目 ID = 2 + 1 = 3
+- 如果已有 ID=3 的项目，则产生冲突
+
+**修复方案**:
+```python
+# 修改前
+"id": len(projects) + 1,
+
+# 修改后
+"id": max([p["id"] for p in projects], default=0) + 1,
+```
+
+**验证**: 
+- 生产环境 projects.json 已清理冲突数据
+- API 返回正确的项目列表（无重复 ID）
+
+**Git 提交**: `c139a60 fix: 修复项目 ID 生成逻辑，避免 ID 冲突`
+
 ## 3. 测试用例
 
 ### 测试覆盖矩阵
