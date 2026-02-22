@@ -1331,50 +1331,23 @@ const res = await fetch(`/api/cp${id ? '/'+id : ''}`, {
 
 **Git 提交**: dc429b2
 
----
-
 ## BUG-055: 刷新页面间歇性 401 错误
 **日期**: 2026-02-22
 **版本**: v0.7.1
 **状态**: ✅ 已修复
 
-**问题描述**: 快速刷新浏览器时，偶尔出现项目无法加载的问题，需要再次刷新才能恢复
+**问题描述**: 登录后刷新浏览器，偶尔会退出登录需要重新登录
 
 **根本原因**: 
+多层问题叠加：
 1. Flask 默认 session 存储在进程内存中，多 worker 时请求分发到不同 worker
-2. Flask-Session 文件存储在多进程环境下仍有竞态条件
+2. SECRET_KEY 每次服务启动时生成新的随机值，导致 session 签名失效
+3. 前端 fetch 请求缺少 credentials: 'include'
 
 **修复方案**: 
-1. 使用 Flask-Session 文件存储（作为基础）
-2. 使用 gevent worker 替代 sync worker（核心修复）
-   - gevent 是协程模型，所有请求在同一进程处理
-   - 避免多进程 session 共享问题
+1. 使用 Flask-Session 文件存储（基础支持）
+2. 使用 gevent worker 替代 sync worker（核心修复 - 协程模型避免多进程）
+3. 使用固定 SECRET_KEY 确保 session 签名一致
+4. 添加全局 fetch 包装器自动发送 credentials
 
-**Git 提交**: 78f8a52
-
----
-
-## BUG-056: 前端 fetch 请求缺少 credentials 导致 session 丢失
-**日期**: 2026-02-22
-**版本**: v0.7.1
-**状态**: ✅ 已修复
-
-**问题描述**: 登录后刷新页面，偶尔会退出登录需要重新登录
-
-**根本原因**: 
-1. checkAuth 函数 fetch 请求缺少 credentials: 'include'
-2. 其他多个 API 调用也缺少 credentials
-
-**修复方案**: 
-添加全局 fetch 包装器，确保所有请求自动包含 credentials：
-```javascript
-const originalFetch = window.fetch;
-window.fetch = async function(url, options = {}) {
-    if (!options.credentials) {
-        options.credentials = 'include';
-    }
-    return originalFetch(url, options);
-};
-```
-
-**Git 提交**: 75fabb5
+**Git 提交**: 660d030
