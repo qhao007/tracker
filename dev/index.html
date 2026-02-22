@@ -1175,7 +1175,7 @@
             e.preventDefault();
             const id = document.getElementById('cpId').value;
             const data = { project_id: currentProject.id, priority: document.getElementById('cpPriority').value, feature: document.getElementById('cpFeature').value, sub_feature: document.getElementById('cpSubFeature').value, cover_point: document.getElementById('cpCoverPoint').value, cover_point_details: document.getElementById('cpDetails').value, comments: document.getElementById('cpComments').value };
-            try { const res = await fetch(`/api/cp${id ? '/'+id : ''}`, { method: id ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }); const result = await res.json(); if (result.success) { closeModal('cpModal'); await Promise.all([loadCP(), loadStats()]); } else { alert(result.error || '保存失败'); } } catch (err) { alert('保存失败: ' + err); }
+            try { const res = await fetch(`/api/cp${id ? '/'+id : ''}`, { method: id ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data), credentials: 'include' }); const result = await res.json(); if (result.success) { closeModal('cpModal'); await Promise.all([loadCP(), loadStats()]); } else { alert(result.error || result.message || '保存失败'); } } catch (err) { alert('保存失败: ' + err); }
         }
         
         async function saveTC(e) {
@@ -1183,7 +1183,7 @@
             const id = document.getElementById('tcId').value;
             const connections = []; document.querySelectorAll('#cpCheckboxes input:checked').forEach(cb => connections.push(parseInt(cb.value)));
             const data = { project_id: currentProject.id, dv_milestone: document.getElementById('tcDvMilestone').value, target_date: document.getElementById('tcTargetDate').value, testbench: document.getElementById('tcTestbench').value, category: document.getElementById('tcCategory').value, owner: document.getElementById('tcOwner').value, test_name: document.getElementById('tcTestName').value, scenario_details: document.getElementById('tcScenario').value, checker_details: document.getElementById('tcChecker').value, coverage_details: document.getElementById('tcCoverage').value, comments: document.getElementById('tcComments').value, connections };
-            try { const res = await fetch(`/api/tc${id ? '/'+id : ''}`, { method: id ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }); const result = await res.json(); if (result.success) { closeModal('tcModal'); await Promise.all([loadTC(), loadStats()]); } else { alert(result.error || '保存失败'); } } catch (err) { alert('保存失败: ' + err); }
+            try { const res = await fetch(`/api/tc${id ? '/'+id : ''}`, { method: id ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data), credentials: 'include' }); const result = await res.json(); if (result.success) { closeModal('tcModal'); await Promise.all([loadTC(), loadStats()]); } else { alert(result.error || result.message || '保存失败'); } } catch (err) { alert('保存失败: ' + err); }
         }
         
         async function deleteCP(id) { 
