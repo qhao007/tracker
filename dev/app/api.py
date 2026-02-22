@@ -674,7 +674,7 @@ def get_coverpoints():
                 "comments": row["comments"],
                 "priority": row["priority"],
                 "created_at": row["created_at"],
-                "created_by": row.get("created_by", ""),
+                "created_by": dict(row).get("created_by", ""),
                 "coverage": coverage,
                 "coverage_detail": f"{passed}/{total}",
             }
@@ -1032,7 +1032,7 @@ def get_testcases():
                 "pass_date": row["pass_date"],
                 "removed_date": row["removed_date"],
                 "target_date": row["target_date"],
-                "created_by": row.get("created_by", ""),
+                "created_by": dict(row).get("created_by", ""),
                 "connected_cps": connected_cps,
             }
         )
