@@ -1070,6 +1070,44 @@ function loadTCFilterOptions() {
 
 **Git 提交**: `c139a60 fix: 修复项目 ID 生成逻辑，避免 ID 冲突`
 
+### BUG-048: sqlite3.Row 不支持 get() 方法导致 API 500 错误
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-22 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-02-22 |
+| **修复人** | 小栗子 |
+
+**描述**: 调用 `/api/tc?project_id=2` 和 `/api/cp?project_id=2` 查询列表时返回 500 错误。
+
+**错误信息**:
+```
+AttributeError: 'sqlite3.Row' object has no attribute 'get'
+```
+
+**根因分析**:
+- 位置: `dev/app/api.py` 第 677 行和 1035 行
+- 代码: `"created_by": row.get("created_by", "")`
+- SQLite 的 `row` 对象不支持 `.get()` 方法，需要转换为 dict
+
+**修复方案**:
+```python
+# 修改前
+"created_by": row.get("created_by", ""),
+
+# 修改后
+"created_by": dict(row).get("created_by", ""),
+```
+
+**验证**: 
+- TC 列表和 CP 列表 API 正常返回 200
+- created_by 字段正确显示
+
+**Git 提交**: `cdc0bcc fix: 修复 created_by 字段查询问题`
+
 ## 3. 测试用例
 
 ### 测试覆盖矩阵
