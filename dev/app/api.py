@@ -1371,6 +1371,7 @@ def update_status(tc_id):
 
 
 @api.route("/api/tc/batch/status", methods=["POST"])
+@guest_required
 def batch_update_tc_status():
     """批量更新 TC 状态"""
     data = request.json
@@ -1442,8 +1443,10 @@ def batch_update_tc_status():
 
     return jsonify({"success": success_count, "failed": len(tc_ids) - success_count})
 
+@guest_required
 
 @api.route("/api/tc/batch/target_date", methods=["POST"])
+@guest_required
 def batch_update_tc_target_date():
     """批量更新 TC Target Date"""
     data = request.json
@@ -1471,9 +1474,12 @@ def batch_update_tc_target_date():
     conn.commit()
 
     return jsonify({"success": success_count, "failed": len(tc_ids) - success_count})
+@guest_required
 
+@guest_required
 
 @api.route("/api/tc/batch/dv_milestone", methods=["POST"])
+@guest_required
 def batch_update_tc_dv_milestone():
     """批量更新 TC DV Milestone"""
     data = request.json
@@ -1504,6 +1510,7 @@ def batch_update_tc_dv_milestone():
 
 
 @api.route("/api/cp/batch/priority", methods=["POST"])
+@guest_required
 def batch_update_cp_priority():
     """批量更新 CP Priority"""
     data = request.json
@@ -1660,6 +1667,7 @@ from openpyxl.styles import Font, Alignment
 
 
 @api.route("/api/import/template", methods=["GET"])
+@guest_required
 def get_import_template():
     """下载导入模板"""
     template_type = request.args.get("type", "cp")
@@ -1711,9 +1719,12 @@ def get_import_template():
         download_name=filename,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+@guest_required
 
+@guest_required
 
 @api.route("/api/import", methods=["POST"])
+@guest_required
 def import_data():
     """执行导入"""
     data = request.json
@@ -2091,6 +2102,7 @@ def import_tc(project, ws, headers, is_csv=False, csv_data=None):
 
 
 @api.route("/api/export", methods=["GET"])
+@guest_required
 def export_data():
     """导出数据 - 必须在静态文件路由之前定义"""
     project_id = request.args.get("project_id", type=int)

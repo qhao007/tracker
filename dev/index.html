@@ -239,8 +239,8 @@
             <div class="toolbar">
                 <div class="toolbar-left">
                     <button class="btn btn-primary" onclick="openCPModal()">+ 添加 CP</button>
-                    <button class="btn" onclick="openImportModal('cp')">📥 导入 CP</button>
-                    <button class="btn" onclick="exportData('cp')">📤 导出 CP</button>
+                    <button class="btn" id="btnImportCP" onclick="openImportModal('cp')">📥 导入 CP</button>
+                    <button class="btn" id="btnExportCP" onclick="exportData('cp')">📤 导出 CP</button>
                     <input type="text" class="search-input" placeholder="搜索..." onkeyup="filterCP(this.value)">
                     <select id="cpFeatureFilter" onchange="filterCPByFeature()"><option value="">全部 Feature</option></select>
                     <select id="cpPriorityFilter" onchange="filterCPByPriority()"><option value="">全部 Priority</option><option value="P0">P0</option><option value="P1">P1</option><option value="P2">P2</option></select>
@@ -295,12 +295,12 @@
             
             <div class="toolbar">
                 <div class="toolbar-left">
-            <button class="btn" onclick="showBatchStatusModal()">📋 批量更新状态</button>
-            <button class="btn" onclick="showBatchTargetDateModal()">📅 批量修改 Target Date</button>
-            <button class="btn" onclick="showBatchDvMilestoneModal()">🏷️ 批量修改 DV Milestone</button>
+            <button class="btn" id="btnBatchStatus" onclick="showBatchStatusModal()">📋 批量更新状态</button>
+            <button class="btn" id="btnBatchTargetDate" onclick="showBatchTargetDateModal()">📅 批量修改 Target Date</button>
+            <button class="btn" id="btnBatchDvMilestone" onclick="showBatchDvMilestoneModal()">🏷️ 批量修改 DV Milestone</button>
                     <button class="btn btn-primary" onclick="openTCModal()">+ 添加 TC</button>
-                    <button class="btn" onclick="openImportModal('tc')">📥 导入 TC</button>
-                    <button class="btn" onclick="exportData('tc')">📤 导出 TC</button>
+                    <button class="btn" id="btnImportTC" onclick="openImportModal('tc')">📥 导入 TC</button>
+                    <button class="btn" id="btnExportTC" onclick="exportData('tc')">📤 导出 TC</button>
                     <input type="text" class="search-input" placeholder="搜索..." onkeyup="filterTC(this.value)">
                     <select onchange="sortTC(this.value)"><option value="id">按ID排序</option><option value="testbench">按TestBench</option><option value="owner">按Owner</option><option value="status">按状态</option></select>
                 </div>
@@ -628,6 +628,17 @@
             if (userManageBtn) {
                 userManageBtn.style.display = currentUser.role === 'admin' ? 'inline-block' : 'none';
             }
+            
+            // 根据角色控制导入/导出/批量操作按钮（guest 禁止使用）
+            const isGuest = currentUser.role === 'guest';
+            const writeButtons = ['btnImportCP', 'btnExportCP', 'btnImportTC', 'btnExportTC', 
+                                 'btnBatchStatus', 'btnBatchTargetDate', 'btnBatchDvMilestone'];
+            writeButtons.forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) {
+                    btn.style.display = isGuest ? 'none' : 'inline-block';
+                }
+            });
         }
         
         function updateUIForLoggedOut() {
