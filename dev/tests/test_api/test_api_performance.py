@@ -24,18 +24,32 @@ def client():
         yield client
 
 
+@pytest.fixture
+def admin_client(client):
+    """创建已登录的管理员客户端"""
+    client.post('/api/auth/login',
+        data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+        content_type='application/json')
+    return client
+
+
 @pytest.fixture(scope='module')
 def test_project():
     """创建测试项目用于测试"""
     app = create_app(testing=True)
     with app.test_client() as client:
+        # 先登录
+        client.post('/api/auth/login',
+            data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+            content_type='application/json')
+
         name = f"Perf_Test_{int(time.time())}"
-        
+
         # 创建项目
         response = client.post('/api/projects',
                               data=json.dumps({'name': name}),
                               content_type='application/json')
-        
+
         if response.status_code == 200:
             data = json.loads(response.data)
             project_id = data['project']['id']
@@ -48,25 +62,25 @@ def test_project():
 
 
 @pytest.fixture
-def cleanup_tcs(client, test_project):
+def cleanup_tcs(admin_client, test_project):
     """清理测试创建的 TC"""
     created_ids = []
     yield created_ids
     for tc_id in created_ids:
         try:
-            client.delete(f'/api/tc/{tc_id}?project_id={test_project["id"]}')
+            admin_client.delete(f'/api/tc/{tc_id}?project_id={test_project["id"]}')
         except:
             pass
 
 
 @pytest.fixture
-def cleanup_cps(client, test_project):
+def cleanup_cps(admin_client, test_project):
     """清理测试创建的 CP"""
     created_ids = []
     yield created_ids
     for cp_id in created_ids:
         try:
-            client.delete(f'/api/cp/{cp_id}?project_id={test_project["id"]}')
+            admin_client.delete(f'/api/cp/{cp_id}?project_id={test_project["id"]}')
         except:
             pass
 
@@ -85,28 +99,28 @@ class TestAPISingleResponseTime:
         assert response.status_code == 200
         assert elapsed < 500, f"API响应时间 {elapsed:.2f}ms 超过 500ms"
     
-    def test_projects_list_response_time(self, client):
+    def test_projects_list_response_time(self, admin_client):
         """API-PERF-001: /api/projects 响应时间 < 500ms"""
         start = time.time()
-        response = client.get('/api/projects')
+        response = admin_client.get('/api/projects')
         elapsed = (time.time() - start) * 1000
-        
+
         assert response.status_code == 200
         assert elapsed < 500, f"API响应时间 {elapsed:.2f}ms 超过 500ms"
-    
-    def test_tc_list_response_time(self, client, test_project):
+
+    def test_tc_list_response_time(self, admin_client, test_project):
         """API-PERF-001: /api/tc 响应时间 < 500ms"""
         start = time.time()
-        response = client.get(f'/api/tc?project_id={test_project["id"]}')
+        response = admin_client.get(f'/api/tc?project_id={test_project["id"]}')
         elapsed = (time.time() - start) * 1000
-        
+
         assert response.status_code == 200
         assert elapsed < 500, f"API响应时间 {elapsed:.2f}ms 超过 500ms"
     
-    def test_cp_list_response_time(self, client, test_project):
+    def test_cp_list_response_time(self, admin_client, test_project):
         """API-PERF-001: /api/cp 响应时间 < 500ms"""
         start = time.time()
-        response = client.get(f'/api/cp?project_id={test_project["id"]}')
+        response = admin_client.get(f'/api/cp?project_id={test_project["id"]}')
         elapsed = (time.time() - start) * 1000
         
         assert response.status_code == 200
@@ -116,12 +130,12 @@ class TestAPISingleResponseTime:
 class TestBatchOperationResponseTime:
     """批量操作响应时间测试 (目标: < 1s for 10 items)"""
     
-    def test_batch_status_response_time(self, client, test_project, cleanup_tcs):
+    def test_batch_status_response_time(self, admin_client, test_project, cleanup_tcs):
         """API-PERF-002: 批量更新 10 个 TC 状态响应时间 < 1s"""
         # 创建 10 个 TC
         tc_ids = []
         for i in range(10):
-            create_resp = client.post('/api/tc',
+            create_resp = admin_client.post('/api/tc',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_Batch_{i}_{int(time.time())}',
@@ -135,7 +149,7 @@ class TestBatchOperationResponseTime:
                 cleanup_tcs.append(tc_ids[-1])
         
         start = time.time()
-        response = client.post('/api/tc/batch/status',
+        response = admin_client.post('/api/tc/batch/status',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'tc_ids': tc_ids,
@@ -147,12 +161,12 @@ class TestBatchOperationResponseTime:
         assert response.status_code == 200
         assert elapsed < 1000, f"批量操作响应时间 {elapsed:.2f}ms 超过 1000ms"
     
-    def test_batch_target_date_response_time(self, client, test_project, cleanup_tcs):
+    def test_batch_target_date_response_time(self, admin_client, test_project, cleanup_tcs):
         """API-PERF-002: 批量更新 10 个 TC Target Date 响应时间 < 1s"""
         # 创建 10 个 TC
         tc_ids = []
         for i in range(10):
-            create_resp = client.post('/api/tc',
+            create_resp = admin_client.post('/api/tc',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_Target_{i}_{int(time.time())}',
@@ -166,7 +180,7 @@ class TestBatchOperationResponseTime:
                 cleanup_tcs.append(tc_ids[-1])
         
         start = time.time()
-        response = client.post('/api/tc/batch/target_date',
+        response = admin_client.post('/api/tc/batch/target_date',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'tc_ids': tc_ids,
@@ -178,12 +192,12 @@ class TestBatchOperationResponseTime:
         assert response.status_code == 200
         assert elapsed < 1000, f"批量操作响应时间 {elapsed:.2f}ms 超过 1000ms"
     
-    def test_batch_priority_response_time(self, client, test_project, cleanup_cps):
+    def test_batch_priority_response_time(self, admin_client, test_project, cleanup_cps):
         """API-PERF-002: 批量更新 10 个 CP Priority 响应时间 < 1s"""
         # 创建 10 个 CP
         cp_ids = []
         for i in range(10):
-            create_resp = client.post('/api/cp',
+            create_resp = admin_client.post('/api/cp',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'feature': f'Feature_Prio_{i}_{int(time.time())}',
@@ -195,7 +209,7 @@ class TestBatchOperationResponseTime:
                 cleanup_cps.append(cp_ids[-1])
         
         start = time.time()
-        response = client.post('/api/cp/batch/priority',
+        response = admin_client.post('/api/cp/batch/priority',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'cp_ids': cp_ids,
@@ -211,11 +225,11 @@ class TestBatchOperationResponseTime:
 class TestListQueryResponseTime:
     """列表查询响应时间测试 (目标: < 500ms for 100 items)"""
     
-    def test_list_query_with_100_tcs(self, client, test_project, cleanup_tcs):
+    def test_list_query_with_100_tcs(self, admin_client, test_project, cleanup_tcs):
         """API-PERF-003: 查询 100 条 TC 数据响应时间 < 500ms"""
         # 创建 100 个 TC
         for i in range(100):
-            create_resp = client.post('/api/tc',
+            create_resp = admin_client.post('/api/tc',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_Perf_{i}_{int(time.time())}',
@@ -229,7 +243,7 @@ class TestListQueryResponseTime:
         
         # 查询列表
         start = time.time()
-        response = client.get(f'/api/tc?project_id={test_project["id"]}')
+        response = admin_client.get(f'/api/tc?project_id={test_project["id"]}')
         elapsed = (time.time() - start) * 1000
         
         assert response.status_code == 200
@@ -237,11 +251,11 @@ class TestListQueryResponseTime:
         assert len(data) >= 0  # 可能有其他测试数据
         assert elapsed < 500, f"查询响应时间 {elapsed:.2f}ms 超过 500ms"
     
-    def test_list_query_with_100_cps(self, client, test_project, cleanup_cps):
+    def test_list_query_with_100_cps(self, admin_client, test_project, cleanup_cps):
         """API-PERF-003: 查询 100 条 CP 数据响应时间 < 500ms"""
         # 创建 100 个 CP
         for i in range(100):
-            create_resp = client.post('/api/cp',
+            create_resp = admin_client.post('/api/cp',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'feature': f'Feature_Perf_{i}_{int(time.time())}',
@@ -253,7 +267,7 @@ class TestListQueryResponseTime:
         
         # 查询列表
         start = time.time()
-        response = client.get(f'/api/cp?project_id={test_project["id"]}')
+        response = admin_client.get(f'/api/cp?project_id={test_project["id"]}')
         elapsed = (time.time() - start) * 1000
         
         assert response.status_code == 200
@@ -265,20 +279,20 @@ class TestListQueryResponseTime:
 class TestStatsAPIResponseTime:
     """统计 API 响应时间测试 (目标: < 500ms)"""
     
-    def test_stats_api_response_time(self, client, test_project):
+    def test_stats_api_response_time(self, admin_client, test_project):
         """API-PERF-004: /api/stats 响应时间 < 500ms"""
         start = time.time()
-        response = client.get(f'/api/stats?project_id={test_project["id"]}')
+        response = admin_client.get(f'/api/stats?project_id={test_project["id"]}')
         elapsed = (time.time() - start) * 1000
         
         assert response.status_code == 200
         assert elapsed < 500, f"统计API响应时间 {elapsed:.2f}ms 超过 500ms"
     
-    def test_stats_api_with_data_response_time(self, client, test_project, cleanup_tcs, cleanup_cps):
+    def test_stats_api_with_data_response_time(self, admin_client, test_project, cleanup_tcs, cleanup_cps):
         """API-PERF-004: 有数据时 /api/stats 响应时间 < 500ms"""
         # 创建测试数据
         for i in range(10):
-            create_tc = client.post('/api/tc',
+            create_tc = admin_client.post('/api/tc',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_Stat_{i}_{int(time.time())}',
@@ -291,7 +305,7 @@ class TestStatsAPIResponseTime:
                 cleanup_tcs.append(json.loads(create_tc.data)['item']['id'])
         
         for i in range(5):
-            create_cp = client.post('/api/cp',
+            create_cp = admin_client.post('/api/cp',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'feature': f'Feature_Stat_{i}_{int(time.time())}',
@@ -302,7 +316,7 @@ class TestStatsAPIResponseTime:
                 cleanup_cps.append(json.loads(create_cp.data)['item']['id'])
         
         start = time.time()
-        response = client.get(f'/api/stats?project_id={test_project["id"]}')
+        response = admin_client.get(f'/api/stats?project_id={test_project["id"]}')
         elapsed = (time.time() - start) * 1000
         
         assert response.status_code == 200
@@ -314,13 +328,13 @@ class TestStatsAPIResponseTime:
 class TestFilterQueryResponseTime:
     """过滤查询响应时间测试 (目标: < 500ms)"""
     
-    def test_filter_query_response_time(self, client, test_project, cleanup_tcs):
+    def test_filter_query_response_time(self, admin_client, test_project, cleanup_tcs):
         """API-PERF-005: 过滤查询响应时间 < 500ms"""
         # 创建带不同属性的 TC
         for i in range(20):
             owner = 'OwnerA' if i % 2 == 0 else 'OwnerB'
             category = 'Sanity' if i % 3 == 0 else 'Feature'
-            create_resp = client.post('/api/tc',
+            create_resp = admin_client.post('/api/tc',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_Filter_{i}_{int(time.time())}',
@@ -334,17 +348,17 @@ class TestFilterQueryResponseTime:
         
         # 按 owner 过滤
         start = time.time()
-        response = client.get(f'/api/tc?project_id={test_project["id"]}&owner=OwnerA')
+        response = admin_client.get(f'/api/tc?project_id={test_project["id"]}&owner=OwnerA')
         elapsed = (time.time() - start) * 1000
         
         assert response.status_code == 200
         assert elapsed < 500, f"过滤查询响应时间 {elapsed:.2f}ms 超过 500ms"
     
-    def test_combined_filter_response_time(self, client, test_project, cleanup_tcs):
+    def test_combined_filter_response_time(self, admin_client, test_project, cleanup_tcs):
         """API-PERF-005: 组合过滤查询响应时间 < 500ms"""
         # 创建带不同属性的 TC
         for i in range(20):
-            create_resp = client.post('/api/tc',
+            create_resp = admin_client.post('/api/tc',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_Comb_{i}_{int(time.time())}',
@@ -359,18 +373,18 @@ class TestFilterQueryResponseTime:
         
         # 组合过滤
         start = time.time()
-        response = client.get(
+        response = admin_client.get(
             f'/api/tc?project_id={test_project["id"]}&owner=Tester&dv_milestone=DV1.0')
         elapsed = (time.time() - start) * 1000
         
         assert response.status_code == 200
         assert elapsed < 500, f"组合过滤响应时间 {elapsed:.2f}ms 超过 500ms"
     
-    def test_sort_query_response_time(self, client, test_project, cleanup_tcs):
+    def test_sort_query_response_time(self, admin_client, test_project, cleanup_tcs):
         """API-PERF-005: 排序查询响应时间 < 500ms"""
         # 创建 TC
         for i in range(30):
-            create_resp = client.post('/api/tc',
+            create_resp = admin_client.post('/api/tc',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_Sort_{i}_{int(time.time())}',
@@ -384,7 +398,7 @@ class TestFilterQueryResponseTime:
         
         # 按 testbench 排序
         start = time.time()
-        response = client.get(
+        response = admin_client.get(
             f'/api/tc?project_id={test_project["id"]}&sort_by=testbench')
         elapsed = (time.time() - start) * 1000
         
@@ -395,13 +409,13 @@ class TestFilterQueryResponseTime:
 class TestThroughputPerformance:
     """吞吐量性能测试"""
     
-    def test_consecutive_requests_throughput(self, client, test_project):
+    def test_consecutive_requests_throughput(self, admin_client, test_project):
         """连续请求吞吐量测试 - 10 个请求平均 < 200ms"""
         response_times = []
         
         for i in range(10):
             start = time.time()
-            response = client.get(f'/api/tc?project_id={test_project["id"]}')
+            response = admin_client.get(f'/api/tc?project_id={test_project["id"]}')
             elapsed = (time.time() - start) * 1000
             response_times.append(elapsed)
             assert response.status_code == 200

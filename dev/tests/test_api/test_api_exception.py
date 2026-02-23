@@ -25,18 +25,32 @@ def client():
         yield client
 
 
+@pytest.fixture
+def admin_client(client):
+    """创建已登录的管理员客户端"""
+    client.post('/api/auth/login',
+        data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+        content_type='application/json')
+    return client
+
+
 @pytest.fixture(scope='module')
 def test_project():
     """创建测试项目用于测试"""
     app = create_app(testing=True)
     with app.test_client() as client:
+        # 先登录
+        client.post('/api/auth/login',
+            data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+            content_type='application/json')
+
         name = f"Exception_Test_{int(time.time())}"
-        
+
         # 创建项目
         response = client.post('/api/projects',
                               data=json.dumps({'name': name}),
                               content_type='application/json')
-        
+
         if response.status_code == 200:
             data = json.loads(response.data)
             project_id = data['project']['id']
@@ -49,25 +63,25 @@ def test_project():
 
 
 @pytest.fixture
-def cleanup_tcs(client, test_project):
+def cleanup_tcs(admin_client, test_project):
     """清理测试创建的 TC"""
     created_ids = []
     yield created_ids
     for tc_id in created_ids:
         try:
-            client.delete(f'/api/tc/{tc_id}?project_id={test_project["id"]}')
+            admin_client.delete(f'/api/tc/{tc_id}?project_id={test_project["id"]}')
         except:
             pass
 
 
 @pytest.fixture
-def cleanup_cps(client, test_project):
+def cleanup_cps(admin_client, test_project):
     """清理测试创建的 CP"""
     created_ids = []
     yield created_ids
     for cp_id in created_ids:
         try:
-            client.delete(f'/api/cp/{cp_id}?project_id={test_project["id"]}')
+            admin_client.delete(f'/api/cp/{cp_id}?project_id={test_project["id"]}')
         except:
             pass
 
@@ -105,10 +119,10 @@ class TestDatabaseFailure:
 class TestConcurrencyConflicts:
     """并发冲突异常场景测试"""
     
-    def test_concurrent_tc_modification(self, client, test_project, cleanup_tcs):
+    def test_concurrent_tc_modification(self, admin_client, test_project, cleanup_tcs):
         """API-EXCP-003: 并发修改同一 TC"""
         # 创建 TC
-        create_resp = client.post('/api/tc',
+        create_resp = admin_client.post('/api/tc',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'testbench': f'TB_Concurrent_{int(time.time())}',
@@ -129,6 +143,11 @@ class TestConcurrencyConflicts:
             app = create_app(testing=True)
             app.config['TESTING'] = True
             with app.test_client() as c:
+                # 先登录 - 模拟真实用户
+                c.post('/api/auth/login',
+                    data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+                    content_type='application/json')
+
                 resp = c.put(f'/api/tc/{tc_id}',
                     data=json.dumps({
                         'project_id': test_project["id"],
@@ -153,10 +172,10 @@ class TestConcurrencyConflicts:
         success_count = sum(1 for _, status in results if status == 200)
         assert success_count >= 1
     
-    def test_concurrent_tc_deletion(self, client, test_project):
+    def test_concurrent_tc_deletion(self, admin_client, test_project):
         """API-EXCP-004: 并发删除 TC"""
         # 创建 TC
-        create_resp = client.post('/api/tc',
+        create_resp = admin_client.post('/api/tc',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'testbench': f'TB_Delete_{int(time.time())}',
@@ -176,6 +195,11 @@ class TestConcurrencyConflicts:
             app = create_app(testing=True)
             app.config['TESTING'] = True
             with app.test_client() as c:
+                # 先登录 - 模拟真实用户
+                c.post('/api/auth/login',
+                    data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+                    content_type='application/json')
+
                 resp = c.delete(f'/api/tc/{tc_id}?project_id={test_project["id"]}')
                 results.append((thread_id, resp.status_code))
         
@@ -198,12 +222,12 @@ class TestConcurrencyConflicts:
 class TestBatchTransactionRollback:
     """批量操作事务回滚测试"""
     
-    def test_batch_operation_with_invalid_ids(self, client, test_project):
+    def test_batch_operation_with_invalid_ids(self, admin_client, test_project):
         """API-EXCP-005: 批量操作部分失败时回滚"""
         # 创建几个有效的 TC
         valid_ids = []
         for i in range(3):
-            create_resp = client.post('/api/tc',
+            create_resp = admin_client.post('/api/tc',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_Batch_{i}_{int(time.time())}',
@@ -219,7 +243,7 @@ class TestBatchTransactionRollback:
         mixed_ids = valid_ids + [99999, 88888, 77777]
         
         # 批量更新状态
-        response = client.post('/api/tc/batch/status',
+        response = admin_client.post('/api/tc/batch/status',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'tc_ids': mixed_ids,
@@ -237,16 +261,16 @@ class TestBatchTransactionRollback:
         # 清理
         for tc_id in valid_ids:
             try:
-                client.delete(f'/api/tc/{tc_id}?project_id={test_project["id"]}')
+                admin_client.delete(f'/api/tc/{tc_id}?project_id={test_project["id"]}')
             except:
                 pass
     
-    def test_batch_update_target_date_partial_failure(self, client, test_project, cleanup_tcs):
+    def test_batch_update_target_date_partial_failure(self, admin_client, test_project, cleanup_tcs):
         """API-EXCP-005: 批量更新 Target Date 部分失败"""
         # 创建 2 个有效 TC
         tc_ids = []
         for i in range(2):
-            create_resp = client.post('/api/tc',
+            create_resp = admin_client.post('/api/tc',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_Target_{i}_{int(time.time())}',
@@ -262,7 +286,7 @@ class TestBatchTransactionRollback:
         # 混合有效和无效 ID
         mixed_ids = tc_ids + [99999, 88888]
         
-        response = client.post('/api/tc/batch/target_date',
+        response = admin_client.post('/api/tc/batch/target_date',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'tc_ids': mixed_ids,
@@ -281,17 +305,17 @@ class TestBatchTransactionRollback:
 class TestInvalidRequestFormat:
     """无效请求格式测试"""
     
-    def test_invalid_json_format(self, client, test_project):
+    def test_invalid_json_format(self, admin_client, test_project):
         """API-EXCP-006: 无效 JSON 格式请求"""
-        response = client.post('/api/tc',
+        response = admin_client.post('/api/tc',
             data='not valid json',
             content_type='application/json')
         # 应该返回 400 错误
         assert response.status_code in [400, 500]
     
-    def test_missing_required_field_project_id(self, client):
+    def test_missing_required_field_project_id(self, admin_client):
         """API-EXCP-007: 创建 TC 缺少必填字段 project_id"""
-        response = client.post('/api/tc',
+        response = admin_client.post('/api/tc',
             data=json.dumps({
                 'testbench': f'TB_{int(time.time())}',
                 'test_name': f'TC_{int(time.time())}',
@@ -301,10 +325,10 @@ class TestInvalidRequestFormat:
             content_type='application/json')
         # 应该返回 400 错误
         assert response.status_code == 400
-    
-    def test_missing_required_field_feature(self, client, test_project):
+
+    def test_missing_required_field_feature(self, admin_client, test_project):
         """API-EXCP-007: 创建 CP 缺少必填字段 feature"""
-        response = client.post('/api/cp',
+        response = admin_client.post('/api/cp',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'cover_point': f'CP_{int(time.time())}'
@@ -313,9 +337,9 @@ class TestInvalidRequestFormat:
         # feature 是必填字段，应该返回错误或使用默认值
         assert response.status_code in [200, 400]
     
-    def test_wrong_field_type_numeric(self, client, test_project, cleanup_cps):
+    def test_wrong_field_type_numeric(self, admin_client, test_project, cleanup_cps):
         """API-EXCP-008: 字段类型错误 - numeric 字段传字符串"""
-        response = client.post('/api/cp',
+        response = admin_client.post('/api/cp',
             data=json.dumps({
                 'project_id': test_project["id"],  # 正确传递数字
                 'feature': f'Feature_{int(time.time())}',
@@ -327,9 +351,9 @@ class TestInvalidRequestFormat:
         if response.status_code == 200:
             cleanup_cps.append(json.loads(response.data)['item']['id'])
     
-    def test_extra_unknown_fields(self, client, test_project):
+    def test_extra_unknown_fields(self, admin_client, test_project):
         """API-EXCP-009: 传入未知字段"""
-        response = client.post('/api/tc',
+        response = admin_client.post('/api/tc',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'testbench': f'TB_{int(time.time())}',
@@ -353,10 +377,10 @@ class TestMethodNotAllowed:
         # GET /api/tc 是合法的，返回列表
         assert response.status_code == 200
     
-    def test_put_on_post_endpoint(self, client, test_project):
+    def test_put_on_post_endpoint(self, admin_client, test_project):
         """测试 PUT 方法"""
         # 创建 CP
-        create_resp = client.post('/api/cp',
+        create_resp = admin_client.post('/api/cp',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'feature': f'Feature_PUT_{int(time.time())}',
@@ -367,7 +391,7 @@ class TestMethodNotAllowed:
             cp_id = json.loads(create_resp.data)['item']['id']
             
             # 使用 PUT 更新
-            update_resp = client.put(f'/api/cp/{cp_id}',
+            update_resp = admin_client.put(f'/api/cp/{cp_id}',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'feature': f'Feature_Updated_{int(time.time())}'
@@ -376,12 +400,12 @@ class TestMethodNotAllowed:
             assert update_resp.status_code == 200
             
             # 清理
-            client.delete(f'/api/cp/{cp_id}?project_id={test_project["id"]}')
+            admin_client.delete(f'/api/cp/{cp_id}?project_id={test_project["id"]}')
     
-    def test_delete_on_get_endpoint(self, client, test_project):
+    def test_delete_on_get_endpoint(self, admin_client, test_project):
         """测试 DELETE 方法"""
         # 创建 TC
-        create_resp = client.post('/api/tc',
+        create_resp = admin_client.post('/api/tc',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'testbench': f'TB_Del_{int(time.time())}',
@@ -394,21 +418,21 @@ class TestMethodNotAllowed:
             tc_id = json.loads(create_resp.data)['item']['id']
             
             # 使用 DELETE 删除
-            del_resp = client.delete(f'/api/tc/{tc_id}?project_id={test_project["id"]}')
+            del_resp = admin_client.delete(f'/api/tc/{tc_id}?project_id={test_project["id"]}')
             assert del_resp.status_code == 200
 
 
 class TestResourceNotFound:
     """资源不存在测试"""
     
-    def test_cp_detail_not_found(self, client, test_project):
+    def test_cp_detail_not_found(self, admin_client, test_project):
         """获取不存在的 CP 详情"""
-        response = client.get(f'/api/cp/99999?project_id={test_project["id"]}')
+        response = admin_client.get(f'/api/cp/99999?project_id={test_project["id"]}')
         assert response.status_code == 404
     
-    def test_tc_detail_not_found(self, client, test_project):
+    def test_tc_detail_not_found(self, admin_client, test_project):
         """获取不存在的 TC 详情"""
-        response = client.get(f'/api/tc/99999?project_id={test_project["id"]}')
+        response = admin_client.get(f'/api/tc/99999?project_id={test_project["id"]}')
         assert response.status_code == 404
     
     def test_cp_tcs_not_found(self, client):
@@ -420,10 +444,10 @@ class TestResourceNotFound:
 class TestStatusTransitionErrors:
     """状态转换错误测试"""
     
-    def test_invalid_status_value(self, client, test_project, cleanup_tcs):
+    def test_invalid_status_value(self, admin_client, test_project, cleanup_tcs):
         """测试无效状态值"""
         # 创建 TC
-        create_resp = client.post('/api/tc',
+        create_resp = admin_client.post('/api/tc',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'testbench': f'TB_Status_{int(time.time())}',
@@ -437,7 +461,7 @@ class TestStatusTransitionErrors:
         cleanup_tcs.append(tc_id)
         
         # 使用无效状态更新
-        response = client.post(f'/api/tc/{tc_id}/status',
+        response = admin_client.post(f'/api/tc/{tc_id}/status',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'status': 'INVALID_STATUS'
@@ -445,9 +469,9 @@ class TestStatusTransitionErrors:
             content_type='application/json')
         assert response.status_code == 400
     
-    def test_status_update_nonexistent_tc(self, client, test_project):
+    def test_status_update_nonexistent_tc(self, admin_client, test_project):
         """更新不存在 TC 的状态"""
-        response = client.post('/api/tc/99999/status',
+        response = admin_client.post('/api/tc/99999/status',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'status': 'PASS'
