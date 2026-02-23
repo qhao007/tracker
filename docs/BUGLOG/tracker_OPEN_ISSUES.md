@@ -62,17 +62,6 @@
 | **建议方案** | 1. 购买域名并配置 SSL 证书（推荐 Let's Encrypt，免费）<br>2. 使用 Nginx 反向代理配置 HTTPS<br>3. 将 SESSION_COOKIE_SECURE 设为 True |
 | **详细说明** | 当前配置为宽松模式（HTTP 可用），适用于内网/开发环境。外网访问建议配置 HTTPS。<br><br>**配置步骤**：<br>1. 购买域名（腾讯云）<br>2. 安装 Nginx + Certbot<br>3. 获取 SSL 证书<br>4. 配置 Nginx 反向代理<br><br>**相关配置**：<br>- SESSION_COOKIE_SECURE = True（需 HTTPS）<br>- SESSION_COOKIE_HTTPONLY = True<br>- SESSION_COOKIE_SAMESITE = 'Lax' |
 
-### ISSUE-005
-
-| 属性 | 内容 |
-|------|------|
-| **发现日期** | 2026-02-23 |
-| **优先级** | P1 |
-| **状态** | 已修复 |
-| **问题描述** | `compatibility_test.py clean` 命令删除 users.db 后，测试环境无法登录（admin/guest 账号失效） |
-| **建议方案** | 在 clean 命令中增加重新初始化用户数据库的步骤 |
-| **详细说明** | v0.7.1 引入认证机制后，用户数据存储在 users.db 中。clean 命令删除该文件后未重新创建，导致所有用户无法登录。<br><br>**修复内容**：<br>1. `clean` 命令删除 users.db 后调用 `reinit_users_db()` 重新初始化<br>2. `test_api` 命令添加登录步骤，使用 cookie 调用认证后的 API<br>3. `projects.json` 重建时排除 users.db（系统数据库不是项目） |
-
 ---
 
 ## 定期 Review
@@ -88,4 +77,4 @@
 
 | ID | 问题描述 | 修复版本 | 修复日期 |
 |----|----------|----------|----------|
-| ISSUE-005 | clean 命令删除 users.db 导致无法登录 | v0.7.1 | 2026-02-23 |
+|      |          |          |          |

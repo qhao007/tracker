@@ -1439,3 +1439,38 @@ created_by = cp_dict.get("created_by", "") or ""
 **修复方案**: 
 - 移除创建用户表单中的访客角色选项
 - 访客通过"访客登录"按钮一键登录，无需手动创建
+
+---
+
+## BUG-062: clean 命令删除 users.db 导致无法登录
+**日期**: 2026-02-23
+**版本**: v0.7.1
+**状态**: ✅ 已修复
+
+**问题描述**: 运行 `compatibility_test.py clean` 后，测试环境无法登录（admin/guest 账号失效）
+
+**根本原因**: v0.7.1 引入认证机制后，用户数据存储在 users.db 中。clean 命令删除该文件后未重新创建，导致所有用户无法登录。
+
+**修复方案**: 
+```python
+# 在 clean() 函数中添加重新初始化用户数据库
+def reinit_users_db():
+    """重新初始化用户数据库（v0.7.1 认证必需）"""
+    # 临时修改环境变量让 auth 模块使用 test_data
+    os.environ['TRACKER_DATA_DIR'] = str(TEST_DATA_DIR)
+    
+    from app import create_app
+    from app.auth import init_users_db, create_default_users
+    
+    app = create_app()
+    with app.app_context():
+        init_users_db()
+        create_default_users()
+```
+
+**修复内容**:
+1. `clean` 命令删除 users.db 后调用 `reinit_users_db()` 重新初始化
+2. `test_api` 命令添加登录步骤，使用 cookie 调用认证后的 API
+3. `projects.json` 重建时排除 users.db（系统数据库不是项目）
+
+**Git 提交**: `3bf0790 fix: 适配 v0.7.1 认证机制`
