@@ -136,7 +136,7 @@ def clean():
         return True
     
     # 预置的原始测试数据（这些是项目自带的，需要保留）
-    PRESERVED_NAMES = ["Debugware", "EX5", "TestProject"]
+    PRESERVED_NAMES = ["EX5", "TestProject"]
     
     # 系统数据库文件（不删除，但也不作为项目处理）
     SYSTEM_DB = "users.db"
