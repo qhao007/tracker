@@ -7,8 +7,16 @@ import { test, expect } from '@playwright/test';
 
 test.describe('前端权限控制', () => {
   const BASE_URL = 'http://localhost:8081';
-  
-  test('1. guest 登录后应有用户管理入口', async ({ page }) => {
+
+  test('1. guest 登录后不应有用户管理入口', async ({ page, request }) => {
+    // 先启用 guest 用户
+    await request.post(`${BASE_URL}/api/auth/login`, {
+      data: { username: 'admin', password: 'admin123' }
+    });
+    await request.patch(`${BASE_URL}/api/users/2`, {
+      data: { is_active: true }
+    });
+
     await page.goto(BASE_URL);
     
     // guest 登录

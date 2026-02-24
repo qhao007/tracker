@@ -1,11 +1,25 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('v0.6.2 功能验证', () => {
-  test.beforeEach(async ({ page }) => {
-    // 访问测试版页面
+
+  /**
+   * 登录辅助函数 - v0.7.1 需要登录
+   */
+  async function loginAsAdmin(page: any) {
     await page.goto('http://localhost:8081');
-    // 等待页面加载
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
+    // 填写登录表单
+    await page.fill('#loginUsername', 'admin');
+    await page.fill('#loginPassword', 'admin123');
+    await page.click('#loginForm button[type="submit"]');
+    await page.waitForTimeout(1000);
+  }
+
+  test.beforeEach(async ({ page }) => {
+    // 登录 - v0.7.1 需要认证
+    await loginAsAdmin(page);
+    // 登录后等待页面加载完成
+    await page.waitForSelector('#projectSelector', { timeout: 10000 });
   });
 
   test('CP 详情按钮 - 展开/收起功能', async ({ page }) => {

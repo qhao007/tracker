@@ -26,9 +26,21 @@ async function waitForData(page: any) {
 
 test.describe('Tracker v0.3 功能测试', () => {
 
-  test.beforeEach(async ({ page }) => {
-    // 使用 domcontentloaded 替代 networkidle
+  /**
+   * 登录辅助函数 - v0.7.1 需要登录
+   */
+  async function loginAsAdmin(page: any) {
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    // 填写登录表单
+    await page.fill('#loginUsername', 'admin');
+    await page.fill('#loginPassword', 'admin123');
+    await page.click('#loginForm button[type="submit"]');
+    await page.waitForTimeout(1000);
+  }
+
+  test.beforeEach(async ({ page }) => {
+    // 登录 - v0.7.1 需要认证
+    await loginAsAdmin(page);
 
     // 等待项目选择器加载
     await expect(page.locator('#projectSelector')).toBeVisible();

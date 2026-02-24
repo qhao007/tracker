@@ -43,14 +43,20 @@ test.describe('登录功能', () => {
     await expect(userInfo).toBeVisible();
   });
 
-  test('访客登录应该成功', async ({ page }) => {
+  test('访客登录应该成功', async ({ page, request }) => {
     await page.goto(BASE_URL);
     await page.waitForLoadState('domcontentloaded');
 
+    // 先确保guest用户是启用状态 (可能之前的测试禁用了它)
+    await request.post(`${BASE_URL}/api/auth/login`, {
+      data: { username: 'admin', password: 'admin123' }
+    });
+    await request.patch(`${BASE_URL}/api/users/2`, {
+      data: { is_active: true }
+    });
+
     // 点击访客登录
     await page.click('#guestLoginBtn');
-
-    // 等待登录完成
     await page.waitForTimeout(2000);
 
     // 验证登录成功 - 显示访客

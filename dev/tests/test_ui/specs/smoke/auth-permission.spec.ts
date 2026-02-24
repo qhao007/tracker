@@ -50,10 +50,18 @@ test.describe('访问控制 API', () => {
   });
 
   test('4. guest 无法创建 TC', async ({ request }) => {
+    // 先确保guest用户是启用状态
+    await request.post(`${BASE_URL}/api/auth/login`, {
+      data: { username: 'admin', password: 'admin123' }
+    });
+    await request.patch(`${BASE_URL}/api/users/2`, {
+      data: { is_active: true }
+    });
+
     // 访客登录
     await request.post(`${BASE_URL}/api/auth/guest-login`);
-    
-    // 尝试创建 TC（应该被拒绝）
+
+    // 尝试创建 TC（应该被拒绝，因为guest没有权限）
     const createResponse = await request.post(`${BASE_URL}/api/tc`, {
       data: { test_name: 'guest_test', testbench: 'tb' }
     });
