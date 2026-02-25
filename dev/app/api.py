@@ -2,17 +2,63 @@
 Tracker API 路由 - v0.3 独立数据库版本
 """
 
-from flask import Blueprint, request, jsonify, send_from_directory, send_file, current_app, g
+from flask import Blueprint, request, jsonify, send_from_directory, send_file, current_app, g, session
 from datetime import datetime
 from urllib.parse import quote
+from functools import wraps
 import json
 import os
 import sqlite3
 
 api = Blueprint("api", __name__)
+auth_api = Blueprint("auth_api", __name__)
+
+# 导入认证模块
+from . import auth
 
 # 项目列表文件
 PROJECTS_FILE = "data/projects.json"
+
+# Session 配置
+SESSION_USER_KEY = "user_id"
+SESSION_USERNAME_KEY = "username"
+SESSION_ROLE_KEY = "role"
+
+
+# ============ 访问控制装饰器 ============
+
+def login_required(f):
+    """要求登录的装饰器"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if SESSION_USER_KEY not in session:
+            return jsonify({"error": "Unauthorized", "message": "请先登录"}), 401
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def admin_required(f):
+    """要求管理员权限的装饰器"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if SESSION_USER_KEY not in session:
+            return jsonify({"error": "Unauthorized", "message": "请先登录"}), 401
+        if session.get(SESSION_ROLE_KEY) != 'admin':
+            return jsonify({"error": "Forbidden", "message": "需要管理员权限"}), 403
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def guest_required(f):
+    """禁止访客访问的装饰器"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if SESSION_USER_KEY not in session:
+            return jsonify({"error": "Unauthorized", "message": "请先登录"}), 401
+        if session.get(SESSION_ROLE_KEY) == 'guest':
+            return jsonify({"error": "Forbidden", "message": "访客无权限执行此操作"}), 403
+        return f(*args, **kwargs)
+    return decorated_function
 
 
 def get_projects_file():
@@ -163,8 +209,8 @@ def get_version():
 
 # ============ 项目管理 ============
 
-
 @api.route("/api/projects", methods=["GET"])
+@login_required
 def get_projects():
     """获取项目列表"""
     projects = load_projects()
@@ -247,6 +293,7 @@ def get_project(project_id):
 
 
 @api.route("/api/projects", methods=["POST"])
+@admin_required
 def create_project():
     """创建新项目"""
     data = request.json
@@ -264,7 +311,7 @@ def create_project():
 
     # 添加到项目列表
     project = {
-        "id": len(projects) + 1,
+        "id": max([p["id"] for p in projects], default=0) + 1,
         "name": name,
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "is_archived": False,
@@ -419,7 +466,7 @@ def restore_project():
 
     # 添加到项目列表
     project = {
-        "id": len(projects) + 1,
+        "id": max([p["id"] for p in projects], default=0) + 1,
         "name": project_name,
         "created_at": project_data.get("created_at", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
         "is_archived": False,
@@ -522,7 +569,7 @@ def restore_project_upload():
 
     # 添加到项目列表
     project = {
-        "id": len(projects) + 1,
+        "id": max([p["id"] for p in projects], default=0) + 1,
         "name": project_name,
         "created_at": project_data.get("created_at", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
         "is_archived": False,
@@ -535,6 +582,7 @@ def restore_project_upload():
 
 
 @api.route("/api/projects/<int:project_id>", methods=["DELETE"])
+@admin_required
 def delete_project(project_id):
     """删除项目"""
     projects = load_projects()
@@ -542,6 +590,40 @@ def delete_project(project_id):
 
     if not project:
         return jsonify({"error": "项目不存在"}), 404
+
+    # 删除前自动创建归档备份
+    try:
+        # 收集项目数据
+        conn = get_db(project["name"])
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM cover_point")
+        cps = [dict(row) for row in cursor.fetchall()]
+
+        cursor.execute("SELECT * FROM test_case")
+        tcs = [dict(row) for row in cursor.fetchall()]
+
+        project_data = {
+            "id": project["id"],
+            "name": project["name"],
+            "created_at": project.get("created_at", ""),
+            "version": project.get("version", "stable"),
+            "cover_points": cps,
+            "test_cases": tcs,
+            "backup_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+
+        # 生成备份文件（保存在 archives 目录）
+        filename = f"{project['name']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_deleted.json"
+        archives_dir = "archives"
+        os.makedirs(archives_dir, exist_ok=True)
+        filepath = os.path.join(archives_dir, filename)
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(project_data, f, ensure_ascii=False, indent=2)
+
+    except Exception as e:
+        # 备份失败不影响删除流程，但记录错误
+        print(f"项目备份失败: {e}")
 
     # 标记为归档
     project["is_archived"] = True
@@ -626,6 +708,7 @@ def get_coverpoints():
                 "comments": row["comments"],
                 "priority": row["priority"],
                 "created_at": row["created_at"],
+                "created_by": dict(row).get("created_by", ""),
                 "coverage": coverage,
                 "coverage_detail": f"{passed}/{total}",
             }
@@ -635,6 +718,7 @@ def get_coverpoints():
 
 
 @api.route("/api/cp", methods=["POST"])
+@guest_required
 def create_coverpoint():
     """创建 CP"""
     data = request.json
@@ -649,13 +733,24 @@ def create_coverpoint():
     if not project:
         return jsonify({"error": "项目不存在"}), 404
 
+    # 获取当前登录用户
+    current_username = session.get(SESSION_USERNAME_KEY, "anonymous")
+
     conn = get_db(project["name"])
     cursor = conn.cursor()
 
+    # 确保 created_by 列存在
+    try:
+        cursor.execute("ALTER TABLE cover_point ADD COLUMN created_by TEXT")
+    except sqlite3.OperationalError:
+        pass  # 列已存在
+
+    today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     cursor.execute(
         """
-        INSERT INTO cover_point (project_id, feature, sub_feature, cover_point, cover_point_details, comments, priority, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO cover_point (project_id, feature, sub_feature, cover_point, cover_point_details, comments, priority, created_at, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     """,
         (
             project_id,
@@ -665,7 +760,8 @@ def create_coverpoint():
             data.get("cover_point_details", ""),
             data.get("comments", ""),
             data.get("priority", "P0"),
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            today,
+            current_username,
         ),
     )
 
@@ -684,7 +780,8 @@ def create_coverpoint():
                 "cover_point_details": data.get("cover_point_details", ""),
                 "comments": data.get("comments", ""),
                 "priority": data.get("priority", "P0"),
-                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "created_at": today,
+                "created_by": current_username,
             },
         }
     )
@@ -713,22 +810,30 @@ def get_coverpoint(cp_id):
     if not cp:
         return jsonify({"error": "Cover Point 不存在"}), 404
 
+    # 将 sqlite3.Row 转换为字典
+    cp_dict = dict(cp)
+
+    # 处理 created_by 字段（可能不存在于旧数据中）
+    created_by = cp_dict.get("created_by", "") or ""
+
     return jsonify(
         {
-            "id": cp["id"],
-            "project_id": cp["project_id"],
-            "feature": cp["feature"],
-            "sub_feature": cp["sub_feature"],
-            "cover_point": cp["cover_point"],
-            "cover_point_details": cp["cover_point_details"],
-            "comments": cp["comments"],
-            "priority": cp["priority"],
-            "created_at": cp["created_at"],
+            "id": cp_dict["id"],
+            "project_id": cp_dict["project_id"],
+            "feature": cp_dict["feature"],
+            "sub_feature": cp_dict["sub_feature"],
+            "cover_point": cp_dict["cover_point"],
+            "cover_point_details": cp_dict["cover_point_details"],
+            "comments": cp_dict["comments"],
+            "priority": cp_dict["priority"],
+            "created_at": cp_dict["created_at"],
+            "created_by": created_by,
         }
     )
 
 
 @api.route("/api/cp/<int:cp_id>", methods=["PUT"])
+@guest_required
 def update_coverpoint(cp_id):
     """更新 CP"""
     data = request.json
@@ -776,6 +881,7 @@ def update_coverpoint(cp_id):
 
 
 @api.route("/api/cp/<int:cp_id>", methods=["DELETE"])
+@guest_required
 def delete_coverpoint(cp_id):
     """删除 CP"""
     project_id = request.args.get("project_id", type=int)
@@ -969,6 +1075,7 @@ def get_testcases():
                 "pass_date": row["pass_date"],
                 "removed_date": row["removed_date"],
                 "target_date": row["target_date"],
+                "created_by": dict(row).get("created_by", ""),
                 "connected_cps": connected_cps,
             }
         )
@@ -999,6 +1106,9 @@ def get_testcase(tc_id):
     if not tc:
         return jsonify({"error": "Test Case 不存在"}), 404
 
+    # 将 sqlite3.Row 转换为字典
+    tc_dict = dict(tc)
+
     # 获取关联的 CP
     cursor.execute(
         """
@@ -1010,32 +1120,37 @@ def get_testcase(tc_id):
     )
     connected_cps = [row["id"] for row in cursor.fetchall()]
 
+    # 处理 created_by 字段（可能不存在于旧数据中）
+    created_by = tc_dict.get("created_by", "") or ""
+
     return jsonify(
         {
-            "id": tc["id"],
-            "project_id": tc["project_id"],
-            "dv_milestone": tc["dv_milestone"],
-            "testbench": tc["testbench"],
-            "category": tc["category"],
-            "owner": tc["owner"],
-            "test_name": tc["test_name"],
-            "scenario_details": tc["scenario_details"],
-            "checker_details": tc["checker_details"],
-            "coverage_details": tc["coverage_details"],
-            "comments": tc["comments"],
-            "status": tc["status"],
-            "created_at": tc["created_at"],
-            "coded_date": tc["coded_date"],
-            "fail_date": tc["fail_date"],
-            "pass_date": tc["pass_date"],
-            "removed_date": tc["removed_date"],
-            "target_date": tc["target_date"],
+            "id": tc_dict["id"],
+            "project_id": tc_dict["project_id"],
+            "dv_milestone": tc_dict["dv_milestone"],
+            "testbench": tc_dict["testbench"],
+            "category": tc_dict["category"],
+            "owner": tc_dict["owner"],
+            "test_name": tc_dict["test_name"],
+            "scenario_details": tc_dict["scenario_details"],
+            "checker_details": tc_dict["checker_details"],
+            "coverage_details": tc_dict["coverage_details"],
+            "comments": tc_dict["comments"],
+            "status": tc_dict["status"],
+            "created_at": tc_dict["created_at"],
+            "coded_date": tc_dict["coded_date"],
+            "fail_date": tc_dict["fail_date"],
+            "pass_date": tc_dict["pass_date"],
+            "removed_date": tc_dict["removed_date"],
+            "target_date": tc_dict["target_date"],
             "connected_cps": connected_cps,
+            "created_by": created_by,
         }
     )
 
 
 @api.route("/api/tc", methods=["POST"])
+@guest_required
 def create_testcase():
     """创建 TC"""
     data = request.json
@@ -1050,8 +1165,17 @@ def create_testcase():
     if not project:
         return jsonify({"error": "项目不存在"}), 404
 
+    # 获取当前登录用户
+    current_username = session.get(SESSION_USERNAME_KEY, "anonymous")
+
     conn = get_db(project["name"])
     cursor = conn.cursor()
+
+    # 确保 created_by 列存在
+    try:
+        cursor.execute("ALTER TABLE test_case ADD COLUMN created_by TEXT")
+    except sqlite3.OperationalError:
+        pass  # 列已存在
 
     today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -1060,9 +1184,9 @@ def create_testcase():
         INSERT INTO test_case (
             project_id, dv_milestone, testbench, category, owner, test_name, 
             scenario_details, checker_details, coverage_details, comments, priority,
-            status, created_at, coded_date, fail_date, pass_date, removed_date, target_date
+            status, created_at, coded_date, fail_date, pass_date, removed_date, target_date, created_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, NULL, NULL, NULL, NULL, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, NULL, NULL, NULL, NULL, ?, ?)
     """,
         (
             project_id,
@@ -1078,6 +1202,7 @@ def create_testcase():
             data.get("priority", "P0"),
             today,
             data.get("target_date", ""),
+            current_username,
         ),
     )
 
@@ -1119,12 +1244,14 @@ def create_testcase():
                 "removed_date": None,
                 "target_date": data.get("target_date", ""),
                 "connected_cps": data.get("connections", []),
+                "created_by": current_username,
             },
         }
     )
 
 
 @api.route("/api/tc/<int:tc_id>", methods=["PUT"])
+@guest_required
 def update_testcase(tc_id):
     """更新 TC"""
     data = request.json
@@ -1189,6 +1316,7 @@ def update_testcase(tc_id):
 
 
 @api.route("/api/tc/<int:tc_id>", methods=["DELETE"])
+@guest_required
 def delete_testcase(tc_id):
     """删除 TC"""
     project_id = request.args.get("project_id", type=int)
@@ -1291,6 +1419,7 @@ def update_status(tc_id):
 
 
 @api.route("/api/tc/batch/status", methods=["POST"])
+@guest_required
 def batch_update_tc_status():
     """批量更新 TC 状态"""
     data = request.json
@@ -1362,8 +1491,10 @@ def batch_update_tc_status():
 
     return jsonify({"success": success_count, "failed": len(tc_ids) - success_count})
 
+@guest_required
 
 @api.route("/api/tc/batch/target_date", methods=["POST"])
+@guest_required
 def batch_update_tc_target_date():
     """批量更新 TC Target Date"""
     data = request.json
@@ -1391,9 +1522,12 @@ def batch_update_tc_target_date():
     conn.commit()
 
     return jsonify({"success": success_count, "failed": len(tc_ids) - success_count})
+@guest_required
 
+@guest_required
 
 @api.route("/api/tc/batch/dv_milestone", methods=["POST"])
+@guest_required
 def batch_update_tc_dv_milestone():
     """批量更新 TC DV Milestone"""
     data = request.json
@@ -1424,6 +1558,7 @@ def batch_update_tc_dv_milestone():
 
 
 @api.route("/api/cp/batch/priority", methods=["POST"])
+@guest_required
 def batch_update_cp_priority():
     """批量更新 CP Priority"""
     data = request.json
@@ -1580,6 +1715,7 @@ from openpyxl.styles import Font, Alignment
 
 
 @api.route("/api/import/template", methods=["GET"])
+@guest_required
 def get_import_template():
     """下载导入模板"""
     template_type = request.args.get("type", "cp")
@@ -1631,9 +1767,12 @@ def get_import_template():
         download_name=filename,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+@guest_required
 
+@guest_required
 
 @api.route("/api/import", methods=["POST"])
+@guest_required
 def import_data():
     """执行导入"""
     data = request.json
@@ -2011,6 +2150,7 @@ def import_tc(project, ws, headers, is_csv=False, csv_data=None):
 
 
 @api.route("/api/export", methods=["GET"])
+@guest_required
 def export_data():
     """导出数据 - 必须在静态文件路由之前定义"""
     project_id = request.args.get("project_id", type=int)
@@ -2175,6 +2315,260 @@ def export_data():
         )
 
 
+# ============ 认证 API ============
+
+@api.route("/api/auth/login", methods=["POST"])
+def login():
+    """用户登录"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({"error": "Bad Request", "message": "无效的请求数据"}), 400
+    
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
+    
+    if not username or not password:
+        return jsonify({"error": "Bad Request", "message": "用户名和密码不能为空"}), 400
+    
+    # 检查暴力破解
+    allowed, message = auth.check_login_attempts(username)
+    if not allowed:
+        return jsonify({"error": "Too Many Requests", "message": message}), 429
+    
+    # 获取用户
+    user = auth.get_user_by_username(username)
+    
+    if not user:
+        auth.record_failed_login(username)
+        return jsonify({"error": "Unauthorized", "message": "用户名或密码错误"}), 401
+    
+    # 检查用户是否启用
+    if not user.get("is_active"):
+        return jsonify({"error": "Forbidden", "message": "账户已被禁用"}), 403
+    
+    # 验证密码
+    if not auth.verify_password(password, user.get("password_hash")):
+        auth.record_failed_login(username)
+        return jsonify({"error": "Unauthorized", "message": "用户名或密码错误"}), 401
+    
+    # 登录成功，清除失败记录
+    auth.clear_login_attempts(username)
+    
+    # 更新最后登录时间
+    auth.update_user(user["id"], last_login=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    
+    # 设置 Session
+    session[SESSION_USER_KEY] = user["id"]
+    session[SESSION_USERNAME_KEY] = user["username"]
+    session[SESSION_ROLE_KEY] = user["role"]
+    session.permanent = True
+    
+    return jsonify({
+        "success": True,
+        "user": {
+            "id": user["id"],
+            "username": user["username"],
+            "role": user["role"],
+            "must_change_password": user.get("must_change_password", 0) == 1
+        }
+    })
+
+
+@api.route("/api/auth/guest-login", methods=["POST"])
+def guest_login():
+    """访客登录"""
+    # 检查暴力破解
+    allowed, message = auth.check_login_attempts("guest")
+    if not allowed:
+        return jsonify({"error": "Too Many Requests", "message": message}), 429
+    
+    # 获取 guest 用户
+    user = auth.get_user_by_username("guest")
+    
+    if not user:
+        return jsonify({"error": "Not Found", "message": "访客账户未配置"}), 404
+    
+    # 检查用户是否启用
+    if not user.get("is_active"):
+        return jsonify({"error": "Forbidden", "message": "访客登录已禁用"}), 403
+    
+    # 登录成功
+    auth.clear_login_attempts("guest")
+    
+    # 更新最后登录时间
+    auth.update_user(user["id"], last_login=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    
+    # 设置 Session
+    session[SESSION_USER_KEY] = user["id"]
+    session[SESSION_USERNAME_KEY] = user["username"]
+    session[SESSION_ROLE_KEY] = user["role"]
+    session.permanent = True
+    
+    return jsonify({
+        "success": True,
+        "user": {
+            "id": user["id"],
+            "username": user["username"],
+            "role": user["role"]
+        }
+    })
+
+
+@api.route("/api/auth/logout", methods=["POST"])
+@login_required
+def logout():
+    """退出登录"""
+    session.clear()
+    return jsonify({"success": True, "message": "已退出登录"})
+
+
+@api.route("/api/auth/me", methods=["GET"])
+@login_required
+def get_current_user():
+    """获取当前用户信息"""
+    user_id = session.get(SESSION_USER_KEY)
+    user = auth.get_user_by_id(user_id)
+    
+    if not user:
+        session.clear()
+        return jsonify({"error": "Unauthorized", "message": "用户不存在"}), 401
+    
+    return jsonify({
+        "id": user["id"],
+        "username": user["username"],
+        "role": user["role"],
+        "must_change_password": user.get("must_change_password", 0) == 1
+    })
+
+
+# ============ 用户管理 API ============
+
+@api.route("/api/users", methods=["GET"])
+@admin_required
+def get_users():
+    """获取用户列表（仅管理员）"""
+    users = auth.get_all_users()
+    return jsonify(users)
+
+
+@api.route("/api/users", methods=["POST"])
+@admin_required
+def create_user():
+    """创建用户（仅管理员）"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({"error": "Bad Request", "message": "无效的请求数据"}), 400
+    
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
+    role = data.get("role", "user")
+    
+    if not username:
+        return jsonify({"error": "Bad Request", "message": "用户名不能为空"}), 400
+    
+    if role not in ['user', 'guest']:
+        return jsonify({"error": "Bad Request", "message": "无效的角色"}), 400
+    
+    # guest 账户不能有密码
+    if role == 'guest' and password:
+        return jsonify({"error": "Bad Request", "message": "访客账户不能设置密码"}), 400
+    
+    # 检查用户名是否已存在
+    existing = auth.get_user_by_username(username)
+    if existing:
+        return jsonify({"error": "Conflict", "message": "用户名已存在"}), 409
+    
+    try:
+        user_id = auth.create_user(username, password, role)
+        return jsonify({"success": True, "id": user_id, "username": username, "role": role}), 201
+    except Exception as e:
+        return jsonify({"error": "Internal Error", "message": str(e)}), 500
+
+
+@api.route("/api/users/<int:user_id>", methods=["PATCH"])
+@admin_required
+def update_user(user_id):
+    """更新用户（仅管理员）"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({"error": "Bad Request", "message": "无效的请求数据"}), 400
+    
+    # 获取现有用户
+    user = auth.get_user_by_id(user_id)
+    if not user:
+        return jsonify({"error": "Not Found", "message": "用户不存在"}), 404
+    
+    # 不能修改 admin 和 guest 的角色
+    if user["username"] in ['admin', 'guest']:
+        if "role" in data:
+            return jsonify({"error": "Forbidden", "message": "不能修改系统用户的角色"}), 403
+    
+    # 构建更新字段
+    updates = {}
+    if "is_active" in data:
+        updates["is_active"] = 1 if data["is_active"] else 0
+    
+    if updates:
+        auth.update_user(user_id, **updates)
+    
+    return jsonify({"success": True})
+
+
+@api.route("/api/users/<int:user_id>", methods=["DELETE"])
+@admin_required
+def delete_user(user_id):
+    """删除用户（仅管理员）"""
+    # 获取现有用户
+    user = auth.get_user_by_id(user_id)
+    if not user:
+        return jsonify({"error": "Not Found", "message": "用户不存在"}), 404
+    
+    # 不能删除 admin 和 guest
+    if user["username"] in ['admin', 'guest']:
+        return jsonify({"error": "Forbidden", "message": "无法删除系统用户"}), 403
+    
+    # 不能删除自己
+    current_user_id = session.get(SESSION_USER_KEY)
+    if current_user_id == user_id:
+        return jsonify({"error": "Forbidden", "message": "不能删除自己"}), 403
+    
+    success, message = auth.delete_user(user_id)
+    
+    if not success:
+        return jsonify({"error": "Forbidden", "message": message}), 403
+    
+    return jsonify({"success": True, "message": message})
+
+
+@api.route("/api/users/<int:user_id>/reset-password", methods=["POST"])
+@admin_required
+def reset_password(user_id):
+    """重置用户密码（仅管理员）"""
+    data = request.get_json()
+    new_password = data.get("new_password", "") if data else ""
+    
+    # 获取现有用户
+    user = auth.get_user_by_id(user_id)
+    if not user:
+        return jsonify({"error": "Not Found", "message": "用户不存在"}), 404
+    
+    # guest 账户不能重置密码
+    if user["role"] == "guest":
+        return jsonify({"error": "Forbidden", "message": "访客账户无密码"}), 403
+    
+    if not new_password:
+        return jsonify({"error": "Bad Request", "message": "密码不能为空"}), 400
+    
+    # 重置密码
+    password_hash = auth.hash_password(new_password)
+    auth.update_user(user_id, password_hash=password_hash, must_change_password=0)
+    
+    return jsonify({"success": True, "message": "密码已重置"})
+
+
 # ============ 静态文件路由 - 必须放在所有 API 路由之后 ============
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -2185,9 +2579,5 @@ def index():
     return send_from_directory(BASE_DIR, "index.html")
 
 
-@api.route("/<path:path>")
-def static_files(path):
-    # 跳过 API 路由
-    if path.startswith("api/"):
-        return jsonify({"error": "Not found"}), 404
-    return send_from_directory(BASE_DIR, path)
+# 注意：这个路由必须放在所有 API 路由之后
+# 它使用 path 变量，会匹配其他未匹配的路由

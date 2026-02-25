@@ -440,7 +440,7 @@ python3 scripts/compatibility_test.py clean
 1. 填写 BugLog 模板 (`/projects/management/feedbacks/new/BugLog_YYYYMMDD.md`)
 2. 提交到 feedbacks/new/ 目录
 3. 评审后标记为待修复
-4. 修复后更新 BUGLOG/tracker_BUGLOG.md
+4. 修复后更新 BUGLOG/tracker_BUG_RECORD.md
 
 **BugLog 模板位置**: `/projects/management/feedbacks/new/BugLog_YYYYMMDD.md`
 

@@ -25,18 +25,32 @@ def client():
     with app.test_client() as client:
         yield client
 
+
+@pytest.fixture
+def admin_client(client):
+    """创建已登录的管理员客户端"""
+    client.post('/api/auth/login',
+        data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+        content_type='application/json')
+    return client
+
 @pytest.fixture(scope='module')
 def test_project():
     """创建测试项目用于测试"""
     app = create_app(testing=True)
     with app.test_client() as client:
+        # 先登录
+        client.post('/api/auth/login',
+            data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+            content_type='application/json')
+
         name = f"API_Test_{int(time.time())}"
-        
+
         # 创建项目
         response = client.post('/api/projects',
                               data=json.dumps({'name': name}),
                               content_type='application/json')
-        
+
         if response.status_code == 200:
             data = json.loads(response.data)
             project_id = data['project']['id']
@@ -65,41 +79,41 @@ class TestVersionAPI:
 
 class TestProjectsAPI:
     """项目 API 测试"""
-    
-    def test_get_projects(self, client):
+
+    def test_get_projects(self, admin_client):
         """GET /api/projects - 获取项目列表"""
-        response = client.get('/api/projects')
+        response = admin_client.get('/api/projects')
         assert response.status_code == 200
-    
-    def test_create_project(self, client):
+
+    def test_create_project(self, admin_client):
         """POST /api/projects - 创建项目"""
         name = f"Test_{int(time.time())}"
-        response = client.post('/api/projects',
+        response = admin_client.post('/api/projects',
                               data=json.dumps({'name': name}),
                               content_type='application/json')
         assert response.status_code == 200
         data = json.loads(response.data)
         assert data['success'] == True
-        
+
         # 清理
-        client.delete(f"/api/projects/{data['project']['id']}")
-    
-    def test_create_duplicate_project(self, client):
+        admin_client.delete(f"/api/projects/{data['project']['id']}")
+
+    def test_create_duplicate_project(self, admin_client):
         """POST /api/projects - 创建重复项目"""
         name = f"Dup_{int(time.time())}"
         # 先创建
-        client.post('/api/projects',
+        admin_client.post('/api/projects',
                    data=json.dumps({'name': name}),
                    content_type='application/json')
         # 再次创建同名项目
-        response = client.post('/api/projects',
+        response = admin_client.post('/api/projects',
                              data=json.dumps({'name': name}),
                              content_type='application/json')
         assert response.status_code == 400
-    
-    def test_get_archive_list(self, client):
+
+    def test_get_archive_list(self, admin_client):
         """GET /api/projects/archive/list - 获取归档列表"""
-        response = client.get('/api/projects/archive/list')
+        response = admin_client.get('/api/projects/archive/list')
         assert response.status_code == 200
 
 
@@ -108,14 +122,14 @@ class TestProjectsAPI:
 class TestCoverPointsAPI:
     """Cover Points API 测试"""
     
-    def test_get_cp_list(self, client, test_project):
+    def test_get_cp_list(self, admin_client, test_project):
         """GET /api/cp - 获取 CP 列表"""
-        response = client.get(f'/api/cp?project_id={test_project["id"]}')
+        response = admin_client.get(f'/api/cp?project_id={test_project["id"]}')
         assert response.status_code == 200
     
-    def test_create_cp(self, client, test_project):
+    def test_create_cp(self, admin_client, test_project):
         """POST /api/cp - 创建 CP"""
-        response = client.post('/api/cp',
+        response = admin_client.post('/api/cp',
                             data=json.dumps({
                                 'project_id': test_project["id"],
                                 'feature': f'Feature_{int(time.time())}',
@@ -126,10 +140,10 @@ class TestCoverPointsAPI:
                             content_type='application/json')
         assert response.status_code == 200
     
-    def test_update_cp(self, client, test_project):
+    def test_update_cp(self, admin_client, test_project):
         """PUT /api/cp/{id} - 更新 CP"""
         # 先创建
-        create_resp = client.post('/api/cp',
+        create_resp = admin_client.post('/api/cp',
                                data=json.dumps({
                                    'project_id': test_project["id"],
                                    'feature': f'Feature_{int(time.time())}',
@@ -141,7 +155,7 @@ class TestCoverPointsAPI:
         if create_resp.status_code == 200:
             cp_id = json.loads(create_resp.data)['item']['id']
             # 更新
-            update_resp = client.put(f'/api/cp/{cp_id}',
+            update_resp = admin_client.put(f'/api/cp/{cp_id}',
                                 data=json.dumps({
                                     'project_id': test_project["id"],
                                     'feature': 'UpdatedFeature',
@@ -152,10 +166,10 @@ class TestCoverPointsAPI:
                                 content_type='application/json')
             assert update_resp.status_code == 200
     
-    def test_delete_cp(self, client, test_project):
+    def test_delete_cp(self, admin_client, test_project):
         """DELETE /api/cp/{id} - 删除 CP"""
         # 先创建
-        create_resp = client.post('/api/cp',
+        create_resp = admin_client.post('/api/cp',
                                data=json.dumps({
                                    'project_id': test_project["id"],
                                    'feature': f'Feature_{int(time.time())}',
@@ -167,7 +181,7 @@ class TestCoverPointsAPI:
         if create_resp.status_code == 200:
             cp_id = json.loads(create_resp.data)['item']['id']
             # 删除
-            delete_resp = client.delete(f'/api/cp/{cp_id}?project_id={test_project["id"]}')
+            delete_resp = admin_client.delete(f'/api/cp/{cp_id}?project_id={test_project["id"]}')
             assert delete_resp.status_code == 200
 
 
@@ -176,14 +190,14 @@ class TestCoverPointsAPI:
 class TestTestCasesAPI:
     """Test Cases API 测试"""
     
-    def test_get_tc_list(self, client, test_project):
+    def test_get_tc_list(self, admin_client, test_project):
         """GET /api/tc - 获取 TC 列表"""
-        response = client.get(f'/api/tc?project_id={test_project["id"]}')
+        response = admin_client.get(f'/api/tc?project_id={test_project["id"]}')
         assert response.status_code == 200
     
-    def test_create_tc(self, client, test_project):
+    def test_create_tc(self, admin_client, test_project):
         """POST /api/tc - 创建 TC"""
-        response = client.post('/api/tc',
+        response = admin_client.post('/api/tc',
                             data=json.dumps({
                                 'project_id': test_project["id"],
                                 'testbench': f'TB_{int(time.time())}',
@@ -195,10 +209,10 @@ class TestTestCasesAPI:
                             content_type='application/json')
         assert response.status_code == 200
     
-    def test_update_tc(self, client, test_project):
+    def test_update_tc(self, admin_client, test_project):
         """PUT /api/tc/{id} - 更新 TC"""
         # 先创建
-        create_resp = client.post('/api/tc',
+        create_resp = admin_client.post('/api/tc',
                               data=json.dumps({
                                   'project_id': test_project["id"],
                                   'testbench': f'TB_Upd_{int(time.time())}',
@@ -211,7 +225,7 @@ class TestTestCasesAPI:
         if create_resp.status_code == 200:
             tc_id = json.loads(create_resp.data)['item']['id']
             # 更新
-            update_resp = client.put(f'/api/tc/{tc_id}',
+            update_resp = admin_client.put(f'/api/tc/{tc_id}',
                                 data=json.dumps({
                                     'project_id': test_project["id"],
                                     'testbench': 'TB_Updated',
@@ -223,10 +237,10 @@ class TestTestCasesAPI:
                                 content_type='application/json')
             assert update_resp.status_code == 200
     
-    def test_delete_tc(self, client, test_project):
+    def test_delete_tc(self, admin_client, test_project):
         """DELETE /api/tc/{id} - 删除 TC"""
         # 先创建
-        create_resp = client.post('/api/tc',
+        create_resp = admin_client.post('/api/tc',
                               data=json.dumps({
                                   'project_id': test_project["id"],
                                   'testbench': f'TB_Del_{int(time.time())}',
@@ -239,13 +253,13 @@ class TestTestCasesAPI:
         if create_resp.status_code == 200:
             tc_id = json.loads(create_resp.data)['item']['id']
             # 删除
-            delete_resp = client.delete(f'/api/tc/{tc_id}?project_id={test_project["id"]}')
+            delete_resp = admin_client.delete(f'/api/tc/{tc_id}?project_id={test_project["id"]}')
             assert delete_resp.status_code == 200
     
-    def test_update_tc_status(self, client, test_project):
+    def test_update_tc_status(self, admin_client, test_project):
         """POST /api/tc/{id}/status - 更新状态"""
         # 先创建 TC
-        create_resp = client.post('/api/tc',
+        create_resp = admin_client.post('/api/tc',
                               data=json.dumps({
                                   'project_id': test_project["id"],
                                   'testbench': f'TB_Status_{int(time.time())}',
@@ -259,7 +273,7 @@ class TestTestCasesAPI:
             tc_id = json.loads(create_resp.data)['item']['id']
             
             # OPEN -> CODED
-            resp1 = client.post(f'/api/tc/{tc_id}/status',
+            resp1 = admin_client.post(f'/api/tc/{tc_id}/status',
                               data=json.dumps({
                                   'project_id': test_project["id"],
                                   'status': 'CODED'
@@ -268,7 +282,7 @@ class TestTestCasesAPI:
             assert resp1.status_code == 200
             
             # CODED -> FAIL
-            resp2 = client.post(f'/api/tc/{tc_id}/status',
+            resp2 = admin_client.post(f'/api/tc/{tc_id}/status',
                               data=json.dumps({
                                   'project_id': test_project["id"],
                                   'status': 'FAIL'
@@ -277,7 +291,7 @@ class TestTestCasesAPI:
             assert resp2.status_code == 200
             
             # FAIL -> PASS
-            resp3 = client.post(f'/api/tc/{tc_id}/status',
+            resp3 = admin_client.post(f'/api/tc/{tc_id}/status',
                               data=json.dumps({
                                   'project_id': test_project["id"],
                                   'status': 'PASS'
@@ -285,14 +299,14 @@ class TestTestCasesAPI:
                               content_type='application/json')
             assert resp3.status_code == 200
     
-    def test_tc_with_status_filter(self, client, test_project):
+    def test_tc_with_status_filter(self, admin_client, test_project):
         """GET /api/tc?status=PASS - 状态过滤"""
-        response = client.get(f'/api/tc?project_id={test_project["id"]}&status=PASS')
+        response = admin_client.get(f'/api/tc?project_id={test_project["id"]}&status=PASS')
         assert response.status_code == 200
     
-    def test_tc_with_sort(self, client, test_project):
+    def test_tc_with_sort(self, admin_client, test_project):
         """GET /api/tc?sort_by=testbench - 排序"""
-        response = client.get(f'/api/tc?project_id={test_project["id"]}&sort_by=testbench')
+        response = admin_client.get(f'/api/tc?project_id={test_project["id"]}&sort_by=testbench')
         assert response.status_code == 200
 
 
@@ -301,12 +315,12 @@ class TestTestCasesAPI:
 class TestTCBatchStatusAPI:
     """TC 批量状态更新 API 测试 (v0.6.0)"""
     
-    def test_batch_update_status(self, client, test_project):
+    def test_batch_update_status(self, admin_client, test_project):
         """POST /api/tc/batch/status - 批量更新状态"""
         # 先创建多个 TC
         tc_ids = []
         for i in range(2):
-            create_resp = client.post('/api/tc',
+            create_resp = admin_client.post('/api/tc',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_Batch_{i}_{int(time.time())}',
@@ -320,7 +334,7 @@ class TestTCBatchStatusAPI:
                 tc_ids.append(json.loads(create_resp.data)['item']['id'])
         
         # 批量更新状态
-        response = client.post('/api/tc/batch/status',
+        response = admin_client.post('/api/tc/batch/status',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'tc_ids': tc_ids,
@@ -332,9 +346,9 @@ class TestTCBatchStatusAPI:
         assert data['failed'] == 0
         assert data['success'] == len(tc_ids)
     
-    def test_batch_update_status_empty_list(self, client, test_project):
+    def test_batch_update_status_empty_list(self, admin_client, test_project):
         """POST /api/tc/batch/status - 空列表返回错误"""
-        response = client.post('/api/tc/batch/status',
+        response = admin_client.post('/api/tc/batch/status',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'tc_ids': [],
@@ -348,10 +362,10 @@ class TestTCBatchStatusAPI:
 class TestTCBatchTargetDateAPI:
     """TC 批量 Target Date API 测试 (v0.6.0)"""
     
-    def test_batch_update_target_date(self, client, test_project):
+    def test_batch_update_target_date(self, admin_client, test_project):
         """POST /api/tc/batch/target_date - 批量更新 Target Date"""
         # 先创建 TC
-        create_resp = client.post('/api/tc',
+        create_resp = admin_client.post('/api/tc',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'testbench': f'TB_Target_{int(time.time())}',
@@ -365,7 +379,7 @@ class TestTCBatchTargetDateAPI:
             tc_id = json.loads(create_resp.data)['item']['id']
             
             # 批量更新
-            response = client.post('/api/tc/batch/target_date',
+            response = admin_client.post('/api/tc/batch/target_date',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'tc_ids': [tc_id],
@@ -380,10 +394,10 @@ class TestTCBatchTargetDateAPI:
 class TestTCBatchDvMilestoneAPI:
     """TC 批量 DV Milestone API 测试 (v0.6.0)"""
     
-    def test_batch_update_dv_milestone(self, client, test_project):
+    def test_batch_update_dv_milestone(self, admin_client, test_project):
         """POST /api/tc/batch/dv_milestone - 批量更新 DV Milestone"""
         # 先创建 TC
-        create_resp = client.post('/api/tc',
+        create_resp = admin_client.post('/api/tc',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'testbench': f'TB_DV_{int(time.time())}',
@@ -397,7 +411,7 @@ class TestTCBatchDvMilestoneAPI:
             tc_id = json.loads(create_resp.data)['item']['id']
             
             # 批量更新
-            response = client.post('/api/tc/batch/dv_milestone',
+            response = admin_client.post('/api/tc/batch/dv_milestone',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'tc_ids': [tc_id],
@@ -412,10 +426,10 @@ class TestTCBatchDvMilestoneAPI:
 class TestCPBatchPriorityAPI:
     """CP 批量 Priority API 测试 (v0.6.0)"""
     
-    def test_batch_update_priority(self, client, test_project):
+    def test_batch_update_priority(self, admin_client, test_project):
         """POST /api/cp/batch/priority - 批量更新 Priority"""
         # 先创建 CP
-        create_resp = client.post('/api/cp',
+        create_resp = admin_client.post('/api/cp',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'feature': f'Feature_Prio_{int(time.time())}',
@@ -427,7 +441,7 @@ class TestCPBatchPriorityAPI:
             cp_id = json.loads(create_resp.data)['item']['id']
             
             # 批量更新
-            response = client.post('/api/cp/batch/priority',
+            response = admin_client.post('/api/cp/batch/priority',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'cp_ids': [cp_id],
@@ -442,10 +456,10 @@ class TestCPBatchPriorityAPI:
 class TestCPTcConnectionsAPI:
     """CP 关联 TC API 测试 (v0.6.2)"""
     
-    def test_get_cp_tcs(self, client, test_project):
+    def test_get_cp_tcs(self, admin_client, test_project):
         """GET /api/cp/{cp_id}/tcs - 获取 CP 关联的 TC 列表"""
         # 先创建 CP
-        create_cp = client.post('/api/cp',
+        create_cp = admin_client.post('/api/cp',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'feature': f'Feature_TC_{int(time.time())}',
@@ -458,7 +472,7 @@ class TestCPTcConnectionsAPI:
         cp_id = cp_data['item']['id']
         
         # 创建 TC 并关联到 CP
-        create_tc = client.post('/api/tc',
+        create_tc = admin_client.post('/api/tc',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'testbench': f'TB_{int(time.time())}',
@@ -473,7 +487,7 @@ class TestCPTcConnectionsAPI:
         tc_id = tc_data['item']['id']
         
         # 获取关联的 TC（传入 project_id）
-        response = client.get(f'/api/cp/{cp_id}/tcs?project_id={test_project["id"]}')
+        response = admin_client.get(f'/api/cp/{cp_id}/tcs?project_id={test_project["id"]}')
         assert response.status_code == 200
         data = json.loads(response.data)
         assert 'cp_id' in data
@@ -492,11 +506,11 @@ class TestCPTcConnectionsAPI:
 class TestTCFilterAPI:
     """TC 过滤 API 测试 (v0.6.2)"""
     
-    def test_tc_filter_by_dv_milestone(self, client, test_project):
+    def test_tc_filter_by_dv_milestone(self, admin_client, test_project):
         """GET /api/tc?dv_milestone= - 按 DV Milestone 过滤"""
         # 创建不同 DV Milestone 的 TC
         for i, dv in enumerate(['DV1.0', 'DV2.0', 'DV1.0']):
-            tc_resp = client.post('/api/tc',
+            tc_resp = admin_client.post('/api/tc',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_{int(time.time())}_{i}',
@@ -509,18 +523,18 @@ class TestTCFilterAPI:
             assert tc_resp.status_code == 200
         
         # 按 DV Milestone 过滤
-        response = client.get(f'/api/tc?project_id={test_project["id"]}&dv_milestone=DV1.0')
+        response = admin_client.get(f'/api/tc?project_id={test_project["id"]}&dv_milestone=DV1.0')
         assert response.status_code == 200
         data = json.loads(response.data)
         # 应该只返回 DV1.0 的 TC
         for tc in data:
             assert tc['dv_milestone'] == 'DV1.0'
     
-    def test_tc_filter_by_owner(self, client, test_project):
+    def test_tc_filter_by_owner(self, admin_client, test_project):
         """GET /api/tc?owner= - 按 Owner 过滤"""
         # 创建不同 Owner 的 TC
         for i, owner in enumerate(['EngA', 'EngB', 'EngA']):
-            tc_resp = client.post('/api/tc',
+            tc_resp = admin_client.post('/api/tc',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_Owner_{int(time.time())}_{i}',
@@ -533,18 +547,18 @@ class TestTCFilterAPI:
             assert tc_resp.status_code == 200
         
         # 按 Owner 过滤
-        response = client.get(f'/api/tc?project_id={test_project["id"]}&owner=EngA')
+        response = admin_client.get(f'/api/tc?project_id={test_project["id"]}&owner=EngA')
         assert response.status_code == 200
         data = json.loads(response.data)
         # 应该只返回 EngA 的 TC
         for tc in data:
             assert tc['owner'] == 'EngA'
     
-    def test_tc_filter_by_category(self, client, test_project):
+    def test_tc_filter_by_category(self, admin_client, test_project):
         """GET /api/tc?category= - 按 Category 过滤"""
         # 创建不同 Category 的 TC
         for i, cat in enumerate(['Sanity', 'Feature', 'Sanity']):
-            tc_resp = client.post('/api/tc',
+            tc_resp = admin_client.post('/api/tc',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_Cat_{int(time.time())}_{i}',
@@ -557,17 +571,17 @@ class TestTCFilterAPI:
             assert tc_resp.status_code == 200
         
         # 按 Category 过滤
-        response = client.get(f'/api/tc?project_id={test_project["id"]}&category=Sanity')
+        response = admin_client.get(f'/api/tc?project_id={test_project["id"]}&category=Sanity')
         assert response.status_code == 200
         data = json.loads(response.data)
         # 应该只返回 Sanity 的 TC
         for tc in data:
             assert tc['category'] == 'Sanity'
     
-    def test_tc_filter_combined(self, client, test_project):
+    def test_tc_filter_combined(self, admin_client, test_project):
         """GET /api/tc?status=&dv_milestone=&priority= - 组合过滤"""
         # 创建 TC
-        tc_resp = client.post('/api/tc',
+        tc_resp = admin_client.post('/api/tc',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'testbench': f'TB_Combined_{int(time.time())}',
@@ -581,7 +595,7 @@ class TestTCFilterAPI:
         assert tc_resp.status_code == 200
         
         # 先验证 TC 创建成功
-        list_resp = client.get(f'/api/tc?project_id={test_project["id"]}')
+        list_resp = admin_client.get(f'/api/tc?project_id={test_project["id"]}')
         assert list_resp.status_code == 200
         list_data = json.loads(list_resp.data)
         # 验证返回数据格式正确
@@ -593,9 +607,9 @@ class TestTCFilterAPI:
 class TestStatsAPI:
     """统计 API 测试"""
     
-    def test_get_stats(self, client, test_project):
+    def test_get_stats(self, admin_client, test_project):
         """GET /api/stats - 获取统计"""
-        response = client.get(f'/api/stats?project_id={test_project["id"]}')
+        response = admin_client.get(f'/api/stats?project_id={test_project["id"]}')
         assert response.status_code == 200
 
 
