@@ -155,11 +155,24 @@ test.describe('CP-TC 关联测试', () => {
 
 test.describe('CP-TC 关联测试 - 边界场景', () => {
 
+  /**
+   * 登录辅助函数 - v0.7.1 需要登录
+   */
+  async function loginAsAdmin(page: any) {
+    await page.goto('http://localhost:8081');
+    await page.waitForLoadState('domcontentloaded');
+    // 填写登录表单
+    await page.fill('#loginUsername', 'admin');
+    await page.fill('#loginPassword', 'admin123');
+    await page.click('#loginForm button[type="submit"]');
+    await page.waitForTimeout(1000);
+  }
+
   test.beforeEach(async ({ page }) => {
-    // 导航到首页
+    // 登录 - v0.7.1 需要认证
+    await loginAsAdmin(page);
+    // 登录后等待页面加载完成
     try {
-      await page.goto('http://localhost:8081');
-      await page.waitForLoadState('domcontentloaded');
       await page.waitForSelector('#projectSelector', { timeout: 10000 });
       // ✅ 设置 dialog 处理器
       setupDialogHandler(page);
@@ -179,7 +192,7 @@ test.describe('CP-TC 关联测试 - 边界场景', () => {
   /**
    * CONN-004: 创建多个 CP
    */
-  test.skip('CONN-004: 创建多个 CP - 需要调试', async ({ page }) => {
+  test('CONN-004: 创建多个 CP', async ({ page }) => {
     const cpNames = [
       TestDataFactory.generateCPName('Multi1'),
       TestDataFactory.generateCPName('Multi2'),
@@ -212,7 +225,7 @@ test.describe('CP-TC 关联测试 - 边界场景', () => {
   /**
    * CONN-005: 创建多个 TC
    */
-  test.skip('CONN-005: 创建多个 TC - 需要调试', async ({ page }) => {
+  test('CONN-005: 创建多个 TC', async ({ page }) => {
     const tcNames = [
       TestDataFactory.generateTCName('Multi1'),
       TestDataFactory.generateTCName('Multi2'),

@@ -24,11 +24,23 @@ test.describe('TC 集成测试', () => {
   async function loginAsAdmin(page: any) {
     await page.goto(BASE_URL);
     await page.waitForLoadState('domcontentloaded');
-    // 填写登录表单
-    await page.fill('#loginUsername', 'admin');
-    await page.fill('#loginPassword', 'admin123');
-    await page.click('#loginForm button[type="submit"]');
-    await page.waitForTimeout(1000);
+
+    // 检查是否需要登录
+    const needsLogin = await page.locator('#loginForm').isVisible().catch(() => false);
+    if (needsLogin) {
+      // 填写登录表单
+      await page.fill('#loginUsername', 'admin');
+      await page.fill('#loginPassword', 'admin123');
+      await page.click('#loginForm button[type="submit"]');
+      // 等待用户信息显示 - 登录成功的标志
+      await page.waitForSelector('#userInfo', { timeout: 10000 });
+    } else {
+      // 已经登录，确保用户信息可见
+      await page.waitForSelector('#userInfo', { timeout: 10000 }).catch(() => {});
+    }
+
+    // 等待项目选择器可用
+    await page.waitForSelector('#projectSelector:not([disabled])', { timeout: 10000 });
   }
 
   /**
@@ -500,9 +512,19 @@ test.describe('TC 集成测试 - 数据一致性', () => {
    * 2. 刷新页面
    * 3. 验证 TC 仍然存在
    */
-  test.skip('TC-011: TC 数据持久化验证 - 需要session修复', async ({ page }) => {
+  test('TC-011: TC 数据持久化验证', async ({ page }) => {
     const tcName = TestDataFactory.generateTCName();
-    
+
+    // 确保登录状态正常
+    const needsLogin = await page.locator('#loginForm').isVisible().catch(() => false);
+    if (needsLogin) {
+      await page.fill('#loginUsername', 'admin');
+      await page.fill('#loginPassword', 'admin123');
+      await page.click('#loginForm button[type="submit"]');
+    }
+    await page.waitForSelector('#userInfo', { timeout: 10000 });
+    await page.waitForSelector('#projectSelector:not([disabled])', { timeout: 10000 });
+
     // 1. 创建 TC
     await page.click('button.tab:has-text("Test Cases")');
     await page.waitForSelector('#tcPanel', { state: 'visible', timeout: 10000 });
@@ -518,16 +540,23 @@ test.describe('TC 集成测试 - 数据一致性', () => {
     // 2. 刷新页面 - 需要处理session丢失
     await page.reload();
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(500);
 
-    // 检查是否需要登录（等待页面完全加载后再检查）
-    const needsLogin = await page.locator('#loginForm').isVisible().catch(() => false);
-    if (needsLogin) {
-      await page.fill('#loginUsername', 'admin');
-      await page.fill('#loginPassword', 'admin123');
-      await page.click('#loginForm button[type="submit"]');
-      // 等待登录完成并显示用户名
-      await page.waitForSelector('#userInfo', { timeout: 10000 }).catch(() => {});
+    // 等待登录状态检查完成 - 检查loginOverlay是否消失或userInfo出现
+    try {
+      await page.waitForFunction(() => {
+        const overlay = document.getElementById('loginOverlay');
+        const userInfo = document.getElementById('userInfo');
+        return (!overlay || !overlay.classList.contains('show')) || (userInfo && userInfo.style.display !== 'none');
+      }, { timeout: 10000 });
+    } catch (e) {
+      // 如果等待失败，可能需要重新登录
+      const needsLogin = await page.locator('#loginForm').isVisible().catch(() => false);
+      if (needsLogin) {
+        await page.fill('#loginUsername', 'admin');
+        await page.fill('#loginPassword', 'admin123');
+        await page.click('#loginForm button[type="submit"]');
+        await page.waitForSelector('#userInfo', { timeout: 10000 });
+      }
     }
 
     // 等待项目选择器加载完成

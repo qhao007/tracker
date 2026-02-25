@@ -23,11 +23,23 @@ test.describe('CP 集成测试', () => {
   async function loginAsAdmin(page: any) {
     await page.goto('http://localhost:8081');
     await page.waitForLoadState('domcontentloaded');
-    // 填写登录表单
-    await page.fill('#loginUsername', 'admin');
-    await page.fill('#loginPassword', 'admin123');
-    await page.click('#loginForm button[type="submit"]');
-    await page.waitForTimeout(1000);
+
+    // 检查是否需要登录
+    const needsLogin = await page.locator('#loginForm').isVisible().catch(() => false);
+    if (needsLogin) {
+      // 填写登录表单
+      await page.fill('#loginUsername', 'admin');
+      await page.fill('#loginPassword', 'admin123');
+      await page.click('#loginForm button[type="submit"]');
+      // 等待用户信息显示 - 登录成功的标志
+      await page.waitForSelector('#userInfo', { timeout: 10000 });
+    } else {
+      // 已经登录，确保用户信息可见
+      await page.waitForSelector('#userInfo', { timeout: 10000 }).catch(() => {});
+    }
+
+    // 等待项目选择器可用
+    await page.waitForSelector('#projectSelector:not([disabled])', { timeout: 10000 });
   }
 
   test.beforeEach(async ({ page }) => {
@@ -35,6 +47,11 @@ test.describe('CP 集成测试', () => {
     await loginAsAdmin(page);
     // 登录后等待页面加载完成
     await page.waitForSelector('#projectSelector', { timeout: 10000 });
+    // 额外等待确保登录覆盖层消失
+    await page.waitForFunction(() => {
+      const overlay = document.getElementById('loginOverlay');
+      return !overlay || !overlay.classList.contains('show');
+    }, { timeout: 5000 }).catch(() => {});
   });
 
   test.afterEach(async ({ page }, testInfo) => {
@@ -319,29 +336,47 @@ test.describe('CP 集成测试 - 数据一致性', () => {
    * 2. 刷新页面
    * 3. 验证 CP 仍然存在
    */
-  test.skip('CP-009: CP 数据持久化验证 - 需要session修复', async ({ cpPage }) => {
+  test('CP-009: CP 数据持久化验证', async ({ cpPage }) => {
     const cpData = TestDataFactory.createCPData();
 
-    // 创建 CP
-    await cpPage.createCP(cpData);
-
-    // 刷新页面 - 需要处理session丢失
-    await cpPage.page.reload();
-    await cpPage.page.waitForLoadState('domcontentloaded');
-    await cpPage.page.waitForTimeout(500);
-
-    // 检查是否需要登录
+    // 确保登录状态正常
     const needsLogin = await cpPage.page.locator('#loginForm').isVisible().catch(() => false);
     if (needsLogin) {
       await cpPage.page.fill('#loginUsername', 'admin');
       await cpPage.page.fill('#loginPassword', 'admin123');
       await cpPage.page.click('#loginForm button[type="submit"]');
-      await cpPage.page.waitForSelector('#userInfo', { timeout: 10000 }).catch(() => {});
     }
+    await cpPage.page.waitForSelector('#userInfo', { timeout: 10000 });
+    await cpPage.page.waitForSelector('#projectSelector:not([disabled])', { timeout: 10000 });
+
+    // 创建 CP
+    await cpPage.createCP(cpData);
+
+    // 保存当前选择的项目
+    const currentProject = await cpPage.page.locator('#projectSelector').inputValue();
+
+    // 刷新页面 - 需要处理session丢失
+    await cpPage.page.reload();
+    await cpPage.page.waitForLoadState('domcontentloaded');
+
+    // 确保登录状态正常
+    const needsLoginAfterReload = await cpPage.page.locator('#loginForm').isVisible().catch(() => false);
+    if (needsLoginAfterReload) {
+      await cpPage.page.fill('#loginUsername', 'admin');
+      await cpPage.page.fill('#loginPassword', 'admin123');
+      await cpPage.page.click('#loginForm button[type="submit"]');
+    }
+    await cpPage.page.waitForSelector('#userInfo', { timeout: 10000 });
+    await cpPage.page.waitForSelector('#projectSelector:not([disabled])', { timeout: 10000 });
 
     // 等待项目选择器
-    await cpPage.page.waitForSelector('#projectSelector:not([disabled])', { timeout: 10000 });
     await cpPage.page.waitForTimeout(500);
+
+    // 重新选择之前的项目
+    if (currentProject) {
+      await cpPage.page.selectOption('#projectSelector', currentProject);
+      await cpPage.page.waitForTimeout(500);
+    }
 
     // 切换到 CP 标签页
     await cpPage.switchToCPTab();

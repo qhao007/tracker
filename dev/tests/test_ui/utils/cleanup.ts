@@ -60,28 +60,47 @@ async function cleanupProjects(page: Page): Promise<void> {
     const projectSelector = page.locator('#projectSelector option');
     const count = await projectSelector.count();
 
-    // 查找并删除以 prefix 开头的项目
+    // 收集要删除的项目 ID
+    const projectsToDelete: { id: number; name: string }[] = [];
+
     for (let i = 0; i < count; i++) {
       const option = projectSelector.nth(i);
       const text = await option.textContent();
 
       if (text && (text.startsWith(prefix) || text.includes('TestUI_'))) {
-        console.log(`🗑️ 发现测试项目: ${text}`);
-
-        // 选择该项目
-        await page.selectOption('#projectSelector', { index: i });
-        await page.waitForTimeout(300);
-
-        // 查找删除按钮并删除项目
-        const deleteBtn = page.locator('.project-delete-btn, [onclick*="deleteProject"]');
-        if (await deleteBtn.isVisible()) {
-          // ✅ 使用 dialogHelper 安全处理
-          await dialogHelper.handle(page, async () => {
-            await deleteBtn.click();
-          });
+        const value = await option.getAttribute('value');
+        if (value) {
+          projectsToDelete.push({ id: parseInt(value), name: text });
         }
       }
     }
+
+    // 使用 API 删除项目（前端没有删除按钮）
+    for (const project of projectsToDelete) {
+      console.log(`🗑️ 删除测试项目: ${project.name}`);
+
+      try {
+        // 直接调用 API 删除项目
+        await page.evaluate(async (projectId) => {
+          const response = await fetch(`/api/projects/${projectId}`, {
+            method: 'DELETE',
+            credentials: 'include'
+          });
+          return response.json();
+        }, project.id);
+
+        // 等待删除完成
+        await page.waitForTimeout(500);
+      } catch (e) {
+        console.warn(`⚠️ 删除项目 ${project.name} 失败:`, e);
+      }
+    }
+
+    // 刷新页面以更新项目列表
+    await page.reload();
+    await page.waitForSelector('#projectSelector', { timeout: 10000 });
+
+    console.log(`✅ 项目清理完成，共删除 ${projectsToDelete.length} 个测试项目`);
   } catch (error) {
     console.warn('⚠️ 清理项目时出错:', error);
   }
