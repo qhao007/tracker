@@ -207,7 +207,7 @@
             <select class="project-selector" id="projectSelector"><option value="">加载项目中...</option></select>
         </div>
         <div class="header-actions" id="headerActions">
-            <button class="header-btn" onclick="showProjectModal()">📁 项目</button>
+            <button class="header-btn" id="projectManageBtn" onclick="showProjectModal()">📁 项目</button>
             <button class="header-btn" onclick="showArchiveModal()">💾 备份</button>
             <button class="header-btn" onclick="showVersionInfo()">ℹ️ 关于</button>
             <a href="/manual" target="_blank" class="header-btn" style="text-decoration: none;">❓ 帮助</a>
@@ -671,6 +671,12 @@
             const userManageBtn = document.getElementById('userManageBtn');
             if (userManageBtn) {
                 userManageBtn.style.display = currentUser.role === 'admin' ? 'inline-block' : 'none';
+            }
+            
+            // 根据角色控制项目管理按钮显示（仅 admin 可见）
+            const projectManageBtn = document.getElementById('projectManageBtn');
+            if (projectManageBtn) {
+                projectManageBtn.style.display = currentUser.role === 'admin' ? 'inline-block' : 'none';
             }
             
             // 根据角色控制导入/导出/批量操作按钮（guest 禁止使用）
