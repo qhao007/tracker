@@ -1474,3 +1474,37 @@ def reinit_users_db():
 3. `projects.json` 重建时排除 users.db（系统数据库不是项目）
 
 **Git 提交**: `3bf0790 fix: 适配 v0.7.1 认证机制`
+
+---
+
+## BUG-063: 项目删除缺少归档备份
+**日期**: 2026-02-25
+**版本**: v0.7.1
+**状态**: ✅ 已修复
+
+**问题描述**: 需求规格书要求"删除前自动创建归档备份"，但实际 delete_project 函数未调用 archive_project，导致误删后无法恢复
+
+**根本原因**: delete_project 函数只标记 is_archived=True 并删除数据库文件，未调用 archive_project 创建备份
+
+**修复方案**: 
+```python
+def delete_project(project_id):
+    # 删除前自动创建归档备份
+    try:
+        # 收集项目数据并保存到 archives 目录
+        filename = f"{project['name']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_deleted.json"
+        # ... 保存备份文件
+    except Exception as e:
+        # 备份失败不影响删除流程
+        print(f"项目备份失败: {e}")
+    
+    # 标记为归档 + 删除数据库文件
+    ...
+```
+
+**修复内容**:
+1. delete_project 函数删除前自动创建归档备份
+2. 备份文件保存到 archives 目录，命名包含 _deleted 后缀
+3. 备份失败不影响删除流程
+
+**Git 提交**: `27936db fix: 项目删除前自动创建归档备份`
