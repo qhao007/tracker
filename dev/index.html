@@ -385,6 +385,20 @@
         </div>
     </div>
     
+    <!-- Delete Project Confirmation Modal -->
+    <div class="modal" id="deleteProjectModal">
+        <div class="modal-content" style="width: 400px;">
+            <div class="modal-header"><span>确认删除</span><button class="modal-close" onclick="closeModal('deleteProjectModal')">&times;</button></div>
+            <div class="modal-body">
+                <p id="deleteProjectMessage" style="margin-bottom: 20px; line-height: 1.6;"></p>
+                <div class="form-actions">
+                    <button type="button" class="btn" onclick="closeModal('deleteProjectModal')">取消</button>
+                    <button type="button" class="btn" style="background: #d32f2f; color: white; border-color: #c62828;" onclick="confirmDeleteProject()">确认删除</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <!-- Archive Modal -->
     <div class="modal" id="archiveModal">
         <div class="modal-content" style="width: 500px;">
@@ -1449,7 +1463,56 @@
         
         function editCP(id) { openCPModal(id); }
         function editTC(id) { openTCModal(id); }
-        function showProjectModal() { const list = document.getElementById('projectList'); list.innerHTML = projects.map(p => `<div class="project-item ${currentProject && currentProject.id === p.id ? 'active' : ''}" onclick="selectProject(${p.id}); closeModal('projectModal');"><div class="project-info"><span class="project-name">${p.name}</span><span class="project-meta">CP: ${p.cp_count} | TC: ${p.tc_count}</span></div></div>`).join(''); document.getElementById('projectModal').classList.add('active'); }
+        let pendingDeleteProjectId = null;
+        let pendingDeleteProjectName = null;
+        
+        function showProjectModal() {
+            const list = document.getElementById('projectList');
+            const isAdmin = currentUser && currentUser.role === 'admin';
+            list.innerHTML = projects.map(p => {
+                const isActive = currentProject && currentProject.id === p.id;
+                const deleteBtn = isAdmin ? `<button class="action-btn delete" onclick="event.stopPropagation(); showDeleteProjectConfirm(${p.id}, '${escapeHtml(p.name)}')" title="删除项目">🗑️ 删除</button>` : '';
+                return `<div class="project-item ${isActive ? 'active' : ''}" onclick="selectProject(${p.id}); closeModal('projectModal');"><div class="project-info"><span class="project-name">${p.name}</span><span class="project-meta">CP: ${p.cp_count} | TC: ${p.tc_count}</span></div><div class="action-btns">${deleteBtn}</div></div>`;
+            }).join('');
+            document.getElementById('projectModal').classList.add('active');
+        }
+        
+        function showDeleteProjectConfirm(projectId, projectName) {
+            pendingDeleteProjectId = projectId;
+            pendingDeleteProjectName = projectName;
+            const message = `确定要删除项目 "<strong>${escapeHtml(projectName)}</strong>" 吗？此操作将同时删除项目下的所有 Cover Points 和 Test Cases。此操作不可恢复。`;
+            document.getElementById('deleteProjectMessage').innerHTML = message;
+            document.getElementById('deleteProjectModal').classList.add('active');
+        }
+        
+        async function confirmDeleteProject() {
+            if (!pendingDeleteProjectId) return;
+            try {
+                const res = await fetch(`/api/projects/${pendingDeleteProjectId}`, { method: 'DELETE' });
+                const result = await res.json();
+                if (result.success || res.ok) {
+                    closeModal('deleteProjectModal');
+                    await loadProjects();
+                    if (projects.length > 0) {
+                        selectProject(projects[0].id);
+                    } else {
+                        currentProject = null;
+                        currentProjectId = null;
+                        cps = [];
+                        tcs = [];
+                        renderCPTable();
+                        renderTCStats();
+                    }
+                    alert('项目删除成功');
+                } else {
+                    alert(result.error || '删除失败');
+                }
+            } catch (err) {
+                alert('删除失败: ' + err);
+            }
+            pendingDeleteProjectId = null;
+            pendingDeleteProjectName = null;
+        }
         
         async function createProject() {
             const name = document.getElementById('newProjectName').value.trim();
