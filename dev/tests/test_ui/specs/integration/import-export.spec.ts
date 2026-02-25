@@ -14,11 +14,24 @@ import { test, expect } from '../../fixtures/tracker.fixture';
 import { TestDataFactory } from '../../fixtures/test-data.factory';
 
 test.describe('导入导出功能测试', () => {
-  
-  test.beforeEach(async ({ page }) => {
-    // 确保在首页并选择一个项目
+
+  /**
+   * 登录辅助函数 - v0.7.1 需要登录
+   */
+  async function loginAsAdmin(page: any) {
     await page.goto('http://localhost:8081');
     await page.waitForLoadState('domcontentloaded');
+    // 填写登录表单
+    await page.fill('#loginUsername', 'admin');
+    await page.fill('#loginPassword', 'admin123');
+    await page.click('#loginForm button[type="submit"]');
+    await page.waitForTimeout(1000);
+  }
+
+  test.beforeEach(async ({ page }) => {
+    // 登录 - v0.7.1 需要认证
+    await loginAsAdmin(page);
+    // 登录后等待页面加载完成
     await page.waitForSelector('#projectSelector', { timeout: 10000 });
     
     // 创建一个测试项目

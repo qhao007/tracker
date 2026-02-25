@@ -1,9 +1,10 @@
 """
-Tracker Flask 应用 - v0.3 独立数据库版本
+Tracker Flask 应用 - v0.7.1 用户认证版本
 """
 from flask import Flask, g
 from .api import api
 import os
+import secrets
 
 
 def create_app(testing=False):
@@ -15,6 +16,26 @@ def create_app(testing=False):
     app.config['TESTING'] = testing
     app.config['BASE_DIR'] = base_dir
     app.config['DATA_DIR'] = data_dir
+    
+    # Session 配置 - 使用固定的 SECRET_KEY 确保 session 持久化
+    # 生产环境应使用环境变量设置
+    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'tracker-dev-secret-key-v071')
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    # 使用文件系统存储 session，支持多 worker
+    session_dir = os.path.join(data_dir, 'sessions')
+    os.makedirs(session_dir, exist_ok=True)
+    app.config['SESSION_TYPE'] = 'filesystem'
+    app.config['SESSION_FILE_DIR'] = session_dir
+    app.config['SESSION_PERMANENT'] = False
+    app.config['SESSION_USE_SIGNER'] = True
+    # 初始化 Flask-Session
+    from flask_session import Session
+    Session(app)
+    # 注意：生产环境需要配置 HTTPS，设置 SESSION_COOKIE_SECURE = True
+    
+    # 配置文件上传大小限制 (16MB)
+    app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
     # 确保数据目录存在
     os.makedirs(data_dir, exist_ok=True)
@@ -25,6 +46,23 @@ def create_app(testing=False):
 
     # 注册蓝图
     app.register_blueprint(api, url_prefix='/')
+
+    # 手动添加 /manual 路由（因为模板在 base_dir）
+    from flask import render_template, send_from_directory
+    
+    @app.route('/manual')
+    def manual():
+        return render_template('templates/manual.html')
+    
+    @app.route('/static/<path:filename>')
+    def serve_static(filename):
+        return send_from_directory(os.path.join(base_dir, 'static'), filename)
+
+    # 初始化认证系统
+    from . import auth
+    if not testing:
+        with app.app_context():
+            auth.init_auth()
 
     # 清理数据库连接
     @app.teardown_appcontext

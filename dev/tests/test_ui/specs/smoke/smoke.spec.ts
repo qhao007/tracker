@@ -11,11 +11,24 @@
 import { test, expect } from '../../fixtures/tracker.fixture';
 
 test.describe('冒烟测试 - 核心功能', () => {
-  
-  test.beforeEach(async ({ page }) => {
-    // 每个测试前确保在首页
+
+  /**
+   * 登录辅助函数 - v0.7.1 需要登录
+   */
+  async function loginAsAdmin(page: any) {
     await page.goto('http://localhost:8081');
     await page.waitForLoadState('domcontentloaded');
+    // 填写登录表单
+    await page.fill('#loginUsername', 'admin');
+    await page.fill('#loginPassword', 'admin123');
+    await page.click('#loginForm button[type="submit"]');
+    await page.waitForTimeout(1000);
+  }
+
+  test.beforeEach(async ({ page }) => {
+    // 登录 - v0.7.1 需要认证
+    await loginAsAdmin(page);
+    // 登录后等待页面加载完成
     await page.waitForSelector('#projectSelector', { timeout: 10000 });
   });
 
@@ -120,10 +133,24 @@ test.describe('冒烟测试 - 核心功能', () => {
 });
 
 test.describe('冒烟测试 - 边界验证', () => {
-  
-  test.beforeEach(async ({ page }) => {
+
+  /**
+   * 登录辅助函数 - v0.7.1 需要登录
+   */
+  async function loginAsAdmin(page: any) {
     await page.goto('http://localhost:8081');
     await page.waitForLoadState('domcontentloaded');
+    // 填写登录表单
+    await page.fill('#loginUsername', 'admin');
+    await page.fill('#loginPassword', 'admin123');
+    await page.click('#loginForm button[type="submit"]');
+    await page.waitForTimeout(1000);
+  }
+
+  test.beforeEach(async ({ page }) => {
+    // 登录 - v0.7.1 需要认证
+    await loginAsAdmin(page);
+    // 登录后等待页面加载完成
     await page.waitForSelector('#projectSelector', { timeout: 10000 });
   });
 

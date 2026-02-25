@@ -196,4 +196,4 @@
 
 **相关文档**:
 - 总体规格: `SPECIFICATIONS/tracker_OVERALL_SPECS.md`
-- Bug 追踪: `../BUGLOG/tracker_BUGLOG.md`
+- Bug 追踪: `../BUGLOG/tracker_BUG_RECORD.md`

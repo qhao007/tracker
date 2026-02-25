@@ -1,6 +1,6 @@
-# 芯片验证 Tracker v0.7.0 总体规格书
+# 芯片验证 Tracker v0.7.1 总体规格书
 
-> **版本**: v0.7.0 | **更新日期**: 2026-02-16 | **状态**: ✅ 已完成
+> **版本**: v0.7.1 | **更新日期**: 2026-02-25 | **状态**: ✅ 已完成
 
 ---
 
@@ -40,8 +40,9 @@
 | 多项目（Project）管理 | 与外部 CI/CD 系统集成 |
 | Cover Points 的增删改查 | 自动化测试执行引擎 |
 | Test Cases 的增删改查 | 芯片仿真功能 |
-| TC 与 CP 的多对多关联管理 | 用户权限管理 |
+| TC 与 CP 的多对多关联管理 | |
 | 状态跟踪（OPEN/CODED/FAIL/PASS） | |
+| **用户权限管理（admin/user/guest）** | |
 | 项目备份/恢复（Archive） | |
 | 测试版本和正式版本分离 | |
 | 进度/覆盖率统计面板 | |
@@ -97,6 +98,38 @@
 | BUG-034 | TC Status/DV Milestone 缺少全部选项 | 添加"全部"选项 |
 | BUG-035 | TC DV Milestone 过滤选项不动态加载 | 动态从 TC 列表加载 |
 | BUG-036 | projectSelector ID 拼写错误 | projectSelect → projectSelector |
+
+### 1.7 v0.7.1 重大变更 (2026-02-25)
+
+**v0.7.1 功能增强（用户认证与权限管理）：**
+
+- **用户认证系统**: 支持用户名密码登录和访客登录
+  - 新增独立用户数据库 `users.db`
+  - 支持 admin/user/guest 三种角色
+  - pbkdf2_sha256 密码哈希
+  - 暴力破解防护（5次失败锁定15分钟）
+  - Session 安全配置（HttpOnly, SameSite）
+
+- **权限管理（RBAC）**: 基于角色的访问控制
+  - 前端按钮权限控制（根据角色隐藏/显示）
+  - 后端 API 权限校验（@admin_required, @guest_required）
+  - created_by 字段记录创建者
+
+- **项目删除功能**: 支持管理员删除项目
+  - 删除前自动创建归档备份
+  - 删除确认对话框
+  - 仅 admin 可删除
+
+- **用户手册**: 在线查看使用帮助
+  - 帮助按钮在首页顶部工具栏
+  - Markdown 渲染
+
+**v0.7.1 Bug 修复：**
+
+| Bug ID | 问题 | 修复内容 |
+|--------|------|----------|
+| BUG-063 | 项目删除缺少归档备份 | delete_project 添加归档备份逻辑 |
+| BUG-064 | user 角色项目管理按钮可见 | 添加 projectManageBtn 权限控制 |
 
 ---
 
@@ -347,7 +380,86 @@ coverage = round(passed / total * 100, 1) if total > 0 else 0.0
 |------|------|------|
 | GET | `/api/version` | 获取版本信息 |
 
-### 4.2 项目管理
+### 4.2 认证 API (v0.7.1 新增)
+
+| 方法 | 路径 | 功能 | 权限 |
+|------|------|------|------|
+| POST | `/api/auth/login` | 用户名密码登录 | 公开 |
+| POST | `/api/auth/guest-login` | 访客登录 | 公开 |
+| POST | `/api/auth/logout` | 登出 | 登录 |
+| GET | `/api/auth/me` | 获取当前用户信息 | 登录 |
+
+**POST /api/auth/login 请求体**:
+```json
+{
+    "username": "admin",
+    "password": "admin123"
+}
+```
+
+**成功响应**:
+```json
+{
+    "success": true,
+    "user": {
+        "id": 1,
+        "username": "admin",
+        "role": "admin",
+        "is_active": 1
+    }
+}
+```
+
+**错误响应**:
+```json
+{
+    "error": "Unauthorized",
+    "message": "用户名或密码错误"
+}
+```
+
+### 4.3 用户管理 API (v0.7.1 新增)
+
+| 方法 | 路径 | 功能 | 权限 |
+|------|------|------|------|
+| GET | `/api/users` | 获取用户列表 | 管理员 |
+| POST | `/api/users` | 创建用户 | 管理员 |
+| PATCH | `/api/users/{id}` | 更新用户（禁用/启用） | 管理员 |
+| DELETE | `/api/users/{id}` | 删除用户 | 管理员 |
+| POST | `/api/users/{id}/reset-password` | 重置密码 | 管理员 |
+
+**GET /api/users 响应**:
+```json
+[
+    {
+        "id": 1,
+        "username": "admin",
+        "role": "admin",
+        "is_active": 1,
+        "created_at": "2026-02-25 10:00:00",
+        "last_login": "2026-02-25 15:30:00"
+    },
+    {
+        "id": 2,
+        "username": "user01",
+        "role": "user",
+        "is_active": 1,
+        "created_at": "2026-02-25 11:00:00",
+        "last_login": null
+    }
+]
+```
+
+**POST /api/users 请求体**:
+```json
+{
+    "username": "newuser",
+    "password": "password123",
+    "role": "user"
+}
+```
+
+### 4.4 项目管理
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
@@ -393,7 +505,7 @@ Body: file=@backup.json
 }
 ```
 
-### 4.3 Cover Points
+### 4.5 Cover Points
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
@@ -489,7 +601,7 @@ DELETE /api/cp/1?project_id=1
 }
 ```
 
-### 4.4 Test Cases
+### 4.6 Test Cases
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
@@ -589,7 +701,7 @@ DELETE /api/tc/1?project_id=1
 
 > **说明**: `connected_cps` 是 TC 详情 API (`GET /api/tc/{id}`) 的返回字段，表示该 Test Case 关联的 Cover Points。
 
-### 4.5 统计
+### 4.7 统计
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
@@ -659,7 +771,7 @@ coverage = (CP1覆盖率 + CP2覆盖率 + ... + CPn覆盖率) / n
 | REMOVED 不参与计算 | PASS Rate 和 Coverage 计算均排除 REMOVED |
 | 无关联 CP | Coverage 按 0% 计算 |
 
-### 4.6 导入导出
+### 4.8 导入导出
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
@@ -724,7 +836,7 @@ coverage = (CP1覆盖率 + CP2覆盖率 + ... + CPn覆盖率) / n
 
 ---
 
-### 4.7 API 使用说明
+### 4.9 API 使用说明
 
 #### 4.7.1 为什么需要 project_id？
 

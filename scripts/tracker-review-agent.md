@@ -37,7 +37,7 @@
 ### 3. 前一天开发经验回顾
 ```
 3.1 读取昨天的开发记录: memory/YYYY-MM-DD.md
-3.2 读取v0.6.1相关的BUGLOG: dev/docs/tracker_BUGLOG.md
+3.2 读取v0.6.1相关的BUGLOG: dev/docs/tracker_BUG_RECORD.md
 3.3 分析：
     - 发现了哪些bug？根本原因是什么？
     - 哪些流程导致了bug？（代码审查不足？测试覆盖不足？）

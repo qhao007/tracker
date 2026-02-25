@@ -431,7 +431,7 @@ TRACKER_TEST_REPORT_E2E_YYYYMMDD.md
 所有发现的代码 Bug 必须记录到 BugLog：
 
 ```
-/projects/management/tracker/docs/BUGLOG/tracker_BUGLOG.md
+/projects/management/tracker/docs/BUGLOG/tracker_BUG_RECORD.md
 ```
 
 ### 6.2 记录格式

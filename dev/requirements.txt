@@ -1,0 +1,8 @@
+# Tracker v0.7.1 依赖
+Flask>=3.0.0
+Flask-Session>=0.8.0
+gevent>=25.0.0
+gunicorn>=25.0.0
+requests>=2.31.0
+openpyxl>=3.1.0
+Pillow>=10.0.0

@@ -41,10 +41,11 @@ fi
 pkill -f "server_test.py" 2>/dev/null || true
 sleep 1
 
-# 使用 gunicorn 启动
-echo "启动 Tracker 开发版服务 (v0.6.0)..."
+# 使用 gunicorn 启动 (gevent worker 解决多进程 session 问题)
+echo "启动 Tracker 开发版服务 (v0.7.1)..."
 gunicorn \
     --workers 2 \
+    --worker-class=gevent \
     --bind 0.0.0.0:8081 \
     --access-logfile /tmp/gunicorn_access.log \
     --error-logfile /tmp/gunicorn_error.log \

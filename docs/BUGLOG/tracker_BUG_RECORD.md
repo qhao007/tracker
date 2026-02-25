@@ -1031,6 +1031,83 @@ function loadTCFilterOptions() {
 
 **Git 提交**: `15ca1e2 fix: 修复 CSV 导出 HTTP Header 中文编码问题`
 
+### BUG-047: 项目 ID 生成逻辑错误导致数据冲突
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Critical |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-22 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-02-22 |
+| **修复人** | 小栗子 |
+
+**描述**: 创建项目时使用 `len(projects) + 1` 作为新项目 ID，而非 `max(id) + 1`，导致多项目共享同一 ID。2026-02-21 23:03 在生产环境创建了名为 "test" 的项目，错误地使用了 ID=3，与已有的 EX5 项目（ID=3）产生冲突。
+
+**影响范围**: 
+- 生产环境 `user_data/projects.json` 包含重复 ID
+- API 返回冲突的项目列表
+- 数据完整性受损
+
+**根因分析**:
+- `create_project()` 函数位于 `dev/app/api.py`
+- ID 生成逻辑: `"id": len(projects) + 1`
+- 当 projects 列表长度为 2 时，新项目 ID = 2 + 1 = 3
+- 如果已有 ID=3 的项目，则产生冲突
+
+**修复方案**:
+```python
+# 修改前
+"id": len(projects) + 1,
+
+# 修改后
+"id": max([p["id"] for p in projects], default=0) + 1,
+```
+
+**验证**: 
+- 生产环境 projects.json 已清理冲突数据
+- API 返回正确的项目列表（无重复 ID）
+
+**Git 提交**: `c139a60 fix: 修复项目 ID 生成逻辑，避免 ID 冲突`
+
+### BUG-048: sqlite3.Row 不支持 get() 方法导致 API 500 错误
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-22 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-02-22 |
+| **修复人** | 小栗子 |
+
+**描述**: 调用 `/api/tc?project_id=2` 和 `/api/cp?project_id=2` 查询列表时返回 500 错误。
+
+**错误信息**:
+```
+AttributeError: 'sqlite3.Row' object has no attribute 'get'
+```
+
+**根因分析**:
+- 位置: `dev/app/api.py` 第 677 行和 1035 行
+- 代码: `"created_by": row.get("created_by", "")`
+- SQLite 的 `row` 对象不支持 `.get()` 方法，需要转换为 dict
+
+**修复方案**:
+```python
+# 修改前
+"created_by": row.get("created_by", ""),
+
+# 修改后
+"created_by": dict(row).get("created_by", ""),
+```
+
+**验证**: 
+- TC 列表和 CP 列表 API 正常返回 200
+- created_by 字段正确显示
+
+**Git 提交**: `cdc0bcc fix: 修复 created_by 字段查询问题`
+
 ## 3. 测试用例
 
 ### 测试覆盖矩阵
@@ -1150,3 +1227,313 @@ cd dev && npx playwright test tests/tracker.spec.ts --project=firefox
 | v1.9 | 2026-02-09 | 修复 BUG-022 CP列表显示批量操作按钮 |
 | v2.0 | 2026-02-10 | 修复 BUG-026 VERSION 文件读取失败 |
 | v2.1 | 2026-02-16 | 修复 v0.7.0 导入导出功能 bug (BUEG-041~044) |
+
+### BUG-049: TC/CP 更新 API 缺少权限控制
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-22 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-02-22 |
+| **修复人** | 小栗子 |
+
+**描述**: `/api/tc/<id>` PUT 和 `/api/cp/<id>` PUT 缺少权限控制，guest 用户可以调用但应该被拒绝。
+
+**修复方案**: 添加 `@guest_required` 装饰器。
+
+**验证**: 6/6 API 权限测试通过。
+
+**Git 提交**: `ddeecf3 fix: 添加 RBAC 权限控制`
+
+### BUG-050: TC/CP 删除 API 缺少权限控制
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-22 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-02-22 |
+| **修复人** | 小栗子 |
+
+**描述**: `/api/tc/<id>` DELETE 和 `/api/cp/<id>` DELETE 缺少权限控制。
+
+**修复方案**: 添加 `@guest_required` 装饰器。
+
+**验证**: 6/6 API 权限测试通过。
+
+**Git 提交**: `ddeecf3 fix: 添加 RBAC 权限控制`
+
+### BUG-052: 前端未根据角色控制按钮显示
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-02-22 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-02-22 |
+| **修复人** | 小栗子 |
+
+**描述**: 所有登录用户都能看到用户管理按钮，未根据角色控制。
+
+**修复方案**: 在 `updateUIForLoggedIn()` 中添加角色检查，仅 admin 可见用户管理按钮。
+
+**验证**: 2/2 前端权限测试通过。
+
+**Git 提交**: `ddeecf3 fix: 添加 RBAC 权限控制`
+
+---
+
+## BUG-053: guest 删除操作无错误提示
+**日期**: 2026-02-22
+**版本**: v0.7.1
+**状态**: ✅ 已修复
+
+**问题描述**: guest 用户点击删除按钮时，无法删除但没有弹出错误提示（不像编辑操作会显示 forbidden 对话框）
+
+**根本原因**: 前端 deleteTC/deleteCP 函数未处理 403 响应
+
+**修复方案**: 
+```javascript
+// 添加 res.ok 检查
+const res = await fetch(...);
+if (!res.ok) {
+    const data = await res.json();
+    alert(data.message || '删除失败');
+    return;
+}
+```
+
+---
+
+## BUG-054: user 角色无法创建 TC/CP
+**日期**: 2026-02-22
+**版本**: v0.7.1
+**状态**: ✅ 已修复
+
+**问题描述**: user 角色登录后，点击添加 TC/CP，弹出 "unauthorized" 错误
+
+**根本原因**: 前端 saveCP/saveTC 的 fetch 请求缺少 `credentials: 'include'`，导致 cookie 未发送，服务器认为是未登录状态
+
+**修复方案**: 
+```javascript
+// 添加 credentials: 'include'
+const res = await fetch(`/api/cp${id ? '/'+id : ''}`, { 
+    method: id ? 'PUT' : 'POST', 
+    headers: {'Content-Type': 'application/json'}, 
+    body: JSON.stringify(data), 
+    credentials: 'include'  // 添加这行
+});
+```
+
+**Git 提交**: dc429b2
+
+## BUG-055: 刷新页面间歇性 401 错误
+**日期**: 2026-02-22
+**版本**: v0.7.1
+**状态**: ✅ 已修复
+
+**问题描述**: 登录后刷新浏览器，偶尔会退出登录需要重新登录
+
+**根本原因**: 
+多层问题叠加：
+1. Flask 默认 session 存储在进程内存中，多 worker 时请求分发到不同 worker
+2. SECRET_KEY 每次服务启动时生成新的随机值，导致 session 签名失效
+3. 前端 fetch 请求缺少 credentials: 'include'
+
+**修复方案**: 
+1. 使用 Flask-Session 文件存储（基础支持）
+2. 使用 gevent worker 替代 sync worker（核心修复 - 协程模型避免多进程）
+3. 使用固定 SECRET_KEY 确保 session 签名一致
+4. 添加全局 fetch 包装器自动发送 credentials
+
+**Git 提交**: 660d030
+
+---
+
+## BUG-057: guest 角色可以使用导入/导出/批量操作功能
+**日期**: 2026-02-22
+**版本**: v0.7.1
+**状态**: ✅ 已修复
+
+**问题描述**: guest 角色可以使用导入、导出、批量操作功能，但需求规格书要求禁止
+
+**根本原因**: 
+1. 后端：导入/导出/批量操作 API 缺少 @guest_required 装饰器
+2. 前端：相关按钮没有根据角色隐藏
+
+**修复方案**: 
+1. 后端：为以下 API 添加 @guest_required 装饰器
+   - /api/tc/batch/status
+   - /api/tc/batch/target_date
+   - /api/tc/batch/dv_milestone
+   - /api/cp/batch/priority
+   - /api/import/template
+   - /api/import
+   - /api/export
+
+2. 前端：隐藏 guest 角色的导入/导出/批量操作按钮
+
+**Git 提交**: 6342d8f
+
+---
+
+## BUG-058: CP/TC 详情 API 未返回 created_by 字段
+**日期**: 2026-02-22
+**版本**: v0.7.1
+**状态**: ✅ 已修复
+
+**问题描述**: 查看 CP/TC 详情时，未返回 created_by 字段
+
+**根本原因**: 
+1. sqlite3.Row 不支持 .get() 方法，导致代码异常
+2. created_by 字段未正确从数据库传递到响应
+
+**修复方案**: 
+```python
+# 将 sqlite3.Row 转换为字典
+cp_dict = dict(cp)
+created_by = cp_dict.get("created_by", "") or ""
+```
+
+---
+
+## BUG-059: sqlite3.Row 访问字段方式错误
+**日期**: 2026-02-22
+**版本**: v0.7.1
+**状态**: ✅ 已修复（与 BUG-058 同一修复）
+
+**问题描述**: sqlite3.Row 对象不支持 .get() 方法，导致访问 created_by 时报错
+
+**根本原因**: 使用了 cp.get("created_by") 而非 dict(cp).get("created_by")
+
+**修复方案**: 先将 sqlite3.Row 转换为字典再访问字段
+
+---
+
+## BUG-060: 创建用户对话框缺少密码输入
+**日期**: 2026-02-22
+**版本**: v0.7.1
+**状态**: ✅ 已修复
+
+**问题描述**: 前端创建用户对话框只要求输入用户名，没有密码输入，导致创建的用户无法登录
+
+**修复方案**: 
+- 添加用户表单模态框，包含用户名、密码、角色选择
+- 创建用户时必须填写密码
+
+---
+
+## BUG-061: 访客角色创建失败
+**日期**: 2026-02-22
+**版本**: v0.7.1
+**状态**: ✅ 已修复
+
+**问题描述**: 创建用户时选择访客角色会失败，后端返回"访客账户不能设置密码"
+
+**根本原因**: 后端 API 禁止为 guest 设置密码，但前端仍然允许选择 guest 角色
+
+**修复方案**: 
+- 移除创建用户表单中的访客角色选项
+- 访客通过"访客登录"按钮一键登录，无需手动创建
+
+---
+
+## BUG-062: clean 命令删除 users.db 导致无法登录
+**日期**: 2026-02-23
+**版本**: v0.7.1
+**状态**: ✅ 已修复
+
+**问题描述**: 运行 `compatibility_test.py clean` 后，测试环境无法登录（admin/guest 账号失效）
+
+**根本原因**: v0.7.1 引入认证机制后，用户数据存储在 users.db 中。clean 命令删除该文件后未重新创建，导致所有用户无法登录。
+
+**修复方案**: 
+```python
+# 在 clean() 函数中添加重新初始化用户数据库
+def reinit_users_db():
+    """重新初始化用户数据库（v0.7.1 认证必需）"""
+    # 临时修改环境变量让 auth 模块使用 test_data
+    os.environ['TRACKER_DATA_DIR'] = str(TEST_DATA_DIR)
+    
+    from app import create_app
+    from app.auth import init_users_db, create_default_users
+    
+    app = create_app()
+    with app.app_context():
+        init_users_db()
+        create_default_users()
+```
+
+**修复内容**:
+1. `clean` 命令删除 users.db 后调用 `reinit_users_db()` 重新初始化
+2. `test_api` 命令添加登录步骤，使用 cookie 调用认证后的 API
+3. `projects.json` 重建时排除 users.db（系统数据库不是项目）
+
+**Git 提交**: `3bf0790 fix: 适配 v0.7.1 认证机制`
+
+---
+
+## BUG-063: 项目删除缺少归档备份
+**日期**: 2026-02-25
+**版本**: v0.7.1
+**状态**: ✅ 已修复
+
+**问题描述**: 需求规格书要求"删除前自动创建归档备份"，但实际 delete_project 函数未调用 archive_project，导致误删后无法恢复
+
+**根本原因**: delete_project 函数只标记 is_archived=True 并删除数据库文件，未调用 archive_project 创建备份
+
+**修复方案**: 
+```python
+def delete_project(project_id):
+    # 删除前自动创建归档备份
+    try:
+        # 收集项目数据并保存到 archives 目录
+        filename = f"{project['name']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_deleted.json"
+        # ... 保存备份文件
+    except Exception as e:
+        # 备份失败不影响删除流程
+        print(f"项目备份失败: {e}")
+    
+    # 标记为归档 + 删除数据库文件
+    ...
+```
+
+**修复内容**:
+1. delete_project 函数删除前自动创建归档备份
+2. 备份文件保存到 archives 目录，命名包含 _deleted 后缀
+3. 备份失败不影响删除流程
+
+**Git 提交**: `27936db fix: 项目删除前自动创建归档备份`
+
+---
+
+## BUG-064: user 角色登录后项目管理按钮仍可见
+**日期**: 2026-02-25
+**版本**: v0.7.1
+**状态**: ✅ 已修复
+
+**问题描述**: 需求规格书要求"user 登录后，项目管理按钮不可见"，但实际实现中 user 登录后仍然可以看到"📁 项目"按钮
+
+**根本原因**: 前端代码中"项目管理"按钮没有添加权限控制，所有登录用户都可以看到
+
+**修复方案**:
+1. 给项目管理按钮添加 `id="projectManageBtn"`
+2. 在 `updateUIForLoggedIn()` 函数中添加权限控制逻辑
+```javascript
+// 根据角色控制项目管理按钮显示（仅 admin 可见）
+const projectManageBtn = document.getElementById('projectManageBtn');
+if (projectManageBtn) {
+    projectManageBtn.style.display = currentUser.role === 'admin' ? 'inline-block' : 'none';
+}
+```
+
+**修复内容**:
+1. `index.html` - 给项目管理按钮添加 id
+2. `index.html` - 添加权限控制逻辑
+3. 添加测试用例验证
+
+**Git 提交**: `5fbfdb1 fix: user登录后项目管理按钮不可见`

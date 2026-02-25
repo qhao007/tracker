@@ -89,6 +89,39 @@ def sync():
     return True
 
 
+def reinit_users_db():
+    """重新初始化用户数据库（v0.7.1 认证必需）"""
+    print_step("步骤 2: 重新初始化用户数据库")
+    
+    # 设置 TEST_DATA_DIR 为数据目录
+    import sys
+    sys.path.insert(0, str(REPO_ROOT / "dev"))
+    
+    # 临时修改环境变量让 auth 模块使用 test_data
+    original_data_dir = os.environ.get('TRACKER_DATA_DIR')
+    os.environ['TRACKER_DATA_DIR'] = str(TEST_DATA_DIR)
+    
+    try:
+        from app import create_app
+        app = create_app()
+        with app.app_context():
+            from app.auth import init_users_db, create_default_users
+            init_users_db()
+            create_default_users()
+            print_ok("用户数据库已重新初始化 (admin, guest)")
+    except Exception as e:
+        print_error(f"初始化用户数据库失败: {e}")
+        return False
+    finally:
+        # 恢复环境变量
+        if original_data_dir:
+            os.environ['TRACKER_DATA_DIR'] = original_data_dir
+        else:
+            os.environ.pop('TRACKER_DATA_DIR', None)
+    
+    return True
+
+
 def clean():
     """删除 test_data 中的测试数据（保留预置的原始数据）"""
     print_step("步骤 1: 清理测试数据")
@@ -103,7 +136,10 @@ def clean():
         return True
     
     # 预置的原始测试数据（这些是项目自带的，需要保留）
-    PRESERVED_NAMES = ["Debugware", "EX5", "TestProject"]
+    PRESERVED_NAMES = ["EX5", "TestProject"]
+    
+    # 系统数据库文件（不删除，但也不作为项目处理）
+    SYSTEM_DB = "users.db"
     
     # 记录将被删除的项目名称
     deleted_names = []
@@ -113,6 +149,13 @@ def clean():
         # 保留预置的原始测试数据
         if any(preserved in db_file.name for preserved in PRESERVED_NAMES):
             print_warn(f"保留预置原始数据: {db_file.name}")
+            continue
+        
+        # users.db 由 reinit_users_db() 重新创建
+        if db_file.name == SYSTEM_DB:
+            print_ok(f"删除 (将重新创建): {db_file.name}")
+            os.remove(db_file)
+            deleted += 1
             continue
         
         # 删除其他所有数据（sync 来的 + 测试创建的）
@@ -126,8 +169,12 @@ def clean():
     
     print_ok(f"完成! 删除了 {deleted} 个文件")
     
+    # v0.7.1+: 重新初始化用户数据库
+    if not reinit_users_db():
+        return False
+    
     # 同步更新 projects.json - 基于剩余的 .db 文件重建
-    print_step("步骤 2: 同步更新 projects.json")
+    print_step("步骤 3: 同步更新 projects.json")
     projects_json = TEST_DATA_DIR / "projects.json"
     
     try:
@@ -147,6 +194,10 @@ def clean():
         # 扫描剩余的 .db 文件（排除 projects.json 本身）
         remaining_dbs = [f for f in TEST_DATA_DIR.iterdir() 
                          if f.is_file() and f.suffix == '.db']
+        
+        # 排除系统数据库文件 (users.db 是用户认证数据库，不是项目)
+        SYSTEM_DBS = ["users.db"]
+        remaining_dbs = [f for f in remaining_dbs if f.name not in SYSTEM_DBS]
         
         # 为每个 .db 文件创建项目记录
         remaining_projects = []
@@ -285,15 +336,38 @@ def test_api():
         print_warn("无法连接测试版服务，跳过动态测试")
         return True
     
+    # v0.7.1+: 先登录获取 session
+    print("执行用户登录...")
+    cookie_file = "/tmp/tracker_test_cookies.txt"
+    try:
+        result = subprocess.run(
+            ["curl", "-s", "-c", cookie_file, "-X", "POST",
+             "http://localhost:8081/api/auth/login",
+             "-H", "Content-Type: application/json",
+             "-d", '{"username":"admin","password":"admin123"}'],
+            capture_output=True, text=True, timeout=10
+        )
+        login_resp = json.loads(result.stdout)
+        if login_resp.get("success"):
+            print_ok(f"登录成功: {login_resp['user']['username']} ({login_resp['user']['role']})")
+        else:
+            print_error(f"登录失败: {login_resp}")
+            print_warn("跳过动态测试")
+            return True
+    except Exception as e:
+        print_error(f"登录异常: {e}")
+        print_warn("跳过动态测试")
+        return True
+    
     print("执行 API 兼容性测试...")
     
     tests_passed = 0
     tests_failed = 0
     
-    # 获取测试项目列表
+    # 获取测试项目列表 (使用 cookie 认证)
     try:
         result = subprocess.run(
-            ["curl", "-s", "http://localhost:8081/api/projects"],
+            ["curl", "-s", "-b", cookie_file, "http://localhost:8081/api/projects"],
             capture_output=True, text=True, timeout=10
         )
         if result.returncode == 0:
@@ -314,7 +388,7 @@ def test_api():
         
         try:
             result = subprocess.run(
-                ["curl", "-s", f"http://localhost:8081/api/stats?project_id={project_id}"],
+                ["curl", "-s", "-b", cookie_file, f"http://localhost:8081/api/stats?project_id={project_id}"],
                 capture_output=True, text=True, timeout=10
             )
             if result.returncode == 0:
@@ -327,6 +401,10 @@ def test_api():
         except Exception as e:
             print_error(f"API /stats 异常: {e}")
             tests_failed += 1
+    
+    # 清理 cookie 文件
+    if os.path.exists(cookie_file):
+        os.remove(cookie_file)
     
     print(f"\n动态测试结果: {tests_passed} 通过, {tests_failed} 失败")
     

@@ -24,23 +24,37 @@ def client():
         yield client
 
 
+@pytest.fixture
+def admin_client(client):
+    """创建已登录的管理员客户端"""
+    client.post('/api/auth/login',
+        data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+        content_type='application/json')
+    return client
+
+
 @pytest.fixture(scope='module')
 def test_project():
     """创建测试项目用于测试"""
     app = create_app(testing=True)
     with app.test_client() as client:
+        # 先登录
+        client.post('/api/auth/login',
+            data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+            content_type='application/json')
+
         name = f"Batch_Test_{int(time.time())}"
-        
+
         # 创建项目
         response = client.post('/api/projects',
                               data=json.dumps({'name': name}),
                               content_type='application/json')
-        
+
         if response.status_code == 200:
             data = json.loads(response.data)
             project_id = data['project']['id']
             yield {'id': project_id, 'name': name}
-            
+
             # 清理：删除测试项目
             client.delete(f"/api/projects/{project_id}")
         else:
@@ -48,25 +62,25 @@ def test_project():
 
 
 @pytest.fixture
-def cleanup_tcs(client, test_project):
+def cleanup_tcs(admin_client, test_project):
     """清理测试创建的 TC"""
     created_ids = []
     yield created_ids
     for tc_id in created_ids:
         try:
-            client.delete(f'/api/tc/{tc_id}?project_id={test_project["id"]}')
+            admin_client.delete(f'/api/tc/{tc_id}?project_id={test_project["id"]}')
         except:
             pass
 
 
 @pytest.fixture
-def cleanup_cps(client, test_project):
+def cleanup_cps(admin_client, test_project):
     """清理测试创建的 CP"""
     created_ids = []
     yield created_ids
     for cp_id in created_ids:
         try:
-            client.delete(f'/api/cp/{cp_id}?project_id={test_project["id"]}')
+            admin_client.delete(f'/api/cp/{cp_id}?project_id={test_project["id"]}')
         except:
             pass
 
@@ -76,12 +90,12 @@ def cleanup_cps(client, test_project):
 class TestTCBatchStatusOperations:
     """TC 批量状态更新测试"""
     
-    def test_batch_status_partial_success(self, client, test_project, cleanup_tcs):
+    def test_batch_status_partial_success(self, admin_client, test_project, cleanup_tcs):
         """API-BATCH-001: 批量更新状态 - 部分成功"""
         # 创建 5 个 TC
         tc_ids = []
         for i in range(5):
-            create_resp = client.post('/api/tc',
+            create_resp = admin_client.post('/api/tc',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_Partial_{i}_{int(time.time())}',
@@ -97,7 +111,7 @@ class TestTCBatchStatusOperations:
         # 只使用前 3 个有效 ID，加上 2 个无效 ID
         mixed_ids = tc_ids[:3] + [99999, 88888]
         
-        response = client.post('/api/tc/batch/status',
+        response = admin_client.post('/api/tc/batch/status',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'tc_ids': mixed_ids,
@@ -112,9 +126,9 @@ class TestTCBatchStatusOperations:
         assert data['success'] == 3
         assert data['failed'] == 2
     
-    def test_batch_status_all_invalid_ids(self, client, test_project):
+    def test_batch_status_all_invalid_ids(self, admin_client, test_project):
         """API-BATCH-002: 批量更新状态 - 全部无效 ID"""
-        response = client.post('/api/tc/batch/status',
+        response = admin_client.post('/api/tc/batch/status',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'tc_ids': [99999, 88888, 77777],
@@ -129,9 +143,9 @@ class TestTCBatchStatusOperations:
         assert data['success'] == 0
         assert data['failed'] == 3
     
-    def test_batch_status_empty_list(self, client, test_project):
+    def test_batch_status_empty_list(self, admin_client, test_project):
         """API-BATCH-003: 批量更新状态 - 空列表"""
-        response = client.post('/api/tc/batch/status',
+        response = admin_client.post('/api/tc/batch/status',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'tc_ids': [],
@@ -142,12 +156,12 @@ class TestTCBatchStatusOperations:
         # 空列表应该返回 400 错误
         assert response.status_code == 400
     
-    def test_batch_status_large_batch(self, client, test_project, cleanup_tcs):
+    def test_batch_status_large_batch(self, admin_client, test_project, cleanup_tcs):
         """API-BATCH-004: 批量更新状态 - 超大批量 (50 个)"""
         # 创建 50 个 TC
         tc_ids = []
         for i in range(50):
-            create_resp = client.post('/api/tc',
+            create_resp = admin_client.post('/api/tc',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_Large_{i}_{int(time.time())}',
@@ -160,7 +174,7 @@ class TestTCBatchStatusOperations:
                 tc_ids.append(json.loads(create_resp.data)['item']['id'])
                 cleanup_tcs.append(tc_ids[-1])
         
-        response = client.post('/api/tc/batch/status',
+        response = admin_client.post('/api/tc/batch/status',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'tc_ids': tc_ids,
@@ -175,12 +189,12 @@ class TestTCBatchStatusOperations:
         assert data['success'] == len(tc_ids)
         assert data['failed'] == 0
     
-    def test_batch_status_mixed_valid_invalid(self, client, test_project, cleanup_tcs):
+    def test_batch_status_mixed_valid_invalid(self, admin_client, test_project, cleanup_tcs):
         """API-BATCH-005: 批量更新 - 混合有效/无效 ID"""
         # 创建 3 个有效 TC
         valid_ids = []
         for i in range(3):
-            create_resp = client.post('/api/tc',
+            create_resp = admin_client.post('/api/tc',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_Mixed_{i}_{int(time.time())}',
@@ -196,7 +210,7 @@ class TestTCBatchStatusOperations:
         # 混合：有效 ID 和无效 ID 交错
         mixed_ids = [valid_ids[0], 99999, valid_ids[1], 88888, valid_ids[2]]
         
-        response = client.post('/api/tc/batch/status',
+        response = admin_client.post('/api/tc/batch/status',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'tc_ids': mixed_ids,
@@ -215,12 +229,12 @@ class TestTCBatchStatusOperations:
 class TestTCBatchTargetDateOperations:
     """TC 批量 Target Date 更新测试"""
     
-    def test_batch_update_target_date(self, client, test_project, cleanup_tcs):
+    def test_batch_update_target_date(self, admin_client, test_project, cleanup_tcs):
         """API-BATCH-006: 批量更新 Target Date"""
         # 创建多个 TC
         tc_ids = []
         for i in range(3):
-            create_resp = client.post('/api/tc',
+            create_resp = admin_client.post('/api/tc',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_Target_{i}_{int(time.time())}',
@@ -233,7 +247,7 @@ class TestTCBatchTargetDateOperations:
                 tc_ids.append(json.loads(create_resp.data)['item']['id'])
                 cleanup_tcs.append(tc_ids[-1])
         
-        response = client.post('/api/tc/batch/target_date',
+        response = admin_client.post('/api/tc/batch/target_date',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'tc_ids': tc_ids,
@@ -245,12 +259,12 @@ class TestTCBatchTargetDateOperations:
         data = json.loads(response.data)
         assert data['success'] == len(tc_ids)
     
-    def test_batch_target_date_partial_failure(self, client, test_project, cleanup_tcs):
+    def test_batch_target_date_partial_failure(self, admin_client, test_project, cleanup_tcs):
         """API-BATCH-006: 批量更新 Target Date - 部分失败"""
         # 创建 2 个有效 TC
         tc_ids = []
         for i in range(2):
-            create_resp = client.post('/api/tc',
+            create_resp = admin_client.post('/api/tc',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_Target_Partial_{i}_{int(time.time())}',
@@ -266,7 +280,7 @@ class TestTCBatchTargetDateOperations:
         # 混合有效和无效 ID
         mixed_ids = tc_ids + [99999, 88888]
         
-        response = client.post('/api/tc/batch/target_date',
+        response = admin_client.post('/api/tc/batch/target_date',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'tc_ids': mixed_ids,
@@ -284,12 +298,12 @@ class TestTCBatchTargetDateOperations:
 class TestTCBatchDvMilestoneOperations:
     """TC 批量 DV Milestone 更新测试"""
     
-    def test_batch_update_dv_milestone(self, client, test_project, cleanup_tcs):
+    def test_batch_update_dv_milestone(self, admin_client, test_project, cleanup_tcs):
         """API-BATCH-007: 批量更新 DV Milestone"""
         # 创建多个 TC
         tc_ids = []
         for i in range(3):
-            create_resp = client.post('/api/tc',
+            create_resp = admin_client.post('/api/tc',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_DV_{i}_{int(time.time())}',
@@ -302,7 +316,7 @@ class TestTCBatchDvMilestoneOperations:
                 tc_ids.append(json.loads(create_resp.data)['item']['id'])
                 cleanup_tcs.append(tc_ids[-1])
         
-        response = client.post('/api/tc/batch/dv_milestone',
+        response = admin_client.post('/api/tc/batch/dv_milestone',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'tc_ids': tc_ids,
@@ -314,12 +328,12 @@ class TestTCBatchDvMilestoneOperations:
         data = json.loads(response.data)
         assert data['success'] == len(tc_ids)
     
-    def test_batch_dv_milestone_partial_failure(self, client, test_project, cleanup_tcs):
+    def test_batch_dv_milestone_partial_failure(self, admin_client, test_project, cleanup_tcs):
         """API-BATCH-007: 批量更新 DV Milestone - 部分失败"""
         # 创建 2 个有效 TC
         tc_ids = []
         for i in range(2):
-            create_resp = client.post('/api/tc',
+            create_resp = admin_client.post('/api/tc',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_DV_Partial_{i}_{int(time.time())}',
@@ -334,7 +348,7 @@ class TestTCBatchDvMilestoneOperations:
         
         mixed_ids = tc_ids + [99999, 88888]
         
-        response = client.post('/api/tc/batch/dv_milestone',
+        response = admin_client.post('/api/tc/batch/dv_milestone',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'tc_ids': mixed_ids,
@@ -352,12 +366,12 @@ class TestTCBatchDvMilestoneOperations:
 class TestCPBatchPriorityOperations:
     """CP 批量 Priority 更新测试"""
     
-    def test_batch_update_priority(self, client, test_project, cleanup_cps):
+    def test_batch_update_priority(self, admin_client, test_project, cleanup_cps):
         """API-BATCH-008: 批量更新 CP Priority"""
         # 创建多个 CP
         cp_ids = []
         for i in range(3):
-            create_resp = client.post('/api/cp',
+            create_resp = admin_client.post('/api/cp',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'feature': f'Feature_Prio_{i}_{int(time.time())}',
@@ -368,7 +382,7 @@ class TestCPBatchPriorityOperations:
                 cp_ids.append(json.loads(create_resp.data)['item']['id'])
                 cleanup_cps.append(cp_ids[-1])
         
-        response = client.post('/api/cp/batch/priority',
+        response = admin_client.post('/api/cp/batch/priority',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'cp_ids': cp_ids,
@@ -380,12 +394,12 @@ class TestCPBatchPriorityOperations:
         data = json.loads(response.data)
         assert data['success'] == len(cp_ids)
     
-    def test_batch_priority_partial_failure(self, client, test_project, cleanup_cps):
+    def test_batch_priority_partial_failure(self, admin_client, test_project, cleanup_cps):
         """API-BATCH-008: 批量更新 Priority - 部分失败"""
         # 创建 2 个有效 CP
         cp_ids = []
         for i in range(2):
-            create_resp = client.post('/api/cp',
+            create_resp = admin_client.post('/api/cp',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'feature': f'Feature_Prio_Partial_{i}_{int(time.time())}',
@@ -398,7 +412,7 @@ class TestCPBatchPriorityOperations:
         
         mixed_ids = cp_ids + [99999, 88888]
         
-        response = client.post('/api/cp/batch/priority',
+        response = admin_client.post('/api/cp/batch/priority',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'cp_ids': mixed_ids,
@@ -416,12 +430,12 @@ class TestCPBatchPriorityOperations:
 class TestBatchDeleteOperations:
     """批量删除操作测试"""
     
-    def test_batch_delete_tc(self, client, test_project):
+    def test_batch_delete_tc(self, admin_client, test_project):
         """API-BATCH-009: 批量删除 TC"""
         # 创建多个 TC
         tc_ids = []
         for i in range(3):
-            create_resp = client.post('/api/tc',
+            create_resp = admin_client.post('/api/tc',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_Del_{i}_{int(time.time())}',
@@ -434,7 +448,7 @@ class TestBatchDeleteOperations:
                 tc_ids.append(json.loads(create_resp.data)['item']['id'])
         
         # 先将状态改为 PASS
-        client.post('/api/tc/batch/status',
+        admin_client.post('/api/tc/batch/status',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'tc_ids': tc_ids,
@@ -444,13 +458,13 @@ class TestBatchDeleteOperations:
         
         # 批量删除
         for tc_id in tc_ids:
-            del_resp = client.delete(f'/api/tc/{tc_id}?project_id={test_project["id"]}')
+            del_resp = admin_client.delete(f'/api/tc/{tc_id}?project_id={test_project["id"]}')
             assert del_resp.status_code == 200
     
-    def test_batch_delete_cp_with_connections(self, client, test_project):
+    def test_batch_delete_cp_with_connections(self, admin_client, test_project):
         """API-BATCH-010: 删除有关联 TC 的 CP"""
         # 创建 CP
-        create_cp = client.post('/api/cp',
+        create_cp = admin_client.post('/api/cp',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'feature': f'Feature_Conn_{int(time.time())}',
@@ -461,7 +475,7 @@ class TestBatchDeleteOperations:
         cp_id = json.loads(create_cp.data)['item']['id']
         
         # 创建 TC 并关联到 CP
-        create_tc = client.post('/api/tc',
+        create_tc = admin_client.post('/api/tc',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'testbench': f'TB_Conn_{int(time.time())}',
@@ -474,13 +488,13 @@ class TestBatchDeleteOperations:
         assert create_tc.status_code == 200
         
         # 删除有 TC 关联的 CP - 应该成功（级联删除关联）
-        del_resp = client.delete(f'/api/cp/{cp_id}?project_id={test_project["id"]}')
+        del_resp = admin_client.delete(f'/api/cp/{cp_id}?project_id={test_project["id"]}')
         assert del_resp.status_code == 200
         
         # 清理 TC
         tc_id = json.loads(create_tc.data)['item']['id']
         try:
-            client.delete(f'/api/tc/{tc_id}?project_id={test_project["id"]}')
+            admin_client.delete(f'/api/tc/{tc_id}?project_id={test_project["id"]}')
         except:
             pass
 
@@ -488,12 +502,12 @@ class TestBatchDeleteOperations:
 class TestBatchConnections:
     """批量关联操作测试"""
     
-    def test_batch_associate_tc_cp(self, client, test_project, cleanup_cps, cleanup_tcs):
+    def test_batch_associate_tc_cp(self, admin_client, test_project, cleanup_cps, cleanup_tcs):
         """API-BATCH-011: 批量关联 TC 和 CP"""
         # 创建多个 CP
         cp_ids = []
         for i in range(3):
-            create_resp = client.post('/api/cp',
+            create_resp = admin_client.post('/api/cp',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'feature': f'Feature_Assoc_{i}_{int(time.time())}',
@@ -507,7 +521,7 @@ class TestBatchConnections:
         # 创建多个 TC
         tc_ids = []
         for i in range(3):
-            create_resp = client.post('/api/tc',
+            create_resp = admin_client.post('/api/tc',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_Assoc_{i}_{int(time.time())}',
@@ -522,7 +536,7 @@ class TestBatchConnections:
         
         # 批量关联 TC 到 CP
         for cp_id in cp_ids:
-            response = client.put(f'/api/tc/{tc_ids[0]}',
+            response = admin_client.put(f'/api/tc/{tc_ids[0]}',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_Assoc_{int(time.time())}',
@@ -535,7 +549,7 @@ class TestBatchConnections:
             assert response.status_code == 200
         
         # 验证关联建立
-        response = client.get(f'/api/cp/{cp_ids[0]}/tcs?project_id={test_project["id"]}')
+        response = admin_client.get(f'/api/cp/{cp_ids[0]}/tcs?project_id={test_project["id"]}')
         assert response.status_code == 200
         data = json.loads(response.data)
         assert 'connected_tcs' in data
@@ -544,12 +558,12 @@ class TestBatchConnections:
 class TestBatchEdgeCases:
     """批量操作边界情况测试"""
     
-    def test_batch_status_same_twice(self, client, test_project, cleanup_tcs):
+    def test_batch_status_same_twice(self, admin_client, test_project, cleanup_tcs):
         """重复批量更新同一批 TC"""
         # 创建 TC
         tc_ids = []
         for i in range(2):
-            create_resp = client.post('/api/tc',
+            create_resp = admin_client.post('/api/tc',
                 data=json.dumps({
                     'project_id': test_project["id"],
                     'testbench': f'TB_Double_{i}_{int(time.time())}',
@@ -563,7 +577,7 @@ class TestBatchEdgeCases:
                 cleanup_tcs.append(tc_ids[-1])
         
         # 第一次批量更新
-        response1 = client.post('/api/tc/batch/status',
+        response1 = admin_client.post('/api/tc/batch/status',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'tc_ids': tc_ids,
@@ -573,7 +587,7 @@ class TestBatchEdgeCases:
         assert response1.status_code == 200
         
         # 第二次批量更新同一批 TC
-        response2 = client.post('/api/tc/batch/status',
+        response2 = admin_client.post('/api/tc/batch/status',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'tc_ids': tc_ids,
@@ -582,9 +596,9 @@ class TestBatchEdgeCases:
             content_type='application/json')
         assert response2.status_code == 200
     
-    def test_batch_status_all_same_id(self, client, test_project, cleanup_tcs):
+    def test_batch_status_all_same_id(self, admin_client, test_project, cleanup_tcs):
         """批量更新包含重复 ID"""
-        create_resp = client.post('/api/tc',
+        create_resp = admin_client.post('/api/tc',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'testbench': f'TB_Duplicate_{int(time.time())}',
@@ -600,7 +614,7 @@ class TestBatchEdgeCases:
         # 重复 ID 列表
         duplicate_ids = [tc_id, tc_id, tc_id]
         
-        response = client.post('/api/tc/batch/status',
+        response = admin_client.post('/api/tc/batch/status',
             data=json.dumps({
                 'project_id': test_project["id"],
                 'tc_ids': duplicate_ids,
