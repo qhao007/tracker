@@ -60,10 +60,10 @@ test.describe('用户手册 UI', () => {
     }
   });
 
-  test('3. 手册内容应正确渲染', async ({ page }) => {
-    // 这个测试依赖于帮助功能的实现
-    // 暂时跳过
-    test.skip(true, '用户手册功能尚未实现');
+  test('3. 手册页面可访问', async ({ page }) => {
+    // 直接访问手册页面，验证返回 200
+    const response = await page.request.get('http://localhost:8081/manual');
+    expect(response.ok()).toBeTruthy();
   });
 
 });
