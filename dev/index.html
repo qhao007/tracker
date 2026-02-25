@@ -778,7 +778,7 @@
                 tag.title = `发布日期: ${data.release_date}`;
                 if (data.version_type === '测试版') tag.classList.add('test');
                 // 更新关于对话框
-                document.getElementById('versionDisplay').textContent = `v${data.version}`;
+                document.getElementById('versionDisplay').textContent = data.version;
                 document.getElementById('versionTypeDisplay').textContent = data.version_type;
                 document.getElementById('versionTypeDisplay').style.color = data.version_type === '测试版' ? '#ff9800' : '#4CAF50';
                 document.getElementById('versionDateDisplay').textContent = `发布日期: ${data.release_date}`;
