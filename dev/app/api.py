@@ -591,6 +591,40 @@ def delete_project(project_id):
     if not project:
         return jsonify({"error": "项目不存在"}), 404
 
+    # 删除前自动创建归档备份
+    try:
+        # 收集项目数据
+        conn = get_db(project["name"])
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM cover_point")
+        cps = [dict(row) for row in cursor.fetchall()]
+
+        cursor.execute("SELECT * FROM test_case")
+        tcs = [dict(row) for row in cursor.fetchall()]
+
+        project_data = {
+            "id": project["id"],
+            "name": project["name"],
+            "created_at": project.get("created_at", ""),
+            "version": project.get("version", "stable"),
+            "cover_points": cps,
+            "test_cases": tcs,
+            "backup_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+
+        # 生成备份文件（保存在 archives 目录）
+        filename = f"{project['name']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_deleted.json"
+        archives_dir = "archives"
+        os.makedirs(archives_dir, exist_ok=True)
+        filepath = os.path.join(archives_dir, filename)
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(project_data, f, ensure_ascii=False, indent=2)
+
+    except Exception as e:
+        # 备份失败不影响删除流程，但记录错误
+        print(f"项目备份失败: {e}")
+
     # 标记为归档
     project["is_archived"] = True
     save_projects(projects)
