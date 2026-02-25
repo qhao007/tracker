@@ -47,6 +47,17 @@ def create_app(testing=False):
     # 注册蓝图
     app.register_blueprint(api, url_prefix='/')
 
+    # 手动添加 /manual 路由（因为模板在 base_dir）
+    from flask import render_template, send_from_directory
+    
+    @app.route('/manual')
+    def manual():
+        return render_template('templates/manual.html')
+    
+    @app.route('/static/<path:filename>')
+    def serve_static(filename):
+        return send_from_directory(os.path.join(base_dir, 'static'), filename)
+
     # 初始化认证系统
     from . import auth
     if not testing:
