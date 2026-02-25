@@ -1508,3 +1508,32 @@ def delete_project(project_id):
 3. 备份失败不影响删除流程
 
 **Git 提交**: `27936db fix: 项目删除前自动创建归档备份`
+
+---
+
+## BUG-064: user 角色登录后项目管理按钮仍可见
+**日期**: 2026-02-25
+**版本**: v0.7.1
+**状态**: ✅ 已修复
+
+**问题描述**: 需求规格书要求"user 登录后，项目管理按钮不可见"，但实际实现中 user 登录后仍然可以看到"📁 项目"按钮
+
+**根本原因**: 前端代码中"项目管理"按钮没有添加权限控制，所有登录用户都可以看到
+
+**修复方案**:
+1. 给项目管理按钮添加 `id="projectManageBtn"`
+2. 在 `updateUIForLoggedIn()` 函数中添加权限控制逻辑
+```javascript
+// 根据角色控制项目管理按钮显示（仅 admin 可见）
+const projectManageBtn = document.getElementById('projectManageBtn');
+if (projectManageBtn) {
+    projectManageBtn.style.display = currentUser.role === 'admin' ? 'inline-block' : 'none';
+}
+```
+
+**修复内容**:
+1. `index.html` - 给项目管理按钮添加 id
+2. `index.html` - 添加权限控制逻辑
+3. 添加测试用例验证
+
+**Git 提交**: `5fbfdb1 fix: user登录后项目管理按钮不可见`
