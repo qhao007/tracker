@@ -332,7 +332,6 @@ git push origin develop
 | **生产版** | `/release/tracker/v{version}/`，端口 8080，user_data |
 | **开发版** | `dev/`，端口 8081，test_data |
 | **测试数据** | `/projects/management/tracker/shared/data/test_data/` |
-| **启动命令** | `cd dev && ./start_server_test.sh` |
 | **WSGI 入口** | `wsgi.py` (定义 app 对象供 gunicorn 加载) |
 
 #### 4.2.1 服务启动说明
