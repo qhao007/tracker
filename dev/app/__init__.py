@@ -48,7 +48,7 @@ def create_app(testing=False):
     app.register_blueprint(api, url_prefix='/')
 
     # 手动添加 /manual 路由（因为模板在 base_dir）
-    from flask import render_template, send_from_directory
+    from flask import render_template, send_from_directory, render_template_string
     
     @app.route('/manual')
     def manual():
@@ -57,6 +57,60 @@ def create_app(testing=False):
     @app.route('/static/<path:filename>')
     def serve_static(filename):
         return send_from_directory(os.path.join(base_dir, 'static'), filename)
+    
+    # 提供 SPECIFICATIONS 目录访问（用于测试期间下载规格书文档）
+    @app.route('/docs/SPECIFICATIONS/')
+    @app.route('/docs/SPECIFICATIONS')
+    def list_specifications():
+        """列出测试版规格书目录"""
+        from datetime import datetime
+        specs_dir = os.path.join(os.path.dirname(base_dir), 'docs', 'SPECIFICATIONS')
+        files = []
+        if os.path.exists(specs_dir):
+            for f in sorted(os.listdir(specs_dir)):
+                if f.endswith('.md'):
+                    filepath = os.path.join(specs_dir, f)
+                    mtime = datetime.fromtimestamp(os.path.getmtime(filepath)).strftime('%Y-%m-%d %H:%M')
+                    size = os.path.getsize(filepath)
+                    files.append({'name': f, 'size': size, 'mtime': mtime})
+        
+        html = '''<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>规格书目录 - Tracker 测试版</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        h1 { color: #333; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #f5f5f5; }
+        a { color: #0066cc; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .size { color: #666; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <h1>📋 Tracker 测试版规格书</h1>
+    <table>
+        <tr><th>文件名</th><th>大小</th><th>修改时间</th></tr>
+        {% for f in files %}
+        <tr>
+            <td><a href="/docs/SPECIFICATIONS/{{ f.name }}">{{ f.name }}</a></td>
+            <td class="size">{{ (f.size / 1024) | round(1) }} KB</td>
+            <td class="size">{{ f.mtime }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>'''
+        return render_template_string(html, files=files)
+    
+    @app.route('/docs/SPECIFICATIONS/<path:filename>')
+    def serve_specifications(filename):
+        """服务测试版规格书文档"""
+        specs_dir = os.path.join(os.path.dirname(base_dir), 'docs', 'SPECIFICATIONS')
+        return send_from_directory(specs_dir, filename)
 
     # 初始化认证系统
     from . import auth

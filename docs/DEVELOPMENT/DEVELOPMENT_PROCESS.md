@@ -33,7 +33,42 @@
 |------|------|
 | **代码隔离** | Git 只维护 dev/ 代码，发布到独立目录 |
 | **数据安全** | 用户数据与测试数据物理隔离 |
-| **流程规范** | 需求 → 开发 → 测试 → 发布 |
+| **流程规范** | 需求 → 版本规格书 → 测试计划 → 开发 → 测试 → 合并 → 发布准备 → 发布执行 → 发布验证 |
+
+### 1.4 总体流程图
+
+  ┌─────────────────────────────────────────────────────────────────────────────┐                                      
+  │                           Tracker 整体开发流程                                │                                    
+  └─────────────────────────────────────────────────────────────────────────────┘                                      
+                                                                                                                       
+     ┌──────────┐                                                                                                      
+     │ 用户提交  │  填写模板 → /projects/management/feedbacks/new/                                                     
+     │  需求    │                                                                                                      
+     └────┬─────┘                                                                                                      
+          ▼                                                                                                            
+     ┌──────────┐                                                                                                      
+     │ 需求评审  │  小栗子细化 → 评估工作量 → 确定优先级                                                               
+     └────┬─────┘                                                                                                      
+          ▼                                                                                                            
+     ┌──────────┐                                                                                                      
+     │ 需求确认  │  生成正式文档 → 用户确认                                                                            
+     └────┬─────┘                                                                                                      
+          ▼                                                                                                            
+     ┌──────────┐                                                                                                      
+     │ 版本规格书 │  定义功能规格 → 验收标准                                                                           
+     └────┬─────┘                                                                                                      
+          ▼                                                                                                            
+     ┌──────────┐                                                                                                      
+     │ 测试计划  │  定义测试用例 → 任务分解                                                                            
+     └────┬─────┘                                                                                                      
+          ▼                                                                                                            
+     ┌──────────┐                                                                                                      
+     │ 开发实现  │  Git分支 → 编码 → 测试 → 提交                                                                       
+     └────┬─────┘                                                                                                      
+          ▼                                                                                                            
+     ┌──────────┐                                                                                                      
+     │ 发布上线  │  执行release_preparation.py → 执行release.py → 切换版本 → 重启服务                                
+     └──────────┘                                                                   
 
 ---
 
@@ -94,7 +129,7 @@ git log --oneline --graph --all
 |------|------|------|
 | **新功能** | 新增功能模块 | TEMPLATE_FEATURE_REQUEST.md |
 | **批量需求** | 多个简单需求 | BATCH_REQUESTS_TEMPLATE.md |
-| **Bug 修复** | 修复缺陷 | BugLog |
+| **Bug 修复** | 修复缺陷 | TEMPLATE_BUGLOG.md |
 
 ### 3.2 需求提交流程
 
@@ -118,12 +153,6 @@ git log --oneline --graph --all
 │                                                                  │
 │  5️⃣ 创建测试计划                                                │
 │     └── 基于规格书 → 定义测试用例 → 任务分解                    │
-│                                                                  │
-│  6️⃣ 开发实现                                                    │
-│     └── Git 分支 → 编码 → 测试 → 提交                          │
-│                                                                  │
-│  7️⃣ 发布上线                                                    │
-│     └── 执行 release.py → 切换版本 → 重启服务                   │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 
@@ -300,7 +329,8 @@ git push origin develop
 
 | 项目 | 配置 |
 |------|------|
-| **开发版** | `dev/` 目录，端口 8081，test_data |
+| **生产版** | `/release/tracker/v{version}/`，端口 8080，user_data |
+| **开发版** | `dev/`，端口 8081，test_data |
 | **测试数据** | `/projects/management/tracker/shared/data/test_data/` |
 | **启动命令** | `cd dev && ./start_server_test.sh` |
 | **WSGI 入口** | `wsgi.py` (gunicorn 使用) |
@@ -412,13 +442,13 @@ bash check_frontent.sh
 cd /projects/management/tracker/dev
 PYTHONPATH=. pytest tests/test_api/ -v
 # 覆盖: API 接口测试
-# 期望: 29/29 通过 (v0.6.2)
+# 期望: 全部通过
 
 # ========== Playwright 冒烟测试 ==========
 cd /projects/management/tracker/dev
-npx playwright test tests/test_ui/specs/smoke/smoke.spec.ts --project=firefox --timeout=60000
+npx playwright test tests/test_ui/specs/smoke/ --project=firefox
 # 覆盖: 页面访问、项目加载、数据加载、控制台错误检测
-# 期望: 10/10 通过 (v0.6.2)
+# 期望: 全部通过
 
 # ========== 兼容性测试 ==========
 cd /projects/management/tracker
@@ -434,15 +464,15 @@ python3 scripts/compatibility_test.py clean
 
 ### 5.3 Bug 处理流程
 
-测试中发现代码 bug 时，必须添加到 BugLog：
+测试中发现代码 bug 时，必须添加到 Bug Record：
 
 **添加步骤**:
-1. 填写 BugLog 模板 (`/projects/management/feedbacks/new/BugLog_YYYYMMDD.md`)
+1. 填写 Bug 模板 (`docs/TEMPLATES/TEMPLATE_BUGLOG.md`)
 2. 提交到 feedbacks/new/ 目录
 3. 评审后标记为待修复
-4. 修复后更新 BUGLOG/tracker_BUG_RECORD.md
+4. 修复后更新 `docs/BUGLOG/tracker_BUG_RECORD.md`
 
-**BugLog 模板位置**: `/projects/management/feedbacks/new/BugLog_YYYYMMDD.md`
+**Bug 模板位置**: `docs/TEMPLATES/TEMPLATE_BUGLOG.md`
 
 ### 5.4 测试报告发布
 
@@ -452,7 +482,7 @@ python3 scripts/compatibility_test.py clean
 1. 使用模板: `TEMPLATES/TEST_REPORT.md`
 2. 包含整体测试开始和完成时间
 3. 包含所有测试类型的通过/失败统计
-4. 发布到: `ARCHIVE/REPORTS/TRACKER_TEST_REPORT_v{version}_{YYYYMMDD}.md`
+4. 发布到: `docs/REPORTS/TRACKER_TEST_REPORT_v{version}_{YYYYMMDD}.md`
 
 **报告模板结构**:
 
@@ -476,12 +506,12 @@ python3 scripts/compatibility_test.py clean
 ```bash
 # 1. 复制测试报告模板
 cp TEMPLATES/TEST_REPORT.md \
-   ARCHIVE/REPORTS/TRACKER_TEST_REPORT_v0.6.0_20260208.md
+   docs/REPORTS/TRACKER_TEST_REPORT_v0.6.0_20260208.md
 
 # 2. 编辑测试报告，填写测试结果
 
 # 3. 提交测试报告
-git add ARCHIVE/REPORTS/TRACKER_TEST_REPORT_*.md
+git add docs/REPORTS/TRACKER_TEST_REPORT_*.md
 git commit -m "docs: 添加 v0.6.0 测试报告"
 
 
@@ -680,6 +710,7 @@ python3 scripts/release.py --rollback --force
 
 ### 服务管理
 
+#### 生产版 (8080)
 ```bash
 # 重启服务
 sudo systemctl restart tracker
@@ -689,6 +720,20 @@ sudo systemctl status tracker
 
 # 查看日志
 journalctl -u tracker -f
+```
+
+#### 测试版 (8081)
+```bash
+# 重启测试服务
+pkill -f "gunicorn.*8081"
+cd /projects/management/tracker/dev && python3 -m gunicorn -c gunicorn.conf.py "app:create_app()" --bind 0.0.0.0:8081 --daemon
+
+# 查看测试服务是否运行
+ps aux | grep "gunicorn.*8081"
+
+# 测试服务是否正常
+curl -s http://localhost:8081/api/version
+```
 
 
 ---

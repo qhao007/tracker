@@ -1,35 +1,9 @@
 #!/bin/bash
 # Tracker 开发版服务启动脚本
-# 使用 gunicorn + systemd 用户单元，稳定运行
-# 同时启动规格文档下载服务
+# 使用 gunicorn 启动开发版服务
+# 规格文档下载服务已集成到 8081 端口 (/docs/SPECIFICATIONS/)
 
 cd /projects/management/tracker/dev
-
-# ========== 规格文档下载服务 ==========
-DOCS_PORT=8888
-DOCS_DIR="/projects/management/tracker/docs/SPECIFICATIONS"
-
-# 检查是否已有 HTTP 服务运行
-if lsof -i:$DOCS_PORT > /dev/null 2>&1; then
-    echo "⚠️  端口 $DOCS_PORT 已被占用，规格文档服务已存在"
-else
-    echo "📄 启动规格文档下载服务..."
-    cd "$DOCS_DIR"
-    nohup python3 -m http.server $DOCS_PORT > /tmp/http_docs.log 2>&1 &
-    sleep 1
-    if curl -s http://localhost:$DOCS_PORT > /dev/null; then
-        echo "✅ 规格文档服务启动成功"
-        echo "📍 下载地址: http://<你的IP>:$DOCS_PORT/"
-        echo ""
-        echo "📚 可下载的文档:"
-        echo "   - tracker_OVERALL_SPECS.md  (总体规格书)"
-        echo "   - tracker_SPECS_v0.6.2.md   (v0.6.2 详细规格)"
-    else
-        echo "❌ 规格文档服务启动失败"
-    fi
-    cd /projects/management/tracker/dev
-fi
-# =====================================
 
 # 检查服务是否已运行
 if pgrep -f "gunicorn.*8081" > /dev/null 2>&1; then
@@ -58,6 +32,7 @@ sleep 3
 if pgrep -f "gunicorn.*8081" > /dev/null 2>&1; then
     echo "✅ 服务启动成功"
     echo "📍 访问地址: http://localhost:8081"
+    echo "📚 规格书下载: http://localhost:8081/docs/SPECIFICATIONS/"
     echo "📝 日志: /tmp/gunicorn_access.log"
 else
     echo "❌ 服务启动失败，检查日志: /tmp/gunicorn_error.log"
