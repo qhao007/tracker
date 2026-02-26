@@ -335,6 +335,18 @@ git push origin develop
 | **启动命令** | `cd dev && ./start_server_test.sh` |
 | **WSGI 入口** | `wsgi.py` (定义 app 对象供 gunicorn 加载) |
 
+#### 4.2.1 服务启动说明
+
+| 文件 | 用途 | 位置 |
+|------|------|------|
+| `start_server_test.sh` | 测试版启动脚本 | `dev/` |
+| `server.py` | Flask 应用入口 | `dev/` (源码) |
+| `server.py` | Flask 应用入口 | `release/tracker/v{version}/` (发布版) |
+
+**启动方式：**
+- **测试版 (8081)**: `dev/start_server_test.sh`
+- **生产版 (8080)**: 通过 systemd 服务管理，或 `release/tracker/v{version}/server.py`
+
 ### 4.3 代码规范
 
 #### 4.3.1 提交信息规范
