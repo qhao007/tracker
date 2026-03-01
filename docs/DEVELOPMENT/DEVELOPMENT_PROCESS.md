@@ -12,6 +12,11 @@
 4. [开发流程](#4-开发流程)
 5. [测试流程](#5-测试流程)
 6. [发布流程](#6-发布流程)
+   - [6.1 执行发布准备脚本](#61-执行发布准备脚本)
+   - [6.2 执行发布](#62-执行发布)
+   - [6.3 发布后验证](#63-发布后验证)
+   - [6.4 回滚](#64-回滚)
+   - [6.5 部署配置](#65-部署配置)
 7. [文档规范](#7-文档规范)
 
 ---
@@ -346,6 +351,8 @@ git push origin develop
 - **测试版 (8081)**: `dev/start_server_test.sh`
 - **生产版 (8080)**: 通过 systemd 服务管理，或 `release/tracker/v{version}/server.py`
 
+> **生产环境部署配置**: 详细说明见 [6.5 部署配置](#65-部署配置)
+
 ### 4.3 代码规范
 
 #### 4.3.1 提交信息规范
@@ -651,6 +658,89 @@ sudo systemctl restart tracker
 
 ---
 
+
+### 6.5 部署配置
+
+#### 6.5.1 systemd 服务配置
+
+生产环境通过 systemd 服务管理，配置文件位于 `/etc/systemd/system/tracker.service`:
+
+```ini
+[Unit]
+Description=Tracker Chip Verification Management System
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/release/tracker/current
+Environment="FLASK_ENV=production"
+Environment="FLASK_SECRET_KEY=your-secret-key-change-in-production"
+Environment="CRON_API_TOKEN=your-cron-token-change-in-production"
+ExecStart=/usr/bin/python3 /release/tracker/current/server.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**创建服务文件**:
+```bash
+sudo nano /etc/systemd/system/tracker.service
+sudo systemctl daemon-reload
+sudo systemctl enable tracker
+sudo systemctl start tracker
+```
+
+#### 6.5.2 环境变量配置
+
+| 变量 | 说明 | 必填 | 示例值 |
+|------|------|------|--------|
+| `FLASK_ENV` | 运行环境 | ✅ | `production` |
+| `FLASK_SECRET_KEY` | Flask Session 加密密钥 | ✅ | (随机字符串，**必须更改**) |
+| `CRON_API_TOKEN` | 定时任务认证 Token | v0.8.2+ | (随机字符串，**必须更改**) |
+
+**重要安全提醒**:
+- `FLASK_SECRET_KEY` 必须使用随机字符串，不能使用默认值
+- `CRON_API_TOKEN` 用于定时任务接口认证，v0.8.2+ 需要配置
+- 环境变量在服务启动时加载，修改后需要重启服务生效
+
+#### 6.5.3 服务管理命令
+
+```bash
+# 启动服务
+sudo systemctl start tracker
+
+# 停止服务
+sudo systemctl stop tracker
+
+# 重启服务
+sudo systemctl restart tracker
+
+# 查看状态
+sudo systemctl status tracker
+
+# 查看实时日志
+journalctl -u tracker -f
+
+# 查看最近日志
+journalctl -u tracker -n 50
+```
+
+#### 6.5.4 端口配置
+
+| 端口 | 用途 | 数据目录 |
+|------|------|----------|
+| 8080 | 生产环境 | `shared/data/user_data/` |
+| 8081 | 测试环境 | `shared/data/test_data/` |
+
+**启动方式**:
+- **生产版 (8080)**: 通过 systemd 服务管理
+- **测试版 (8081)**: `dev/start_server_test.sh`
+
+
 ## 7. 文档规范
 
 ### 7.1 文档类型
@@ -721,17 +811,7 @@ python3 scripts/release.py --rollback --force
 
 ### 服务管理
 
-#### 生产版 (8080)
-```bash
-# 重启服务
-sudo systemctl restart tracker
-
-# 查看状态
-sudo systemctl status tracker
-
-# 查看日志
-journalctl -u tracker -f
-```
+> 详细说明见 [6.5 部署配置](#65-部署配置)
 
 #### 测试版 (8081)
 ```bash
@@ -749,6 +829,6 @@ curl -s http://localhost:8081/api/version
 
 ---
 
-**文档版本**: v1.6  
-**最后更新**: 2026-02-09  
+**文档版本**: v1.7  
+**最后更新**: 2026-03-01  
 **维护者**: 小栗子 🌰
