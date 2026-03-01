@@ -163,3 +163,28 @@
 | **状态** | 待处理 |
 | **问题描述** | Session key 命名分散，应统一管理 |
 | **建议方案** | 在 `app/constants.py` 中统一管理所有常量，包括 SESSION_USER_KEY, SESSION_USERNAME_KEY, SESSION_ROLE_KEY 等 |
+
+---
+
+## v0.8.0 代码审查发现的问题 (2026-03-01)
+
+### ISSUE-013
+
+| 属性 | 内容 |
+|------|------|
+| **发现日期** | 2026-03-01 |
+| **优先级** | P3 |
+| **状态** | 待处理 |
+| **问题描述** | Flask-Session 库使用废弃 API，测试输出中有 429 个 DeprecationWarning（SESSION_FILE_DIR, FileSystemSessionInterface, use_signer） |
+| **建议方案** | 1. 短期：静默测试中的警告（不影响功能）<br>2. 中期：升级 Flask-Session 到最新版本<br>3. 长期：迁移到 CacheLib 后端或切换到 Redis 存储 |
+| **详细说明** | 警告来源是 Flask-Session 库，不是我们代码的问题。功能正常，但未来升级可能会失败。建议关注 Flask-Session 版本更新，适时迁移配置。 |
+
+### ISSUE-014
+
+| 属性 | 内容 |
+|------|------|
+| **发现日期** | 2026-03-01 |
+| **优先级** | P3 |
+| **状态** | 待处理 |
+| **问题描述** | 前端 switchTab 函数依赖全局 event 对象，在某些边缘情况下可能失效 |
+| **建议方案** | 修改为传递 event 参数：`switchTab(tab, event)` 并使用 `event.currentTarget` 替代 `event.target` |
