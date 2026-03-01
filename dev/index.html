@@ -179,7 +179,8 @@
         .header-user-name { font-size: 12px; }
     </style>
     <!-- Chart.js for Progress Charts (v0.8.0) -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" onerror="window.ChartLoaded=false;console.warn('Chart.js CDN 加载失败，将使用降级模式')"></script>
+    <script>window.ChartLoaded = window.ChartLoaded !== false;</script>
 </head>
 <body>
     <!-- 登录模态框 -->
@@ -920,6 +921,14 @@
         let progressChart = null;
         
         async function loadProgressChart() {
+            // 检查 Chart.js 是否加载成功
+            if (!window.ChartLoaded || typeof Chart === 'undefined') {
+                document.getElementById('progressEmptyState').innerHTML = '<p>📊 图表库加载失败</p><p style="font-size: 12px; color: #666;">请检查网络连接，或刷新页面重试</p>';
+                document.getElementById('progressEmptyState').style.display = 'block';
+                document.getElementById('progressChart').style.display = 'none';
+                return;
+            }
+            
             if (!currentProject) {
                 document.getElementById('progressEmptyState').style.display = 'block';
                 document.getElementById('progressChart').style.display = 'none';
