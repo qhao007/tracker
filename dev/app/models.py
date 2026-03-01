@@ -15,6 +15,10 @@ class Project(db.Model):
     is_archived = db.Column(db.Boolean, default=False)
     version = db.Column(db.String(20), default='stable')  # 'stable' 或 'test'
     
+    # v0.8.0 新增：项目起止日期
+    start_date = db.Column(db.String(10))  # YYYY-MM-DD
+    end_date = db.Column(db.String(10))    # YYYY-MM-DD
+    
     # 关系
     cover_points = db.relationship('CoverPoint', backref='project', lazy='dynamic', cascade='all, delete-orphan')
     test_cases = db.relationship('TestCase', backref='project', lazy='dynamic', cascade='all, delete-orphan')
@@ -26,6 +30,8 @@ class Project(db.Model):
             'created_at': self.created_at,
             'is_archived': self.is_archived,
             'version': self.version,
+            'start_date': self.start_date,
+            'end_date': self.end_date,
             'cp_count': self.cover_points.count(),
             'tc_count': self.test_cases.count()
         }

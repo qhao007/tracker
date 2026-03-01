@@ -178,6 +178,8 @@
         .header-user-info { display: flex; align-items: center; gap: 10px; }
         .header-user-name { font-size: 12px; }
     </style>
+    <!-- Chart.js for Progress Charts (v0.8.0) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <!-- 登录模态框 -->
@@ -235,6 +237,7 @@
         <div class="tabs">
             <button class="tab active" onclick="switchTab('cp')">Cover Points</button>
             <button class="tab" onclick="switchTab('tc')">Test Cases</button>
+            <button class="tab" onclick="switchTab('progress')">Progress Charts</button>
         </div>
         <div id="cpPanel">
             <div class="toolbar">
@@ -312,6 +315,22 @@
                 <tbody id="tcList"></tbody>
             </table>
         </div>
+        
+        <!-- Progress Charts Panel -->
+        <div id="progressPanel" style="display: none;">
+            <div class="toolbar">
+                <div class="toolbar-left">
+                    <span style="color: #666; font-size: 14px;">选择项目查看进度图表</span>
+                </div>
+            </div>
+            <div id="progressChartContainer" style="padding: 20px;">
+                <div id="progressEmptyState" style="text-align: center; padding: 50px; color: #999;">
+                    <p>请选择一个项目查看进度图表</p>
+                    <p style="font-size: 12px;">提示：需要为项目设置起止日期</p>
+                </div>
+                <canvas id="progressChart" style="display: none; max-height: 400px;"></canvas>
+            </div>
+        </div>
     </div>
     
     <!-- CP Modal -->
@@ -380,7 +399,14 @@
         <div class="modal-content" style="width: 500px;">
             <div class="modal-header"><span>项目管理</span><button class="modal-close" onclick="closeModal('projectModal')">&times;</button></div>
             <div class="modal-body">
-                <div class="form-group"><label>创建新项目</label><div style="display: flex; gap: 10px;"><input type="text" class="form-control" id="newProjectName" placeholder="项目名称"><button class="btn btn-primary" onclick="createProject()">创建</button></div></div>
+                <div class="form-group"><label>创建新项目</label>
+                    <input type="text" class="form-control" id="newProjectName" placeholder="项目名称" style="margin-bottom: 10px;">
+                    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                        <input type="date" class="form-control" id="newProjectStartDate" placeholder="开始日期 (可选)">
+                        <input type="date" class="form-control" id="newProjectEndDate" placeholder="结束日期 (可选)">
+                    </div>
+                    <button class="btn btn-primary" onclick="createProject()">创建</button>
+                </div>
                 <div class="form-group"><label>选择项目</label><div class="project-list" id="projectList"></div></div>
             </div>
         </div>
@@ -865,6 +891,83 @@
             } catch (e) { console.error('加载统计失败:', e); }
         }
         
+        // Progress Charts (v0.8.0)
+        let progressChart = null;
+        
+        async function loadProgressChart() {
+            if (!currentProject) {
+                document.getElementById('progressEmptyState').style.display = 'block';
+                document.getElementById('progressChart').style.display = 'none';
+                return;
+            }
+            
+            try {
+                // 获取项目详情（含日期）
+                const res = await fetch(`/api/projects/${currentProject.id}`);
+                const project = await res.json();
+                
+                if (!project.start_date || !project.end_date) {
+                    document.getElementById('progressEmptyState').innerHTML = '<p>请先设置项目起止日期</p><p style="font-size: 12px;">在项目管理中编辑项目日期</p>';
+                    document.getElementById('progressEmptyState').style.display = 'block';
+                    document.getElementById('progressChart').style.display = 'none';
+                    return;
+                }
+                
+                // 获取进度数据
+                const progressRes = await fetch(`/api/progress/${currentProject.id}`);
+                const progressData = await progressRes.json();
+                
+                document.getElementById('progressEmptyState').style.display = 'none';
+                document.getElementById('progressChart').style.display = 'block';
+                
+                renderProgressChart(progressData);
+            } catch (e) {
+                console.error('加载进度图表失败:', e);
+                document.getElementById('progressEmptyState').innerHTML = '<p>加载失败</p>';
+            }
+        }
+        
+        function renderProgressChart(data) {
+            const ctx = document.getElementById('progressChart').getContext('2d');
+            
+            // 如果已有图表，先销毁
+            if (progressChart) {
+                progressChart.destroy();
+            }
+            
+            // 创建图表
+            progressChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['暂无数据'],
+                    datasets: [{
+                        label: '覆盖率',
+                        data: [0],
+                        borderColor: '#2170bb',
+                        backgroundColor: 'rgba(33, 112, 187, 0.1)',
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            title: { display: true, text: '覆盖率 (%)' }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'CP 覆盖率进度'
+                        }
+                    }
+                }
+            });
+        }
+        
         function renderCP(filter = '') {
             let filtered = coverPoints;
             
@@ -1149,7 +1252,7 @@
             renderTC('', value); 
         }
         function sortTC(value) { renderTC('', '', value); }
-        function switchTab(tab) { currentTab = tab; document.querySelectorAll('.tab').forEach(t => t.classList.remove('active')); event.target.classList.add('active'); document.getElementById('cpPanel').style.display = tab === 'cp' ? 'block' : 'none'; document.getElementById('tcPanel').style.display = tab === 'tc' ? 'block' : 'none'; }
+        function switchTab(tab) { currentTab = tab; document.querySelectorAll('.tab').forEach(t => t.classList.remove('active')); event.target.classList.add('active'); document.getElementById('cpPanel').style.display = tab === 'cp' ? 'block' : 'none'; document.getElementById('tcPanel').style.display = tab === 'tc' ? 'block' : 'none'; document.getElementById('progressPanel').style.display = tab === 'progress' ? 'block' : 'none'; if (tab === 'progress') loadProgressChart(); }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
         
         let importType = 'cp';
@@ -1479,7 +1582,7 @@
             list.innerHTML = projects.map(p => {
                 const isActive = currentProject && currentProject.id === p.id;
                 const deleteBtn = isAdmin ? `<button class="action-btn delete" onclick="event.stopPropagation(); showDeleteProjectConfirm(${p.id}, '${escapeHtml(p.name)}')" title="删除项目">🗑️ 删除</button>` : '';
-                return `<div class="project-item ${isActive ? 'active' : ''}" onclick="selectProject(${p.id}); closeModal('projectModal');"><div class="project-info"><span class="project-name">${p.name}</span><span class="project-meta">CP: ${p.cp_count} | TC: ${p.tc_count}</span></div><div class="action-btns">${deleteBtn}</div></div>`;
+                return `<div class="project-item ${isActive ? 'active' : ''}" onclick="selectProject(${p.id}); closeModal('projectModal');"><div class="project-info"><span class="project-name">${p.name}</span><span class="project-meta">CP: ${p.cp_count} | TC: ${p.tc_count}${p.start_date ? ' | ' + p.start_date + ' ~ ' + p.end_date : ''}</span></div><div class="action-btns">${deleteBtn}</div></div>`;
             }).join('');
             document.getElementById('projectModal').classList.add('active');
         }
@@ -1523,16 +1626,22 @@
         
         async function createProject() {
             const name = document.getElementById('newProjectName').value.trim();
+            const startDate = document.getElementById('newProjectStartDate').value;
+            const endDate = document.getElementById('newProjectEndDate').value;
             if (!name) { alert('请输入项目名称'); return; }
             try {
                 const res = await fetch('/api/projects', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({name})
+                    body: JSON.stringify({name, start_date: startDate, end_date: endDate})
                 });
                 const result = await res.json();
                 if (result.success) {
                     closeModal('projectModal');
+                    // 清空输入框
+                    document.getElementById('newProjectName').value = '';
+                    document.getElementById('newProjectStartDate').value = '';
+                    document.getElementById('newProjectEndDate').value = '';
                     await loadProjects();
                     selectProject(result.project.id);
                 } else { alert(result.error || '创建失败'); }
