@@ -426,6 +426,31 @@
         </div>
     </div>
     
+    <!-- Edit Project Date Modal (v0.8.0) -->
+    <div class="modal" id="editProjectDateModal">
+        <div class="modal-content" style="width: 400px;">
+            <div class="modal-header"><span>编辑项目日期</span><button class="modal-close" onclick="closeModal('editProjectDateModal')">&times;</button></div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>项目名称</label>
+                    <p id="editProjectName" style="font-weight: bold;"></p>
+                </div>
+                <div class="form-group">
+                    <label>开始日期</label>
+                    <input type="date" class="form-control" id="editProjectStartDate">
+                </div>
+                <div class="form-group">
+                    <label>结束日期</label>
+                    <input type="date" class="form-control" id="editProjectEndDate">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn" onclick="closeModal('editProjectDateModal')">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="saveProjectDate()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <!-- Archive Modal -->
     <div class="modal" id="archiveModal">
         <div class="modal-content" style="width: 500px;">
@@ -1582,9 +1607,45 @@
             list.innerHTML = projects.map(p => {
                 const isActive = currentProject && currentProject.id === p.id;
                 const deleteBtn = isAdmin ? `<button class="action-btn delete" onclick="event.stopPropagation(); showDeleteProjectConfirm(${p.id}, '${escapeHtml(p.name)}')" title="删除项目">🗑️ 删除</button>` : '';
-                return `<div class="project-item ${isActive ? 'active' : ''}" onclick="selectProject(${p.id}); closeModal('projectModal');"><div class="project-info"><span class="project-name">${p.name}</span><span class="project-meta">CP: ${p.cp_count} | TC: ${p.tc_count}${p.start_date ? ' | ' + p.start_date + ' ~ ' + p.end_date : ''}</span></div><div class="action-btns">${deleteBtn}</div></div>`;
+                const editBtn = isAdmin ? `<button class="action-btn edit" onclick="event.stopPropagation(); showEditProjectDate(${p.id}, '${escapeHtml(p.name)}', '${p.start_date || ''}', '${p.end_date || ''}')" title="编辑项目日期">✏️ 编辑</button>` : '';
+                return `<div class="project-item ${isActive ? 'active' : ''}" onclick="selectProject(${p.id}); closeModal('projectModal');"><div class="project-info"><span class="project-name">${p.name}</span><span class="project-meta">CP: ${p.cp_count} | TC: ${p.tc_count}${p.start_date ? ' | ' + p.start_date + ' ~ ' + p.end_date : ''}</span></div><div class="action-btns">${editBtn}${deleteBtn}</div></div>`;
             }).join('');
             document.getElementById('projectModal').classList.add('active');
+        }
+        
+        // v0.8.0 编辑项目日期
+        let editingProjectId = null;
+        
+        function showEditProjectDate(projectId, projectName, startDate, endDate) {
+            editingProjectId = projectId;
+            document.getElementById('editProjectName').textContent = projectName;
+            document.getElementById('editProjectStartDate').value = startDate;
+            document.getElementById('editProjectEndDate').value = endDate;
+            document.getElementById('editProjectDateModal').classList.add('active');
+        }
+        
+        async function saveProjectDate() {
+            if (!editingProjectId) return;
+            const startDate = document.getElementById('editProjectStartDate').value;
+            const endDate = document.getElementById('editProjectEndDate').value;
+            
+            try {
+                const res = await fetch(`/api/projects/${editingProjectId}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({start_date: startDate, end_date: endDate})
+                });
+                const result = await res.json();
+                if (result.success) {
+                    closeModal('editProjectDateModal');
+                    await loadProjects();
+                    alert('项目日期已更新');
+                } else {
+                    alert(result.error || '更新失败');
+                }
+            } catch (e) {
+                alert('更新失败: ' + e);
+            }
         }
         
         function showDeleteProjectConfirm(projectId, projectName) {

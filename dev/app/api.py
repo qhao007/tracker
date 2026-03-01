@@ -300,8 +300,6 @@ def get_project(project_id):
 @admin_required
 def create_project():
     """创建新项目"""
-    from datetime import datetime
-    
     data = request.json
     name = data.get("name", "").strip()
     start_date = data.get("start_date", "").strip()
@@ -374,7 +372,6 @@ def update_project(project_id):
     end_date = project.get("end_date", "")
     if start_date and end_date:
         try:
-            from datetime import datetime
             start = datetime.strptime(start_date, "%Y-%m-%d")
             end = datetime.strptime(end_date, "%Y-%m-%d")
             if start > end:
