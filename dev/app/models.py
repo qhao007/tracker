@@ -137,6 +137,51 @@ class Archive(db.Model):
     project_name = db.Column(db.String(100), nullable=False)
     backup_date = db.Column(db.String(20), nullable=False)
     data = db.Column(db.Text, nullable=False)  # JSON 格式
+
+
+# v0.8.2: 项目进度快照表
+class ProjectProgress(db.Model):
+    """项目进度快照表"""
+    __tablename__ = 'project_progress'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    snapshot_date = db.Column(db.String(10), nullable=False)  # YYYY-MM-DD
+    
+    # 覆盖率数据
+    actual_coverage = db.Column(db.Float)  # 实际覆盖率 (0-100)
+    tc_pass_count = db.Column(db.Integer)  # Pass 状态 TC 数
+    tc_total = db.Column(db.Integer)       # 总 TC 数
+    cp_covered = db.Column(db.Integer)     # 已覆盖 CP 数
+    cp_total = db.Column(db.Integer)       # 总 CP 数
+    
+    # 时间戳
+    created_at = db.Column(db.String(20), default=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+    updated_at = db.Column(db.String(20))  # 更新时间
+    updated_by = db.Column(db.String(100)) # 更新人
+    
+    # 关系
+    project = db.relationship('Project', backref='progress_snapshots')
+    
+    # 唯一约束
+    __table_args__ = (
+        db.UniqueConstraint('project_id', 'snapshot_date', name='uq_project_progress_date'),
+    )
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'project_id': self.project_id,
+            'snapshot_date': self.snapshot_date,
+            'actual_coverage': self.actual_coverage,
+            'tc_pass_count': self.tc_pass_count,
+            'tc_total': self.tc_total,
+            'cp_covered': self.cp_covered,
+            'cp_total': self.cp_total,
+            'created_at': self.created_at,
+            'updated_at': self.updated_at,
+            'updated_by': self.updated_by
+        }
     version = db.Column(db.String(20))          # 备份时的版本
     
     def to_dict(self):

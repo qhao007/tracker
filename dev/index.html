@@ -329,6 +329,9 @@
                     <span style="color: #999;">-</span>
                     <input type="date" id="progressEndDate" style="width: 130px; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
                     <button type="button" onclick="refreshProgressChart()" style="padding: 4px 12px; margin-left: 8px; background: #2170bb; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;">应用</button>
+                    <!-- v0.8.2: 快照管理按钮 -->
+                    <button type="button" id="snapshotManageBtn" onclick="openSnapshotManage()" style="padding: 4px 12px; margin-left: 8px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; display: none;">快照管理</button>
+                    <button type="button" id="snapshotCreateBtn" onclick="createSnapshot()" style="padding: 4px 12px; margin-left: 8px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; display: none;">刷新快照</button>
                 </div>
             </div>
             <div id="progressChartContainer" style="padding: 20px;">
@@ -994,8 +997,118 @@
                 
                 currentProgressData = progressData;
                 renderProgressChart(progressData);
+                
+                // v0.8.2: 根据角色显示/隐藏快照按钮
+                updateSnapshotButtons();
             } catch (e) {
                 console.error('刷新进度图表失败:', e);
+            }
+        }
+        
+        // v0.8.2: 快照管理
+        function updateSnapshotButtons() {
+            // 根据用户角色显示/隐藏快照按钮
+            const isAdmin = sessionRole === 'admin';
+            document.getElementById('snapshotManageBtn').style.display = isAdmin ? 'inline-block' : 'none';
+            document.getElementById('snapshotCreateBtn').style.display = isAdmin ? 'inline-block' : 'none';
+        }
+        
+        async function createSnapshot() {
+            if (!currentProjectId) {
+                alert('请先选择一个项目');
+                return;
+            }
+            
+            try {
+                const res = await fetch(`/api/progress/${currentProjectId}/snapshot`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    alert('快照创建成功！\n覆盖率: ' + data.snapshot.actual_coverage + '%');
+                    refreshProgressChart();
+                } else {
+                    alert('创建失败: ' + (data.error || '未知错误'));
+                }
+            } catch (e) {
+                alert('创建快照失败: ' + e.message);
+            }
+        }
+        
+        async function openSnapshotManage() {
+            if (!currentProjectId) {
+                alert('请先选择一个项目');
+                return;
+            }
+            
+            try {
+                const res = await fetch(`/api/progress/${currentProjectId}/snapshots`, {
+                    credentials: 'include'
+                });
+                const data = await res.json();
+                
+                let html = '<div style="max-height: 400px; overflow-y: auto;">';
+                html += '<table style="width: 100%; border-collapse: collapse;">';
+                html += '<tr style="background: #f5f5f5;"><th style="padding: 8px; border: 1px solid #ddd;">日期</th><th style="padding: 8px; border: 1px solid #ddd;">覆盖率</th><th style="padding: 8px; border: 1px solid #ddd;">TC</th><th style="padding: 8px; border: 1px solid #ddd;">CP</th>';
+                if (sessionRole === 'admin') {
+                    html += '<th style="padding: 8px; border: 1px solid #ddd;">操作</th>';
+                }
+                html += '</tr>';
+                
+                if (data.snapshots && data.snapshots.length > 0) {
+                    data.snapshots.forEach(snap => {
+                        html += '<tr>';
+                        html += `<td style="padding: 8px; border: 1px solid #ddd;">${snap.snapshot_date}</td>`;
+                        html += `<td style="padding: 8px; border: 1px solid #ddd;">${snap.actual_coverage}%</td>`;
+                        html += `<td style="padding: 8px; border: 1px solid #ddd;">${snap.tc_pass_count}/${snap.tc_total}</td>`;
+                        html += `<td style="padding: 8px; border: 1px solid #ddd;">${snap.cp_covered}/${snap.cp_total}</td>`;
+                        if (sessionRole === 'admin') {
+                            html += `<td style="padding: 8px; border: 1px solid #ddd;"><button onclick="deleteSnapshot(${snap.id})" style="padding: 4px 8px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">删除</button></td>`;
+                        }
+                        html += '</tr>';
+                    });
+                } else {
+                    html += '<tr><td colspan="5" style="padding: 20px; text-align: center; color: #999;">暂无快照数据</td></tr>';
+                }
+                
+                html += '</table></div>';
+                
+                // 显示对话框
+                document.getElementById('cpModalTitle').textContent = '快照管理';
+                document.getElementById('cpForm').innerHTML = html;
+                document.getElementById('cpModal').style.display = 'block';
+                
+            } catch (e) {
+                alert('加载快照失败: ' + e.message);
+            }
+        }
+        
+        async function deleteSnapshot(snapshotId) {
+            if (!confirm('确定要删除这个快照吗？')) {
+                return;
+            }
+            
+            try {
+                const res = await fetch(`/api/progress/snapshots/${snapshotId}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    if (data.is_current_week) {
+                        alert('已删除当周快照');
+                    }
+                    // 刷新列表
+                    openSnapshotManage();
+                    refreshProgressChart();
+                } else {
+                    alert('删除失败: ' + (data.error || '未知错误'));
+                }
+            } catch (e) {
+                alert('删除快照失败: ' + e.message);
             }
         }
         
@@ -1009,8 +1122,16 @@
             
             // 准备数据
             const planned = data.planned || [];
-            const labels = planned.map(p => p.week);
+            const actual = data.actual || [];
+            
+            // 使用计划曲线的 labels，如果没有则用实际的
+            let labels = planned.map(p => p.week);
+            if (labels.length === 0) {
+                labels = actual.map(a => a.week);
+            }
+            
             const plannedData = planned.map(p => p.coverage);
+            const actualData = actual.map(a => a.coverage);
             
             // 构建 datasets
             const datasets = [];
@@ -1023,6 +1144,18 @@
                     borderColor: '#2170bb',
                     backgroundColor: 'rgba(33, 112, 187, 0.1)',
                     borderDash: [5, 5],  // 虚线
+                    fill: true,
+                    tension: 0.1
+                });
+            }
+            
+            // v0.8.2: 实际曲线（绿色实线）
+            if (actualData.length > 0) {
+                datasets.push({
+                    label: '实际曲线',
+                    data: actualData,
+                    borderColor: '#28a745',
+                    backgroundColor: 'rgba(40, 167, 69, 0.1)',
                     fill: true,
                     tension: 0.1
                 });
