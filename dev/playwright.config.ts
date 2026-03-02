@@ -56,11 +56,11 @@ export default defineConfig({
     },
   ],
 
-  // WebServer 配置（可选）
+  // WebServer 配置（复用 8081 测试服务）
   webServer: {
-    command: 'cd /projects/management/tracker/dev && gunicorn --workers 2 --bind 0.0.0.0:8082 wsgi:app',
-    url: 'http://localhost:8082',
-    reuseExistingServer: !process.env.CI,
+    command: 'cd /projects/management/tracker/dev && gunicorn --workers 2 --bind 0.0.0.0:8081 wsgi:app',
+    url: 'http://localhost:8081',
+    reuseExistingServer: true,
     timeout: 30000,
   },
 });
