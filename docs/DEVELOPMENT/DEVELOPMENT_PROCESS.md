@@ -437,7 +437,7 @@ bash check_frontent.sh
 | **ESLint 检查** | 脚本 | 前端 JS 语法 | `check_frontent.sh` | 每次提交 |
 | **API 测试** | pytest | API 接口 | `tests/test_api/` | 每次提交 |
 | **Playwright 冒烟测试** | UI 自动化 | 核心功能点 | `tests/test_ui/specs/smoke/` | 每次提交 |
-| **兼容性测试** | Python 脚本 | 数据库兼容性 | `scripts/compatibility_test.py` | 发布前 |
+| **兼容性测试** | Python 脚本 | 数据库兼容性 | `scripts/tracker_ops.py` | 发布前 |
 
 ### 5.1.1 ESLint 检查（前端代码）
 
@@ -471,13 +471,13 @@ npx playwright test tests/test_ui/specs/smoke/ --project=firefox
 # ========== 兼容性测试 ==========
 cd /projects/management/tracker
 # 复制用户数据到测试目录
-python3 scripts/compatibility_test.py sync
+python3 scripts/tracker_ops.py sync
 # 执行兼容性检查
-python3 scripts/compatibility_test.py check
+python3 scripts/tracker_ops.py check
 # 执行 API 兼容性测试
-python3 scripts/compatibility_test.py test
+python3 scripts/tracker_ops.py test
 # 清理测试数据
-python3 scripts/compatibility_test.py clean
+python3 scripts/tracker_ops.py clean
 
 
 ### 5.3 Bug 处理流程
@@ -604,7 +604,7 @@ python3 scripts/release_preparation.py --version v0.6.0
 |------|------|----------|
 | 1 | API 测试 (pytest tests/test_api/) | ❌ 中止发布 |
 | 2 | Playwright 冒烟测试 (tests/test_ui/specs/smoke/) | ❌ 中止发布 |
-| 3 | 兼容性测试 (compatibility_test.py) | ⚠️ 部分通过可继续 |
+| 3 | 兼容性测试 (tracker_ops.py) | ⚠️ 部分通过可继续 |
 | 4 | VERSION 更新和提交 | ❌ 中止发布 |
 | 5 | Git 状态检查 | ❌ 中止发布 |
 | 6 | Merge 和 Tag | ❌ 中止发布 |

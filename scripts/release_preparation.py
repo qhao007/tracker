@@ -312,7 +312,7 @@ def run_compatibility_tests(dry_run=False):
         return True
 
     # 执行兼容性测试脚本
-    cmd = f"python3 {scripts_dir}/compatibility_test.py all"
+    cmd = f"python3 {scripts_dir}/tracker_ops.py all"
     success, output = run_command(cmd, "执行兼容性测试", cwd=repo_root)
     
     if success:
