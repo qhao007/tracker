@@ -257,6 +257,10 @@ def check():
     
     print(f"检查 {len(test_dbs)} 个数据库文件...\n")
     
+    # 排除系统数据库文件
+    SYSTEM_DBS = ["users.db", "tracker.db"]
+    test_dbs = [f for f in test_dbs if f.name not in SYSTEM_DBS]
+    
     # 必要的表和字段（注意：tc_cp_connections 没有 id 字段）
     REQUIRED_TABLES = {
         'cover_point': ['id', 'project_id', 'feature', 'sub_feature', 'cover_point', 'priority'],
