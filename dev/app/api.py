@@ -771,7 +771,7 @@ def calculate_planned_coverage(project_name, start_date, end_date):
                 WHERE tc.project_id = ?
                 AND tc.target_date IS NOT NULL
                 AND tc.target_date <= ?
-                AND tc.status = 'Pass'
+                AND tc.status = 'PASS'
             ),
             covered_cps AS (
                 SELECT DISTINCT cp.id
