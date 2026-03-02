@@ -3,7 +3,7 @@ Tracker API 路由 - v0.3 独立数据库版本
 """
 
 from flask import Blueprint, request, jsonify, send_from_directory, send_file, current_app, g, session
-from datetime import datetime
+from datetime import datetime, timedelta, date
 from urllib.parse import quote
 from functools import wraps
 import json
@@ -700,6 +700,102 @@ def delete_project(project_id):
 # ============ Progress Charts (v0.8.0) ============
 
 
+def calculate_planned_coverage(project_name, start_date, end_date):
+    """
+    计算计划覆盖率曲线
+    
+    算法：对于项目周期内的每一周，计算该周之前已target且状态为Pass的TC
+    所关联的CP覆盖率
+    
+    Args:
+        project_name: 项目名称
+        start_date: 项目开始日期
+        end_date: 项目结束日期
+    
+    Returns:
+        list: 每周数据点列表 [{week: 'YYYY-MM-DD', coverage: float}, ...]
+    """
+    if not start_date or not end_date:
+        return []
+    
+    try:
+        start = datetime.strptime(start_date, '%Y-%m-%d').date()
+        end = datetime.strptime(end_date, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        return []
+    
+    # 获取项目 ID
+    projects = load_projects()
+    project = next((p for p in projects if p["name"] == project_name), None)
+    if not project:
+        return []
+    project_id = project["id"]
+    
+    conn = get_db(project_name)
+    cursor = conn.cursor()
+    
+    # 获取项目总 CP 数
+    cursor.execute("SELECT COUNT(*) FROM cover_point")
+    total_cp = cursor.fetchone()[0]
+    
+    if total_cp == 0:
+        return []
+    
+    planned = []
+    
+    # 从项目开始日期到结束日期，每周计算一次
+    current = start
+    while current <= end:
+        # 获取本周的周日（week end）
+        # 周一为一周开始
+        days_to_sunday = (current.weekday() - 6) % 7  # 0-6, Monday=0, Sunday=6
+        if days_to_sunday == 0 and current.weekday() == 6:
+            # 如果当前是周日，直接用
+            week_end = current
+        else:
+            # 计算本周日的日期
+            days_until_sunday = (6 - current.weekday()) % 7
+            if days_until_sunday == 0:
+                days_until_sunday = 7
+            week_end = current + timedelta(days=days_until_sunday)
+        
+        # 只处理不超过结束日期的周
+        if week_end > end:
+            week_end = end
+        
+        # 计算覆盖率：target_date <= week_end 且 status = 'Pass' 的 TC 关联的 CP 覆盖率
+        cursor.execute("""
+            WITH pass_tcs AS (
+                SELECT DISTINCT tc.id
+                FROM test_case tc
+                WHERE tc.project_id = ?
+                AND tc.target_date IS NOT NULL
+                AND tc.target_date <= ?
+                AND tc.status = 'Pass'
+            ),
+            covered_cps AS (
+                SELECT DISTINCT cp.id
+                FROM tc_cp_connections tcc
+                INNER JOIN pass_tcs pt ON tcc.tc_id = pt.id
+                INNER JOIN cover_point cp ON tcc.cp_id = cp.id
+            )
+            SELECT COUNT(*) FROM covered_cps
+        """, (project_id, week_end.isoformat()))
+        
+        covered_cp = cursor.fetchone()[0]
+        coverage = round((covered_cp / total_cp) * 100, 1)
+        
+        planned.append({
+            'week': current.isoformat(),  # 使用周一的日期作为标识
+            'coverage': coverage
+        })
+        
+        # 移到下一周
+        current = week_end + timedelta(days=1)
+    
+    return planned
+
+
 @api.route("/api/progress/<int:project_id>", methods=["GET"])
 @login_required
 def get_progress(project_id):
@@ -713,14 +809,27 @@ def get_progress(project_id):
     # 获取项目日期
     start_date = project.get("start_date", "")
     end_date = project.get("end_date", "")
+    
+    # 获取日期过滤参数
+    filter_start = request.args.get("start_date", "")
+    filter_end = request.args.get("end_date", "")
+    
+    # 如果有过滤参数，使用过滤参数
+    if filter_start:
+        start_date = filter_start
+    if filter_end:
+        end_date = filter_end
+
+    # 计算计划曲线
+    planned = calculate_planned_coverage(project["name"], start_date, end_date)
 
     # v0.8.0 基础版：返回空数据（后续版本返回计划/实际曲线）
     return jsonify({
         "project_id": project_id,
         "project_name": project["name"],
-        "start_date": start_date,
-        "end_date": end_date,
-        "planned": [],
+        "start_date": project.get("start_date", ""),
+        "end_date": project.get("end_date", ""),
+        "planned": planned,
         "actual": []
     })
 
