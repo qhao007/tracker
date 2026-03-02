@@ -1047,7 +1047,7 @@ npx playwright test tests/test_ui/specs/smoke/smoke.spec.ts --project=firefox --
 | 日期 | 决策 | 状态 | 记录人 |
 |------|------|------|--------|
 | 2026-02-10 | UI 测试统一使用 Playwright CLI (TypeScript) | ✅ 已执行 | Claude Code |
-| 2026-02-13 | 添加兼容性测试脚本 compatibility_test.py | ✅ 已完成 | Claude Code |
+| 2026-02-13 | 添加兼容性测试脚本 tracker_ops.py | ✅ 已完成 | Claude Code |
 
 ---
 

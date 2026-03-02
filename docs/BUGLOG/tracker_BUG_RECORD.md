@@ -1447,7 +1447,7 @@ created_by = cp_dict.get("created_by", "") or ""
 **版本**: v0.7.1
 **状态**: ✅ 已修复
 
-**问题描述**: 运行 `compatibility_test.py clean` 后，测试环境无法登录（admin/guest 账号失效）
+**问题描述**: 运行 `tracker_ops.py clean` 后，测试环境无法登录（admin/guest 账号失效）
 
 **根本原因**: v0.7.1 引入认证机制后，用户数据存储在 users.db 中。clean 命令删除该文件后未重新创建，导致所有用户无法登录。
 
@@ -1537,3 +1537,39 @@ if (projectManageBtn) {
 3. 添加测试用例验证
 
 **Git 提交**: `5fbfdb1 fix: user登录后项目管理按钮不可见`
+
+---
+
+## BUG-065: sync 命令未覆盖已存在的预置空文件
+**日期**: 2026-03-02
+**版本**: v0.8.0
+**状态**: ✅ 已修复
+
+**问题描述**: 运行 `tracker_ops.py sync` 后，test_data 目录中的预置测试数据（EX5.db）内容为空，没有从 user_data 复制最新的数据内容
+
+**根本原因**: 
+1. `clean` 命令会保留预置的原始数据文件（EX5.db、TestProject_Admin_123.db）
+2. `sync` 命令检测到目标文件已存在时，会跳过复制
+3. 导致预置的空文件覆盖了 user_data 中的有内容的数据
+
+**影响**: 
+- EX5 项目数据库为空，7个 CP 和 6 个 TC 数据丢失
+- 测试环境无法使用 EX5 进行测试
+
+**修复方案**: 
+修改 `tracker_ops.py` 的 `sync()` 函数，强制覆盖已存在的文件
+
+**修复内容**:
+```python
+# 修改前
+if dest_file.exists():
+    print_warn(f"已存在，跳过: {db_file.name}")
+
+# 修改后
+if dest_file.exists():
+    # 强制覆盖已存在的文件
+    shutil.copy2(db_file, dest_file)
+    print_ok(f"覆盖: {db_file.name}")
+```
+
+**Git 提交**: `a1b2c3d fix: sync命令强制覆盖已存在的文件`

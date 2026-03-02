@@ -33,6 +33,8 @@ cd /projects/management/tracker/dev && ./start_server_test.sh
 
 ### 测试
 
+> **UI 测试内存原则**: 以内存消耗最小为原则进行测试，使用 `--project=firefox` 仅运行 Firefox 浏览器
+
 ```bash
 # API 测试
 cd /projects/management/tracker/dev && PYTHONPATH=. pytest tests/test_api/ -v

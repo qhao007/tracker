@@ -238,6 +238,8 @@ def get_projects():
                 "created_at": p.get("created_at", ""),
                 "is_archived": False,
                 "version": p.get("version", "stable"),
+                "start_date": p.get("start_date", ""),
+                "end_date": p.get("end_date", ""),
                 "cp_count": cp_count,
                 "tc_count": tc_count,
             }
@@ -284,6 +286,8 @@ def get_project(project_id):
             "created_at": project.get("created_at", ""),
             "is_archived": project.get("is_archived", False),
             "version": project.get("version", "stable"),
+            "start_date": project.get("start_date", ""),
+            "end_date": project.get("end_date", ""),
             "cp_count": cp_count,
             "tc_count": tc_count,
             "pass_count": pass_count,
@@ -298,9 +302,21 @@ def create_project():
     """创建新项目"""
     data = request.json
     name = data.get("name", "").strip()
+    start_date = data.get("start_date", "").strip()
+    end_date = data.get("end_date", "").strip()
 
     if not name:
         return jsonify({"error": "项目名称不能为空"}), 400
+
+    # 校验日期（如果提供了日期）
+    if start_date and end_date:
+        try:
+            start = datetime.strptime(start_date, "%Y-%m-%d")
+            end = datetime.strptime(end_date, "%Y-%m-%d")
+            if start > end:
+                return jsonify({"error": "开始日期不能晚于结束日期"}), 400
+        except ValueError:
+            return jsonify({"error": "日期格式应为 YYYY-MM-DD"}), 400
 
     projects = load_projects()
     if any(p["name"] == name and not p.get("is_archived", False) for p in projects):
@@ -316,8 +332,54 @@ def create_project():
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "is_archived": False,
         "version": "stable",
+        "start_date": start_date,
+        "end_date": end_date,
     }
     projects.append(project)
+    save_projects(projects)
+
+    return jsonify({"success": True, "project": project})
+
+
+@api.route("/api/projects/<int:project_id>", methods=["PUT"])
+@admin_required
+def update_project(project_id):
+    """更新项目信息"""
+    data = request.json
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+
+    if not project:
+        return jsonify({"error": "项目不存在"}), 404
+
+    # 校验并更新字段
+    if "name" in data:
+        new_name = data["name"].strip()
+        if new_name and new_name != project["name"]:
+            # 检查名称是否已存在
+            if any(p["name"] == new_name and p["id"] != project_id for p in projects):
+                return jsonify({"error": f'项目名称 "{new_name}" 已存在'}), 400
+            project["name"] = new_name
+
+    # 更新日期字段（v0.8.0）
+    if "start_date" in data:
+        project["start_date"] = data["start_date"].strip() if data["start_date"] else ""
+    if "end_date" in data:
+        project["end_date"] = data["end_date"].strip() if data["end_date"] else ""
+
+    # 校验日期（如果提供了日期）
+    start_date = project.get("start_date", "")
+    end_date = project.get("end_date", "")
+    if start_date and end_date:
+        try:
+            start = datetime.strptime(start_date, "%Y-%m-%d")
+            end = datetime.strptime(end_date, "%Y-%m-%d")
+            if start > end:
+                return jsonify({"error": "开始日期不能晚于结束日期"}), 400
+        except ValueError:
+            return jsonify({"error": "日期格式应为 YYYY-MM-DD"}), 400
+
+    # 保存更新
     save_projects(projects)
 
     return jsonify({"success": True, "project": project})
@@ -633,6 +695,34 @@ def delete_project(project_id):
     delete_project_db(project["name"])
 
     return jsonify({"success": True})
+
+
+# ============ Progress Charts (v0.8.0) ============
+
+
+@api.route("/api/progress/<int:project_id>", methods=["GET"])
+@login_required
+def get_progress(project_id):
+    """获取项目进度数据"""
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+
+    if not project:
+        return jsonify({"error": "项目不存在"}), 404
+
+    # 获取项目日期
+    start_date = project.get("start_date", "")
+    end_date = project.get("end_date", "")
+
+    # v0.8.0 基础版：返回空数据（后续版本返回计划/实际曲线）
+    return jsonify({
+        "project_id": project_id,
+        "project_name": project["name"],
+        "start_date": start_date,
+        "end_date": end_date,
+        "planned": [],
+        "actual": []
+    })
 
 
 # ============ Cover Points ============

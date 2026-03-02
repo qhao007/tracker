@@ -12,6 +12,11 @@
 4. [开发流程](#4-开发流程)
 5. [测试流程](#5-测试流程)
 6. [发布流程](#6-发布流程)
+   - [6.1 执行发布准备脚本](#61-执行发布准备脚本)
+   - [6.2 执行发布](#62-执行发布)
+   - [6.3 发布后验证](#63-发布后验证)
+   - [6.4 回滚](#64-回滚)
+   - [6.5 部署配置](#65-部署配置)
 7. [文档规范](#7-文档规范)
 
 ---
@@ -33,7 +38,42 @@
 |------|------|
 | **代码隔离** | Git 只维护 dev/ 代码，发布到独立目录 |
 | **数据安全** | 用户数据与测试数据物理隔离 |
-| **流程规范** | 需求 → 开发 → 测试 → 发布 |
+| **流程规范** | 需求 → 版本规格书 → 测试计划 → 开发 → 测试 → 合并 → 发布准备 → 发布执行 → 发布验证 |
+
+### 1.4 总体流程图
+
+  ┌─────────────────────────────────────────────────────────────────────────────┐                                      
+  │                           Tracker 整体开发流程                                │                                    
+  └─────────────────────────────────────────────────────────────────────────────┘                                      
+                                                                                                                       
+     ┌──────────┐                                                                                                      
+     │ 用户提交  │  填写模板 → /projects/management/feedbacks/new/                                                     
+     │  需求    │                                                                                                      
+     └────┬─────┘                                                                                                      
+          ▼                                                                                                            
+     ┌──────────┐                                                                                                      
+     │ 需求评审  │  小栗子细化 → 评估工作量 → 确定优先级                                                               
+     └────┬─────┘                                                                                                      
+          ▼                                                                                                            
+     ┌──────────┐                                                                                                      
+     │ 需求确认  │  生成正式文档 → 用户确认                                                                            
+     └────┬─────┘                                                                                                      
+          ▼                                                                                                            
+     ┌──────────┐                                                                                                      
+     │ 版本规格书 │  定义功能规格 → 验收标准                                                                           
+     └────┬─────┘                                                                                                      
+          ▼                                                                                                            
+     ┌──────────┐                                                                                                      
+     │ 测试计划  │  定义测试用例 → 任务分解                                                                            
+     └────┬─────┘                                                                                                      
+          ▼                                                                                                            
+     ┌──────────┐                                                                                                      
+     │ 开发实现  │  Git分支 → 编码 → 测试 → 提交                                                                       
+     └────┬─────┘                                                                                                      
+          ▼                                                                                                            
+     ┌──────────┐                                                                                                      
+     │ 发布上线  │  执行release_preparation.py → 执行release.py → 切换版本 → 重启服务                                
+     └──────────┘                                                                   
 
 ---
 
@@ -94,7 +134,7 @@ git log --oneline --graph --all
 |------|------|------|
 | **新功能** | 新增功能模块 | TEMPLATE_FEATURE_REQUEST.md |
 | **批量需求** | 多个简单需求 | BATCH_REQUESTS_TEMPLATE.md |
-| **Bug 修复** | 修复缺陷 | BugLog |
+| **Bug 修复** | 修复缺陷 | TEMPLATE_BUGLOG.md |
 
 ### 3.2 需求提交流程
 
@@ -118,12 +158,6 @@ git log --oneline --graph --all
 │                                                                  │
 │  5️⃣ 创建测试计划                                                │
 │     └── 基于规格书 → 定义测试用例 → 任务分解                    │
-│                                                                  │
-│  6️⃣ 开发实现                                                    │
-│     └── Git 分支 → 编码 → 测试 → 提交                          │
-│                                                                  │
-│  7️⃣ 发布上线                                                    │
-│     └── 执行 release.py → 切换版本 → 重启服务                   │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 
@@ -300,10 +334,24 @@ git push origin develop
 
 | 项目 | 配置 |
 |------|------|
-| **开发版** | `dev/` 目录，端口 8081，test_data |
+| **生产版** | `/release/tracker/v{version}/`，端口 8080，user_data |
+| **开发版** | `dev/`，端口 8081，test_data |
 | **测试数据** | `/projects/management/tracker/shared/data/test_data/` |
-| **启动命令** | `cd dev && ./start_server_test.sh` |
-| **WSGI 入口** | `wsgi.py` (gunicorn 使用) |
+| **WSGI 入口** | `wsgi.py` (定义 app 对象供 gunicorn 加载) |
+
+#### 4.2.1 服务启动说明
+
+| 文件 | 用途 | 位置 |
+|------|------|------|
+| `start_server_test.sh` | 测试版启动脚本 | `dev/` |
+| `server.py` | Flask 应用入口 | `dev/` (源码) |
+| `server.py` | Flask 应用入口 | `release/tracker/v{version}/` (发布版) |
+
+**启动方式：**
+- **测试版 (8081)**: `dev/start_server_test.sh`
+- **生产版 (8080)**: 通过 systemd 服务管理，或 `release/tracker/v{version}/server.py`
+
+> **生产环境部署配置**: 详细说明见 [6.5 部署配置](#65-部署配置)
 
 ### 4.3 代码规范
 
@@ -389,7 +437,7 @@ bash check_frontent.sh
 | **ESLint 检查** | 脚本 | 前端 JS 语法 | `check_frontent.sh` | 每次提交 |
 | **API 测试** | pytest | API 接口 | `tests/test_api/` | 每次提交 |
 | **Playwright 冒烟测试** | UI 自动化 | 核心功能点 | `tests/test_ui/specs/smoke/` | 每次提交 |
-| **兼容性测试** | Python 脚本 | 数据库兼容性 | `scripts/compatibility_test.py` | 发布前 |
+| **兼容性测试** | Python 脚本 | 数据库兼容性 | `scripts/tracker_ops.py` | 发布前 |
 
 ### 5.1.1 ESLint 检查（前端代码）
 
@@ -412,37 +460,37 @@ bash check_frontent.sh
 cd /projects/management/tracker/dev
 PYTHONPATH=. pytest tests/test_api/ -v
 # 覆盖: API 接口测试
-# 期望: 29/29 通过 (v0.6.2)
+# 期望: 全部通过
 
 # ========== Playwright 冒烟测试 ==========
 cd /projects/management/tracker/dev
-npx playwright test tests/test_ui/specs/smoke/smoke.spec.ts --project=firefox --timeout=60000
+npx playwright test tests/test_ui/specs/smoke/ --project=firefox
 # 覆盖: 页面访问、项目加载、数据加载、控制台错误检测
-# 期望: 10/10 通过 (v0.6.2)
+# 期望: 全部通过
 
 # ========== 兼容性测试 ==========
 cd /projects/management/tracker
 # 复制用户数据到测试目录
-python3 scripts/compatibility_test.py sync
+python3 scripts/tracker_ops.py sync
 # 执行兼容性检查
-python3 scripts/compatibility_test.py check
+python3 scripts/tracker_ops.py check
 # 执行 API 兼容性测试
-python3 scripts/compatibility_test.py test
+python3 scripts/tracker_ops.py test
 # 清理测试数据
-python3 scripts/compatibility_test.py clean
+python3 scripts/tracker_ops.py clean
 
 
 ### 5.3 Bug 处理流程
 
-测试中发现代码 bug 时，必须添加到 BugLog：
+测试中发现代码 bug 时，必须添加到 Bug Record：
 
 **添加步骤**:
-1. 填写 BugLog 模板 (`/projects/management/feedbacks/new/BugLog_YYYYMMDD.md`)
+1. 填写 Bug 模板 (`docs/TEMPLATES/TEMPLATE_BUGLOG.md`)
 2. 提交到 feedbacks/new/ 目录
 3. 评审后标记为待修复
-4. 修复后更新 BUGLOG/tracker_BUG_RECORD.md
+4. 修复后更新 `docs/BUGLOG/tracker_BUG_RECORD.md`
 
-**BugLog 模板位置**: `/projects/management/feedbacks/new/BugLog_YYYYMMDD.md`
+**Bug 模板位置**: `docs/TEMPLATES/TEMPLATE_BUGLOG.md`
 
 ### 5.4 测试报告发布
 
@@ -452,7 +500,7 @@ python3 scripts/compatibility_test.py clean
 1. 使用模板: `TEMPLATES/TEST_REPORT.md`
 2. 包含整体测试开始和完成时间
 3. 包含所有测试类型的通过/失败统计
-4. 发布到: `ARCHIVE/REPORTS/TRACKER_TEST_REPORT_v{version}_{YYYYMMDD}.md`
+4. 发布到: `docs/REPORTS/TRACKER_TEST_REPORT_v{version}_{YYYYMMDD}.md`
 
 **报告模板结构**:
 
@@ -476,12 +524,12 @@ python3 scripts/compatibility_test.py clean
 ```bash
 # 1. 复制测试报告模板
 cp TEMPLATES/TEST_REPORT.md \
-   ARCHIVE/REPORTS/TRACKER_TEST_REPORT_v0.6.0_20260208.md
+   docs/REPORTS/TRACKER_TEST_REPORT_v0.6.0_20260208.md
 
 # 2. 编辑测试报告，填写测试结果
 
 # 3. 提交测试报告
-git add ARCHIVE/REPORTS/TRACKER_TEST_REPORT_*.md
+git add docs/REPORTS/TRACKER_TEST_REPORT_*.md
 git commit -m "docs: 添加 v0.6.0 测试报告"
 
 
@@ -556,7 +604,7 @@ python3 scripts/release_preparation.py --version v0.6.0
 |------|------|----------|
 | 1 | API 测试 (pytest tests/test_api/) | ❌ 中止发布 |
 | 2 | Playwright 冒烟测试 (tests/test_ui/specs/smoke/) | ❌ 中止发布 |
-| 3 | 兼容性测试 (compatibility_test.py) | ⚠️ 部分通过可继续 |
+| 3 | 兼容性测试 (tracker_ops.py) | ⚠️ 部分通过可继续 |
 | 4 | VERSION 更新和提交 | ❌ 中止发布 |
 | 5 | Git 状态检查 | ❌ 中止发布 |
 | 6 | Merge 和 Tag | ❌ 中止发布 |
@@ -609,6 +657,89 @@ sudo systemctl restart tracker
 
 
 ---
+
+
+### 6.5 部署配置
+
+#### 6.5.1 systemd 服务配置
+
+生产环境通过 systemd 服务管理，配置文件位于 `/etc/systemd/system/tracker.service`:
+
+```ini
+[Unit]
+Description=Tracker Chip Verification Management System
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/release/tracker/current
+Environment="FLASK_ENV=production"
+Environment="FLASK_SECRET_KEY=your-secret-key-change-in-production"
+Environment="CRON_API_TOKEN=your-cron-token-change-in-production"
+ExecStart=/usr/bin/python3 /release/tracker/current/server.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**创建服务文件**:
+```bash
+sudo nano /etc/systemd/system/tracker.service
+sudo systemctl daemon-reload
+sudo systemctl enable tracker
+sudo systemctl start tracker
+```
+
+#### 6.5.2 环境变量配置
+
+| 变量 | 说明 | 必填 | 示例值 |
+|------|------|------|--------|
+| `FLASK_ENV` | 运行环境 | ✅ | `production` |
+| `FLASK_SECRET_KEY` | Flask Session 加密密钥 | ✅ | (随机字符串，**必须更改**) |
+| `CRON_API_TOKEN` | 定时任务认证 Token | v0.8.2+ | (随机字符串，**必须更改**) |
+
+**重要安全提醒**:
+- `FLASK_SECRET_KEY` 必须使用随机字符串，不能使用默认值
+- `CRON_API_TOKEN` 用于定时任务接口认证，v0.8.2+ 需要配置
+- 环境变量在服务启动时加载，修改后需要重启服务生效
+
+#### 6.5.3 服务管理命令
+
+```bash
+# 启动服务
+sudo systemctl start tracker
+
+# 停止服务
+sudo systemctl stop tracker
+
+# 重启服务
+sudo systemctl restart tracker
+
+# 查看状态
+sudo systemctl status tracker
+
+# 查看实时日志
+journalctl -u tracker -f
+
+# 查看最近日志
+journalctl -u tracker -n 50
+```
+
+#### 6.5.4 端口配置
+
+| 端口 | 用途 | 数据目录 |
+|------|------|----------|
+| 8080 | 生产环境 | `shared/data/user_data/` |
+| 8081 | 测试环境 | `shared/data/test_data/` |
+
+**启动方式**:
+- **生产版 (8080)**: 通过 systemd 服务管理
+- **测试版 (8081)**: `dev/start_server_test.sh`
+
 
 ## 7. 文档规范
 
@@ -680,19 +811,24 @@ python3 scripts/release.py --rollback --force
 
 ### 服务管理
 
+> 详细说明见 [6.5 部署配置](#65-部署配置)
+
+#### 测试版 (8081)
 ```bash
-# 重启服务
-sudo systemctl restart tracker
+# 重启测试服务
+pkill -f "gunicorn.*8081"
+cd /projects/management/tracker/dev && python3 -m gunicorn -c gunicorn.conf.py "app:create_app()" --bind 0.0.0.0:8081 --daemon
 
-# 查看状态
-sudo systemctl status tracker
+# 查看测试服务是否运行
+ps aux | grep "gunicorn.*8081"
 
-# 查看日志
-journalctl -u tracker -f
+# 测试服务是否正常
+curl -s http://localhost:8081/api/version
+```
 
 
 ---
 
-**文档版本**: v1.6  
-**最后更新**: 2026-02-09  
+**文档版本**: v1.7  
+**最后更新**: 2026-03-01  
 **维护者**: 小栗子 🌰

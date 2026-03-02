@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Tracker 兼容性测试脚本
+Tracker 运维管理脚本
 
 功能:
     1. sync    - 复制 user_data 到 test_data
@@ -9,11 +9,11 @@ Tracker 兼容性测试脚本
     4. test    - 动态测试：调用 API 验证兼容性
 
 使用方法:
-    python3 scripts/compatibility_test.py sync      # 复制数据
-    python3 scripts/compatibility_test.py clean     # 清理数据
-    python3 scripts/compatibility_test.py check     # 静态检查
-    python3 scripts/compatibility_test.py test     # 动态测试
-    python3 scripts/compatibility_test.py all      # 执行全部
+    python3 scripts/tracker_ops.py sync      # 复制数据
+    python3 scripts/tracker_ops.py clean     # 清理数据
+    python3 scripts/tracker_ops.py check     # 静态检查
+    python3 scripts/tracker_ops.py test     # 动态测试
+    python3 scripts/tracker_ops.py all      # 执行全部
 """
 
 import sqlite3
@@ -76,10 +76,14 @@ def sync():
     TEST_DATA_DIR.mkdir(parents=True, exist_ok=True)
     
     copied = 0
+    skipped = 0
     for db_file in user_dbs:
         dest_file = TEST_DATA_DIR / db_file.name
         if dest_file.exists():
-            print_warn(f"已存在，跳过: {db_file.name}")
+            # 强制覆盖已存在的文件
+            shutil.copy2(db_file, dest_file)
+            print_ok(f"覆盖: {db_file.name}")
+            copied += 1
         else:
             shutil.copy2(db_file, dest_file)
             print_ok(f"复制: {db_file.name}")
