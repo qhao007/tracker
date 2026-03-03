@@ -949,7 +949,8 @@ def calculate_current_coverage(project_name):
         INNER JOIN cover_point cp ON tcc.cp_id = cp.id
         WHERE tc.status = 'PASS'
     """)
-    covered_cps = cursor.fetchone()[0]
+    result = cursor.fetchone()
+    covered_cps = result[0] if result else 0
     
     coverage = round((covered_cps / total_cp) * 100, 1) if total_cp > 0 else 0
     
