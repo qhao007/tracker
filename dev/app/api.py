@@ -825,16 +825,25 @@ def get_progress(project_id):
 
     # v0.8.1: 返回计划曲线
     # v0.8.2: 添加实际曲线
-    from app.models import ProjectProgress
     actual = []
-    if current_app.config.get('SQLALCHEMY_DATABASE_URI'):
-        # 从数据库获取实际快照
-        snapshots = ProjectProgress.query.filter_by(project_id=project_id).order_by(ProjectProgress.snapshot_date).all()
-        for snap in snapshots:
+    # 确保表存在并获取快照
+    try:
+        ensure_progress_table_exists(project["name"])
+        conn = get_db(project["name"])
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT snapshot_date, actual_coverage 
+            FROM project_progress 
+            WHERE project_id = ? 
+            ORDER BY snapshot_date
+        """, (project_id,))
+        for row in cursor.fetchall():
             actual.append({
-                'week': snap.snapshot_date,
-                'coverage': snap.actual_coverage
+                'week': row[0],
+                'coverage': row[1]
             })
+    except Exception as e:
+        print(f"Warning: Could not load actual curve: {e}")
     
     return jsonify({
         "project_id": project_id,
@@ -849,6 +858,46 @@ def get_progress(project_id):
 # ============ Progress Snapshots (v0.8.2) ============
 
 
+def ensure_progress_table_exists(project_name):
+    """
+    确保 project_progress 表存在，如不存在则创建
+    
+    Returns:
+        bool: 表是否存在或创建成功
+    """
+    conn = get_db(project_name)
+    cursor = conn.cursor()
+    
+    # 检查表是否存在
+    cursor.execute("""
+        SELECT name FROM sqlite_master 
+        WHERE type='table' AND name='project_progress'
+    """)
+    
+    if cursor.fetchone():
+        return True  # 表已存在
+    
+    # 创建表
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS project_progress (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            snapshot_date TEXT NOT NULL,
+            actual_coverage REAL,
+            tc_pass_count INTEGER,
+            tc_total INTEGER,
+            cp_covered INTEGER,
+            cp_total INTEGER,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT,
+            updated_by TEXT,
+            UNIQUE(project_id, snapshot_date)
+        )
+    """)
+    conn.commit()
+    return True
+
+
 def calculate_current_coverage(project_name):
     """
     计算当前覆盖率（用于快照）
@@ -856,7 +905,10 @@ def calculate_current_coverage(project_name):
     Returns:
         dict: {actual_coverage, tc_pass_count, tc_total, cp_covered, cp_total}
     """
-    if not current_app.config.get('SQLALCHEMY_DATABASE_URI'):
+    # 确保 project_progress 表存在
+    try:
+        ensure_progress_table_exists(project_name)
+    except Exception:
         return None
     
     # 获取项目 ID
@@ -914,7 +966,6 @@ def calculate_current_coverage(project_name):
 @admin_required
 def create_snapshot(project_id):
     """手动创建进度快照"""
-    from app.models import ProjectProgress
     from datetime import datetime
     
     projects = load_projects()
@@ -922,6 +973,9 @@ def create_snapshot(project_id):
     
     if not project:
         return jsonify({"error": "项目不存在"}), 404
+    
+    # 确保表存在
+    ensure_progress_table_exists(project["name"])
     
     # 计算当前覆盖率
     coverage_data = calculate_current_coverage(project["name"])
@@ -929,41 +983,77 @@ def create_snapshot(project_id):
         return jsonify({"error": "数据库未初始化"}), 500
     
     today = datetime.now().strftime('%Y-%m-%d')
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
     
     # 检查是否已存在当周快照
-    existing = ProjectProgress.query.filter_by(
-        project_id=project_id,
-        snapshot_date=today
-    ).first()
+    cursor.execute("""
+        SELECT id FROM project_progress 
+        WHERE project_id = ? AND snapshot_date = ?
+    """, (project_id, today))
+    existing = cursor.fetchone()
     
     if existing:
         # 更新现有快照
-        existing.actual_coverage = coverage_data['actual_coverage']
-        existing.tc_pass_count = coverage_data['tc_pass_count']
-        existing.tc_total = coverage_data['tc_total']
-        existing.cp_covered = coverage_data['cp_covered']
-        existing.cp_total = coverage_data['cp_total']
-        existing.updated_at = today
-        existing.updated_by = session.get('username', 'admin')
-        db.session.commit()
-        snapshot = existing
+        cursor.execute("""
+            UPDATE project_progress SET 
+                actual_coverage = ?,
+                tc_pass_count = ?,
+                tc_total = ?,
+                cp_covered = ?,
+                cp_total = ?,
+                updated_at = ?,
+                updated_by = ?
+            WHERE project_id = ? AND snapshot_date = ?
+        """, (
+            coverage_data['actual_coverage'],
+            coverage_data['tc_pass_count'],
+            coverage_data['tc_total'],
+            coverage_data['cp_covered'],
+            coverage_data['cp_total'],
+            today,
+            session.get('username', 'admin'),
+            project_id,
+            today
+        ))
+        conn.commit()
+        snapshot_id = existing[0]
     else:
         # 创建新快照
-        snapshot = ProjectProgress(
-            project_id=project_id,
-            snapshot_date=today,
-            actual_coverage=coverage_data['actual_coverage'],
-            tc_pass_count=coverage_data['tc_pass_count'],
-            tc_total=coverage_data['tc_total'],
-            cp_covered=coverage_data['cp_covered'],
-            cp_total=coverage_data['cp_total']
-        )
-        db.session.add(snapshot)
-        db.session.commit()
+        cursor.execute("""
+            INSERT INTO project_progress (
+                project_id, snapshot_date, actual_coverage,
+                tc_pass_count, tc_total, cp_covered, cp_total
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            project_id,
+            today,
+            coverage_data['actual_coverage'],
+            coverage_data['tc_pass_count'],
+            coverage_data['tc_total'],
+            coverage_data['cp_covered'],
+            coverage_data['cp_total']
+        ))
+        conn.commit()
+        snapshot_id = cursor.lastrowid
+    
+    # 获取创建的快照
+    cursor.execute("SELECT * FROM project_progress WHERE id = ?", (snapshot_id,))
+    row = cursor.fetchone()
+    snapshot = {
+        'id': row[0],
+        'snapshot_date': row[2],
+        'actual_coverage': row[3],
+        'tc_pass_count': row[4],
+        'tc_total': row[5],
+        'cp_covered': row[6],
+        'cp_total': row[7],
+        'created_at': row[8]
+    }
     
     return jsonify({
         "success": True,
-        "snapshot": snapshot.to_dict()
+        "snapshot": snapshot
     })
 
 
@@ -971,20 +1061,40 @@ def create_snapshot(project_id):
 @login_required
 def get_snapshots(project_id):
     """获取项目快照列表"""
-    from app.models import ProjectProgress
-    
     projects = load_projects()
     project = next((p for p in projects if p["id"] == project_id), None)
     
     if not project:
         return jsonify({"error": "项目不存在"}), 404
     
-    snapshots = ProjectProgress.query.filter_by(project_id=project_id).order_by(
-        ProjectProgress.snapshot_date.desc()
-    ).all()
+    # 确保表存在
+    ensure_progress_table_exists(project["name"])
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT id, snapshot_date, actual_coverage, tc_pass_count, tc_total, 
+               cp_covered, cp_total, created_at
+        FROM project_progress 
+        WHERE project_id = ?
+        ORDER BY snapshot_date DESC
+    """, (project_id,))
+    
+    snapshots = []
+    for row in cursor.fetchall():
+        snapshots.append({
+            'id': row[0],
+            'snapshot_date': row[1],
+            'actual_coverage': row[2],
+            'tc_pass_count': row[3],
+            'tc_total': row[4],
+            'cp_covered': row[5],
+            'cp_total': row[6],
+            'created_at': row[7]
+        })
     
     return jsonify({
-        "snapshots": [s.to_dict() for s in snapshots]
+        "snapshots": snapshots
     })
 
 
@@ -992,23 +1102,35 @@ def get_snapshots(project_id):
 @admin_required
 def delete_snapshot(snapshot_id):
     """删除快照"""
-    from app.models import ProjectProgress
     from datetime import datetime
     
-    snapshot = ProjectProgress.query.get(snapshot_id)
-    if not snapshot:
+    # 先获取快照信息
+    conn = None
+    for project in load_projects():
+        try:
+            temp_conn = get_db(project["name"])
+            temp_cursor = temp_conn.cursor()
+            temp_cursor.execute("SELECT project_id, snapshot_date FROM project_progress WHERE id = ?", (snapshot_id,))
+            row = temp_cursor.fetchone()
+            if row:
+                conn = temp_conn
+                project_id = row[0]
+                snapshot_date = row[1]
+                break
+        except Exception:
+            continue
+    
+    if not conn:
         return jsonify({"error": "快照不存在"}), 404
     
     # 检查是否当周快照
     today = datetime.now().strftime('%Y-%m-%d')
-    is_current_week = snapshot.snapshot_date == today
+    is_current_week = snapshot_date == today
     
-    # 更新人
-    snapshot.updated_at = today
-    snapshot.updated_by = session.get('username', 'admin')
-    
-    db.session.delete(snapshot)
-    db.session.commit()
+    # 删除快照
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM project_progress WHERE id = ?", (snapshot_id,))
+    conn.commit()
     
     return jsonify({
         "success": True,
@@ -1021,22 +1143,29 @@ def delete_snapshot(snapshot_id):
 @login_required
 def export_progress(project_id):
     """导出项目进度数据"""
-    from app.models import ProjectProgress
-    
     projects = load_projects()
     project = next((p for p in projects if p["id"] == project_id), None)
     
     if not project:
         return jsonify({"error": "项目不存在"}), 404
     
-    snapshots = ProjectProgress.query.filter_by(project_id=project_id).order_by(
-        ProjectProgress.snapshot_date
-    ).all()
+    # 确保表存在
+    ensure_progress_table_exists(project["name"])
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT snapshot_date, actual_coverage, tc_pass_count, tc_total, 
+               cp_covered, cp_total, created_at
+        FROM project_progress 
+        WHERE project_id = ?
+        ORDER BY snapshot_date
+    """, (project_id,))
     
     # CSV 格式导出
     csv_lines = ["snapshot_date,actual_coverage,tc_pass_count,tc_total,cp_covered,cp_total,created_at"]
-    for s in snapshots:
-        csv_lines.append(f"{s.snapshot_date},{s.actual_coverage},{s.tc_pass_count},{s.tc_total},{s.cp_covered},{s.cp_total},{s.created_at}")
+    for row in cursor.fetchall():
+        csv_lines.append(f"{row[0]},{row[1]},{row[2]},{row[3]},{row[4]},{row[5]},{row[6]}")
     
     return "\n".join(csv_lines), 200, {
         'Content-Type': 'text/csv',
@@ -1048,8 +1177,6 @@ def export_progress(project_id):
 @api.route("/api/cron/progress-snapshot", methods=["POST"])
 def cron_progress_snapshot():
     """定时任务：批量创建所有项目的快照"""
-    from app.models import ProjectProgress
-    
     # 验证 API Token
     token = request.headers.get('X-API-Token')
     expected_token = current_app.config.get('CRON_API_TOKEN')
@@ -1075,31 +1202,42 @@ def cron_progress_snapshot():
         if not project.get('start_date') or not project.get('end_date'):
             continue
         
+        # 确保表存在
+        try:
+            ensure_progress_table_exists(project_name)
+        except Exception:
+            continue
+        
         # 计算覆盖率
         coverage_data = calculate_current_coverage(project_name)
         if coverage_data is None:
             continue
         
         # 检查是否已存在当周快照
-        existing = ProjectProgress.query.filter_by(
-            project_id=project_id,
-            snapshot_date=today
-        ).first()
+        conn = get_db(project_name)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id FROM project_progress 
+            WHERE project_id = ? AND snapshot_date = ?
+        """, (project_id, today))
         
-        if not existing:
-            snapshot = ProjectProgress(
-                project_id=project_id,
-                snapshot_date=today,
-                actual_coverage=coverage_data['actual_coverage'],
-                tc_pass_count=coverage_data['tc_pass_count'],
-                tc_total=coverage_data['tc_total'],
-                cp_covered=coverage_data['cp_covered'],
-                cp_total=coverage_data['cp_total']
-            )
-            db.session.add(snapshot)
+        if not cursor.fetchone():
+            cursor.execute("""
+                INSERT INTO project_progress (
+                    project_id, snapshot_date, actual_coverage,
+                    tc_pass_count, tc_total, cp_covered, cp_total
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                project_id,
+                today,
+                coverage_data['actual_coverage'],
+                coverage_data['tc_pass_count'],
+                coverage_data['tc_total'],
+                coverage_data['cp_covered'],
+                coverage_data['cp_total']
+            ))
+            conn.commit()
             created_count += 1
-    
-    db.session.commit()
     
     return jsonify({
         "success": True,

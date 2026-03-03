@@ -1119,6 +1119,11 @@
                 
                 html += '</table></div>';
                 
+                // 添加导出按钮（admin 和 user 可见）
+                html += '<div style="margin-top: 16px; text-align: right;">';
+                html += `<button onclick="exportProgressData(${currentProjectId})" style="padding: 8px 16px; background: #2170bb; color: white; border: none; border-radius: 4px; cursor: pointer;">📥 导出进度数据</button>`;
+                html += '</div>';
+                
                 // 显示对话框
                 document.getElementById('cpModalTitle').textContent = '快照管理';
                 document.getElementById('cpForm').innerHTML = html;
@@ -1153,6 +1158,41 @@
                 }
             } catch (e) {
                 alert('删除快照失败: ' + e.message);
+            }
+        }
+        
+        // 导出进度数据
+        async function exportProgressData(projectId) {
+            if (!projectId) {
+                alert('请先选择一个项目');
+                return;
+            }
+            
+            try {
+                const res = await fetch(`/api/progress/${projectId}/export`, {
+                    credentials: 'include'
+                });
+                
+                if (!res.ok) {
+                    throw new Error('导出失败');
+                }
+                
+                // 获取 CSV 内容
+                const csvContent = await res.text();
+                
+                // 创建下载链接
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `progress_${projectId}_${new Date().toISOString().slice(0,10)}.csv`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+            } catch (e) {
+                alert('导出失败: ' + e.message);
             }
         }
         
