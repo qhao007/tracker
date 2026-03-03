@@ -46,18 +46,34 @@ npx playwright codegen http://localhost:8081
 - 服务器未启动
 - 网络延迟
 - 沙箱/容器环境中的浏览器启动问题
+- 外部 CDN 资源加载超时
 - `waitUntil` 设置不当
 
-**解决方案**:
+**waitUntil 选项详解**:
+
+| 选项 | 等待内容 | 适用场景 |
+|------|---------|---------|
+| `load` | 所有资源（包括 CDN、字体等） | 完整页面加载 |
+| `domcontentloaded` | DOM 解析完成 | 大多数测试 |
+| `commit` | 仅导航提交，不等待任何资源 | 沙箱环境、快速测试 |
+
 ```typescript
-// 方案 1: 调整 waitUntil
+// 方案 1: 使用 commit 模式（推荐沙箱环境）
+await page.goto('http://localhost:8081', { waitUntil: 'commit' });
+
+// 方案 2: 使用 domcontentloaded
 await page.goto('http://localhost:8081', { waitUntil: 'domcontentloaded' });
 
-// 方案 2: 增加超时时间
+// 方案 3: 增加超时时间
 await page.goto('http://localhost:8081', { timeout: 120000 });
 
-// 方案 3: 使用 navigationTimeout 配置
-test.setTimeout(120000);
+// 方案 4: 全局配置
+// playwright.config.ts
+use: {
+  waitUntil: 'commit',  // 不等待任何资源
+  actionTimeout: 120000,
+  navigationTimeout: 120000,
+}
 ```
 
 ---
@@ -82,6 +98,77 @@ await page.locator('#button').click({ force: true });
 // 使用 hover 确保元素可见
 await page.hover('#element');
 await page.click('#element');
+```
+
+### 1.5 登录后默认状态问题
+
+**问题**: 测试假设"无项目"状态，但登录后已有默认项目选中
+
+**常见原因**:
+- 登录后自动选中上次项目
+- 测试数据初始化了默认项目
+
+**解决方案**:
+```typescript
+// 错误：假设无项目
+await expect(emptyState).toContainText('请选择一个项目');  // 失败！
+
+// 正确：检查实际显示的状态
+await expect(emptyState).toContainText('请先设置项目起止日期');
+
+// 或者：先清除选中状态（如果应用支持）
+// 或者：调整测试逻辑以适应默认状态
+```
+
+### 1.6 创建项目后列表刷新问题
+
+**问题**: 创建项目后无法在新打开的列表中找到新项目
+
+**原因**: 项目创建后需要重新打开模态框刷新列表
+
+**解决方案**:
+```typescript
+// 创建项目
+await page.click('#projectManageBtn');
+await page.fill('#newProjectName', 'Test_Project');
+await page.click('button:has-text("创建")');
+
+// 重新打开项目管理对话框查看新项目
+await page.click('#projectManageBtn');
+await page.waitForTimeout(500);
+
+// 现在可以找到新项目
+await expect(page.locator('.project-item:has-text("Test_Project")')).toBeVisible();
+```
+
+---
+
+---
+
+### 1.4 选择器混淆问题
+
+**问题**: 测试找不到元素或点击错误的元素
+
+**常见原因**: 混淆了不同的 UI 元素
+
+**示例**:
+- `#projectSelector` - 项目选择下拉框（`<select>` 元素）
+- `#projectManageBtn` - 顶部导航栏的项目管理按钮
+
+**调试方法**: 查看页面截图
+```typescript
+// 截图会显示在错误消息中
+// 检查页面实际显示的内容
+```
+
+**解决方案**:
+```typescript
+// 错误：点击下拉框后在下拉框内找"项目管理"按钮
+await page.click('#projectSelector');
+await page.click('button:has-text("项目管理")');  // 不存在！
+
+// 正确：直接点击导航栏按钮
+await page.click('#projectManageBtn');
 ```
 
 ---
@@ -173,9 +260,24 @@ test.describe('功能模块', () => {
 | 策略 | 适用场景 |
 |------|----------|
 | `toBeVisible()` | 元素需要可见 |
+| `toBeAttached()` | 元素存在于 DOM（即使隐藏）|
 | `toBeEnabled()` | 元素需要可交互 |
 | `toHaveText()` | 元素文本需要匹配 |
 | `waitForTimeout()` | 等待动画/过渡（慎用）|
+
+**重要区别**: `toBeVisible()` vs `toBeAttached()`
+
+```typescript
+// toBeVisible() - 元素必须可见（display: none 会失败）
+await expect(page.locator('#chartCanvas')).toBeVisible();
+
+// toBeAttached() - 元素只需存在于 DOM（即使隐藏）
+await expect(page.locator('#chartCanvas')).toBeAttached();
+
+// 示例：canvas 元素可能因无数据而隐藏const
+ chartCanvas = page.locator('#progressChart');
+await expect(chartCanvas).toBeAttached();  // 推荐
+```
 
 ---
 
@@ -310,26 +412,90 @@ curl -o static/js/chart.min.js https://cdn.jsdelivr.net/npm/chart.js/dist/chart.
 <script src="/static/js/chart.min.js"></script>
 ```
 
-#### 方案 3: 异步加载 + 错误处理
+#### 方案 3: CDN优先 + 超时自动切换本地（推荐方案）
 
+**应用代码实现**：
 ```html
-<script async src="https://cdn.jsdelivr.net/npm/chart.js"
-        onerror="console.warn('Chart.js loaded failed')"></script>
+<!-- Chart.js - CDN优先，超时自动切换本地 -->
+<script>
+    const CHART_CDN_URL = 'https://cdn.jsdelivr.net/npm/chart.js';
+    const CHART_LOCAL_URL = '/app_static/js/chart.min.js';
+    const CHART_TIMEOUT_MS = 3000; // 3秒超时
+
+    function loadChartScript(url) {
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = url;
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.appendChild(script);
+        });
+    }
+
+    async function loadChartWithFallback() {
+        try {
+            await new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = CHART_CDN_URL;
+                script.onload = () => { window.ChartLoaded = true; resolve(); };
+                script.onerror = reject;
+                const timeout = setTimeout(reject, CHART_TIMEOUT_MS);
+                document.head.appendChild(script);
+            });
+        } catch (e) {
+            // CDN 失败，使用本地版本
+            await loadChartScript(CHART_LOCAL_URL);
+            window.ChartLoaded = true;
+        }
+    }
+
+    window.ChartLoaded = false;
+    loadChartWithFallback();
+</script>
 ```
 
-注意：异步加载可能仍然会导致超时，取决于网络环境。
+**Flask 路由配置**：
+```python
+@app.route('/app_static/<path:filename>')
+def serve_app_static(filename):
+    return send_from_directory(os.path.join(base_dir, 'app_static'), filename)
+```
 
 #### 方案 4: Playwright 配置优化
 
 ```typescript
 // playwright.config.ts
 use: {
-  // 使用 domcontentloaded 减少等待
+  // 等待 DOM 解析完成，允许 Chart.js 异步加载
   waitUntil: 'domcontentloaded',
-  // 增加超时
+
+  // 增加超时（沙箱环境）
   actionTimeout: 120000,
+  navigationTimeout: 120000,
 }
 ```
+
+#### 方案 5: 测试中等待异步加载的资源
+
+当应用使用异步加载（如方案3）时，测试需要显式等待资源加载完成：
+
+```typescript
+// 等待 Chart.js 加载完成
+await page.waitForFunction(() => window.ChartLoaded === true, { timeout: 10000 });
+```
+
+**重要提示**：
+- 如果应用使用 CDN + Fallback 方案，测试**必须**等待 `window.ChartLoaded === true`
+- 否则测试可能在 Chart.js 加载完成前就检查页面状态，导致误判
+
+### 方案对比
+
+| 方案 | 优点 | 缺点 | 适用场景 |
+|------|------|------|----------|
+| 方案1: 移除CDN | 简单 | 需要改代码 | 本地开发 |
+| 方案2: 本地文件 | 稳定 | 需手动更新 | 生产环境 |
+| **方案3: CDN+Fallback** | 兼顾两者 | 需测试配合 | **推荐** |
+| 方案4: waitUntil:commit | 最快 | 可能丢资源 | 不推荐 |
 
 ### 验证方法
 
@@ -351,4 +517,22 @@ DEBUG=pw:api npx playwright test --project=firefox
 
 ---
 
-*最后更新: 2026-03-01*
+## 9. 快速调试命令
+
+```bash
+# 运行单个测试
+npx playwright test tests/xxx.spec.ts -g "test-name" --project=firefox
+
+# DEBUG 模式查看详细日志
+DEBUG=pw:api npx playwright test --project=firefox
+
+# 查看 trace
+npx playwright show-trace test-results/xxx/trace.zip
+
+# 仅列出测试
+npx playwright test tests/xxx.spec.ts --list
+```
+
+---
+
+*最后更新: 2026-03-03*

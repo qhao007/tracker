@@ -178,9 +178,53 @@
         .header-user-info { display: flex; align-items: center; gap: 10px; }
         .header-user-name { font-size: 12px; }
     </style>
-    <!-- Chart.js for Progress Charts (v0.8.0) -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js" onerror="window.ChartLoaded=false;console.warn('Chart.js CDN 加载失败，将使用降级模式')"></script>
-    <script>window.ChartLoaded = window.ChartLoaded !== false;</script>
+    <!-- Chart.js for Progress Charts (v0.8.0) - CDN优先，超时自动切换本地 -->
+    <script>
+        // CDN 配置
+        const CHART_CDN_URL = 'https://cdn.jsdelivr.net/npm/chart.js';
+        const CHART_LOCAL_URL = '/app_static/js/chart.min.js';
+        const CHART_TIMEOUT_MS = 3000; // 3秒超时
+
+        // 动态加载脚本
+        function loadChartScript(url) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = url;
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+
+        // 尝试加载 Chart.js：先 CDN，超时则本地
+        async function loadChartWithFallback() {
+            // 先尝试加载 CDN 版本
+            try {
+                await new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = CHART_CDN_URL;
+                    script.onload = () => {
+                        console.log('Chart.js: CDN 加载成功');
+                        window.ChartLoaded = true;
+                        resolve();
+                    };
+                    script.onerror = reject;
+                    // 设置超时
+                    const timeout = setTimeout(reject, CHART_TIMEOUT_MS);
+                    document.head.appendChild(script);
+                });
+            } catch (e) {
+                // CDN 加载失败，使用本地版本
+                console.warn('Chart.js: CDN 加载失败，使用本地版本', e);
+                await loadChartScript(CHART_LOCAL_URL);
+                window.ChartLoaded = true;
+            }
+        }
+
+        // 页面加载时异步加载 Chart.js
+        window.ChartLoaded = false;
+        loadChartWithFallback();
+    </script>
 </head>
 <body>
     <!-- 登录模态框 -->

@@ -7,12 +7,12 @@ export default defineConfig({
   // 测试输出目录
   outputDir: './test-results/playwright-output',
 
-  // 全局超时
-  timeout: 60000,
+  // 全局超时 - 沙箱环境需要更长超时
+  timeout: 180000,
 
   // 期待失败（预期会失败的测试）
   expect: {
-    timeout: 5000,
+    timeout: 10000,
     toHaveScreenshot: {
       maxDiffPixels: 100,
     },
@@ -35,8 +35,12 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:8081',
 
-    // 智能等待
+    // 智能等待 - 等待 DOM 解析完成，允许 Chart.js 异步加载
     waitUntil: 'domcontentloaded',
+
+    // 沙箱环境需要更长的超时
+    actionTimeout: 120000,
+    navigationTimeout: 120000,
 
     // 截图（仅失败时）
     screenshot: 'only-on-failure',

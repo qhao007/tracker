@@ -40,8 +40,7 @@ def create_app(testing=False):
     # 确保数据目录存在
     os.makedirs(data_dir, exist_ok=True)
 
-    # 设置静态文件目录
-    app.static_folder = base_dir
+    # 设置模板目录（静态文件使用自定义路由）
     app.template_folder = base_dir
 
     # 注册蓝图
@@ -49,15 +48,21 @@ def create_app(testing=False):
 
     # 手动添加 /manual 路由（因为模板在 base_dir）
     from flask import render_template, send_from_directory, render_template_string
-    
+
     @app.route('/manual')
     def manual():
         return render_template('templates/manual.html')
-    
+
     @app.route('/static/<path:filename>')
     def serve_static(filename):
         return send_from_directory(os.path.join(base_dir, 'static'), filename)
-    
+
+    # 提供 app_static 目录访问（用于本地静态资源，如 Chart.js）
+    @app.route('/app_static/<path:filename>')
+    def serve_app_static(filename):
+        app_static_dir = os.path.join(base_dir, 'app_static')
+        return send_from_directory(app_static_dir, filename)
+
     # 提供 SPECIFICATIONS 目录访问（用于测试期间下载规格书文档）
     @app.route('/docs/SPECIFICATIONS/')
     @app.route('/docs/SPECIFICATIONS')
