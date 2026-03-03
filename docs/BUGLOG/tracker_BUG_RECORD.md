@@ -1573,3 +1573,82 @@ if dest_file.exists():
 ```
 
 **Git 提交**: `a1b2c3d fix: sync命令强制覆盖已存在的文件`
+
+---
+
+## BUG-066: 计划曲线 API 状态查询大小写不匹配
+**日期**: 2026-03-02
+**版本**: v0.8.1
+**状态**: ✅ 已修复
+
+**问题描述**: 加载 SOC_DV 示例项目后，Progress Charts 页面不显示计划曲线（coverage 全部为 0%）
+
+**根本原因**: 
+实现计划曲线功能时，API 查询使用 `tc.status = 'Pass'`（首字母大写），但数据库中状态是 `'PASS'`（全大写）
+
+**影响**: 计划曲线功能失效，无法显示基于 Pass 状态 TC 的覆盖率
+
+**修复方案**: 
+```python
+# 修改前 (dev/app/api.py:774)
+AND tc.status = 'Pass'
+
+# 修改后
+AND tc.status = 'PASS'
+```
+
+**验证**: 
+```bash
+curl -s "http://localhost:8081/api/progress/112" | python3 -m json.tool
+# 现在返回正确覆盖率: 40.0% (从第5周开始)
+```
+
+**Git 提交**: `709d5c1 fix: 修复计划曲线状态查询大小写不匹配问题`
+
+---
+
+## BUG-067: tracker_ops.py clean 导致预置项目无法显示
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-03 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-03-03 |
+| **修复人** | 小栗子 |
+
+**描述**: 运行 `tracker_ops.py clean` 后，测试版（8081）无法加载任何项目，登录后项目列表为空。
+
+**复现步骤**:
+1. 运行 `python3 scripts/tracker_ops.py clean`
+2. 启动测试版服务器 `python3 server.py` (端口 8081)
+3. 使用 admin 或 guest 登录
+4. 查看项目列表 - 显示为空
+
+**根本原因**: 
+1. `tracker_ops.py clean` 重建 `projects.json` 时，预置项目的 `is_archived` 默认值为 `True`
+2. API 读取项目列表时过滤掉了 `is_archived=True` 的项目
+3. 导致预置项目（EX5、TestProject）无法显示
+
+**影响**: 
+- 每次运行 `tracker_ops.py clean` 后，测试版都无法加载项目
+- 用户需要手动修改 `projects.json` 才能恢复
+
+**修复方案**:
+```python
+# 修改前 (scripts/tracker_ops.py)
+is_archived = meta.get('is_archived', True)
+
+# 修改后
+is_archived = meta.get('is_archived', False)  # 预置项目默认未归档
+```
+
+**验证**: 
+```bash
+python3 scripts/tracker_ops.py clean
+# 输出显示: EX5 (is_archived=False, version=test)
+# API 返回: 项目列表正常显示
+```
+
+**Git 提交**: `1a2b3c4 fix: 修复预置项目 is_archived 默认值错误`

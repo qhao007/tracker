@@ -312,9 +312,10 @@ git checkout -b feature/功能名称
 
 # 4. 开发测试
 #    - 执行 ESLint 检查: cd dev && bash check_frontent.sh
-#    - 执行 API 测试: cd dev && PYTHONPATH=. pytest tests/test_api/ -v
+#    - 执行 API 测试: cd dev && PYTHONPATH=. pytest tests/test_api/ -v --reruns 2
 #    - 执行冒烟测试: cd dev && npx playwright test tests/test_ui/specs/smoke/smoke.spec.ts --project=firefox
 #    - ⚠️ 必须所有测试通过后才能提交代码
+#    - ⚠️ 如果测试需要重试才能通过，必须修复根因，不能依赖重试
 
 # 5. 提交代码
 git add .
@@ -879,5 +880,14 @@ curl -s http://localhost:8081/api/version
 ---
 
 **文档版本**: v1.8  
-**最后更新**: 2026-03-02  
+**最后更新**: 2026-03-03
+
+---
+
+## 更新日志
+
+### 2026-03-03
+
+- 更新 API 测试命令，添加 `--reruns 2` 参数
+- 新增要求：测试需要重试时必须修复根因  
 **维护者**: 小栗子 🌰

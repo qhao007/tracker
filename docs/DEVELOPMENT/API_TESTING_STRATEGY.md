@@ -349,8 +349,59 @@ class CPFactory:
 | 时间戳命名 | `f"TB_{int(time.time())}"` | 避免命名冲突 |
 | 自动清理 | `cleanup_tcs` / `cleanup_cps` fixture | yield 后自动删除 |
 | test_data 目录 | `create_app(testing=True)` | 与 user_data 完全隔离 |
+| Session 清理 | `conftest.py` 自动清理 | 防止 session 文件竞争 |
 
-### 5.2 Fixture 作用域说明
+### 5.2 conftest.py 核心功能
+
+项目已创建 `tests/test_api/conftest.py`，提供以下核心功能：
+
+```python
+# tests/test_api/conftest.py
+@pytest.fixture(autouse=True)
+def cleanup_test_sessions():
+    """每个测试前后清理 session 文件"""
+    # 测试开始前清理
+    session_dir = '/projects/management/tracker/dev/data/sessions'
+    # ...清理逻辑...
+    
+    yield
+    
+    # 测试结束后清理
+    # ...清理逻辑...
+```
+
+**作用**：
+- 自动清理 session 文件，防止测试间竞争
+- 确保登录状态在测试间隔离
+
+### 5.3 不稳定测试检测机制
+
+项目已实现不稳定测试自动检测：
+
+```python
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    """检测需要重试的测试并报告为错误"""
+    rerun_info = terminalreporter.stats.get('rerun', [])
+    if rerun_info:
+        # 报告为错误，强制退出码为 1
+        terminalreporter._sessionexitstatus = 1
+```
+
+**行为**：
+- 当测试需要重试时，报告为 **错误**（不是警告）
+- 退出码强制设为 1（失败）
+- 提示必须修复根因，不能依赖重试
+
+**显示示例**：
+```
+🔴 UNSTABLE TESTS - NEEDS FIX
+❌ tests/test_api/test_api_progress.py::TestProgressAPI::test_get_progress_with_date_filter
+
+💡 These tests passed after retry but MUST BE FIXED!
+📝 Fix the root cause - do not rely on retries
+```
+
+### 5.4 Fixture 作用域说明
 
 ```
 session scope   ─── 整个测试会话共享（未使用）
@@ -373,13 +424,38 @@ test_api.py 执行流程:
 8. [module] 清理 test_project → 删除 "API_Test_1739..."
 ```
 
-### 5.4 已知的数据隔离问题
+### 5.5 已知的数据隔离问题
 
 | 问题 | 影响 | 解决方案 |
 |------|------|---------|
 | 批量 target_date/dv_milestone 不检查 ID 有效性 | 无效 ID 也计入 success | API 层面需要修复 |
 | module scope 跨测试类共享 | 测试类间可能互相影响 | 每个测试类创建独立数据 |
 | 并发测试创建多个 app 实例 | 潜在资源竞争 | 限制并发线程数 |
+| Session 文件竞争 | 登录状态偶尔丢失，测试随机失败 | 使用 conftest.py 清理 session |
+
+### 5.6 随机失败问题的根因与解决
+
+**问题描述**：
+- 测试在完整套件运行时偶尔失败（~20% 概率）
+- 单独运行测试时 100% 通过
+- 失败表现为 `project_id` 返回 `None`，导致 404 错误
+
+**根因分析**：
+1. 多个测试文件共享 session 目录 (`data/sessions/`)
+2. Flask-Session 使用文件系统存储 session
+3. 快速连续运行时，session 文件产生读写竞争
+4. 导致登录状态丢失 → 项目创建 API 返回异常
+
+**解决方案**：
+1. 创建 `conftest.py` 自动清理 session 文件（测试前后）
+2. 在关键 fixture 中添加重试逻辑（如 `test_project_with_dates`）
+3. 安装 `pytest-rerunfailures` 支持测试重试
+4. 不稳定测试检测机制：重试报错误而非警告
+
+**安装依赖**：
+```bash
+pip install pytest-rerunfailures
+```
 
 ---
 
@@ -424,7 +500,10 @@ assert elapsed < threshold, f"响应时间 {elapsed:.2f}ms 超过 {threshold}ms"
 # 进入项目目录
 cd /projects/management/tracker/dev
 
-# 运行全部 API 测试
+# 运行全部 API 测试（本地开发，允许重试）
+PYTHONPATH=. pytest tests/test_api/ -v --reruns 2
+
+# 运行全部 API 测试（CI/CD，不允许重试，必须稳定）
 PYTHONPATH=. pytest tests/test_api/ -v
 
 # 按文件运行
@@ -441,12 +520,25 @@ PYTHONPATH=. pytest tests/test_api/ -k "boundary" -v         # 关键字过滤
 
 ### 7.2 测试执行策略
 
-| 触发条件 | 执行范围 | 预期时间 |
-|---------|---------|---------|
-| 每次提交 | 基础 CRUD 测试 | ~30s |
-| PR 合并 | 基础 + 边界 + 异常 | ~2min |
-| 每日定时 | 全部 (含性能) | ~5min |
-| 发版前 | 全部 + 手动验证 | ~10min |
+| 触发条件 | 执行范围 | 参数 | 预期时间 |
+|---------|---------|------|---------|
+| 每次提交 | 基础 CRUD 测试 | `--reruns 2` | ~30s |
+| PR 合并 | 基础 + 边界 + 异常 | (无重试) | ~2min |
+| 每日定时 | 全部 (含性能) | `--reruns 2` | ~5min |
+| 发版前 | 全部 + 手动验证 | (无重试) | ~10min |
+
+### 7.3 重试机制说明
+
+**本地开发**（使用 `--reruns 2`）：
+- 允许测试失败后重试 2 次
+- 如果重试后通过，显示警告提示不稳定
+- 退出码仍为 1（失败），强制修复根因
+
+**CI/CD**（不使用 `--reruns`）：
+- 不允许重试，测试必须一次通过
+- 更严格，确保测试真正稳定
+
+**⚠️ 重要**：重试是临时解决方案，不稳定测试必须修复根因。
 
 ### 7.3 测试报告
 
@@ -568,5 +660,17 @@ PYTHONPATH=. pytest tests/test_api/ -v --lf
 
 ---
 
-> 文档版本：v1.0  
-> 最后更新：2026-02-15
+> 文档版本：v1.1  
+> 最后更新：2026-03-03
+
+---
+
+## 更新日志
+
+### v1.1 (2026-03-03)
+
+- 新增 `conftest.py` 核心功能说明（Session 清理）
+- 新增不稳定测试检测机制说明
+- 新增随机失败问题的根因分析与解决方案
+- 更新测试执行命令，添加 `--reruns` 参数说明
+- 更新测试执行策略表格
