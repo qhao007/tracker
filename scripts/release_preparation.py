@@ -252,6 +252,9 @@ MAIN_COMMIT={current_commit}
     flag_file.write_text(content)
     print(f"✅ Flag 文件已创建: {flag_file}")
     return True
+
+
+def merge_and_tag(version, dry_run=False):
     """
     步骤 6: 执行 Merge 和 Tag 操作
 
@@ -369,7 +372,7 @@ def run_smoke_tests(dry_run=False):
         time.sleep(3)
 
     # 运行冒烟测试 (tests/test_ui/specs/smoke/)
-    cmd = f"cd {dev_dir} && npx playwright test tests/test_ui/specs/smoke/smoke.spec.ts --project=firefox --timeout=60000"
+    cmd = f"cd {dev_dir} && npx playwright test tests/test_ui/specs/smoke/ --project=firefox --timeout=60000"
     success, output = run_command(cmd, "冒烟测试", cwd=repo_root)
 
     if not success:
@@ -468,13 +471,13 @@ def main():
     if not args.skip_tests:
         results["api_tests"] = run_api_tests(args.dry_run)
         results["smoke_tests"] = run_smoke_tests(args.dry_run)
-        # 已移除: results["buglog_tests"] = run_buglog_tests(args.dry_run)
+        # buglog_tests 已移除
     else:
         print_step(0, "跳过测试执行")
         print(YELLOW + "⚠️  已跳过测试执行" + RESET)
         results["api_tests"] = True
         results["smoke_tests"] = True
-        # 已移除: results["buglog_tests"] = True
+        # buglog_tests 已移除
 
     # VERSION 更新
     if not args.skip_version:

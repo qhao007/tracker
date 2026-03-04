@@ -81,7 +81,12 @@ def check_release_ready(version):
     ).stdout.strip()
     
     if "MAIN_COMMIT=" in content:
-        expected_commit = content.split("MAIN_COMMIT=")[1].split("\n")[0]
+        try:
+            expected_commit = content.split("MAIN_COMMIT=")[1].split("\n")[0]
+        except IndexError:
+            print(f"   ❌ Flag 文件格式错误: MAIN_COMMIT 解析失败")
+            return False
+        
         if current_commit != expected_commit:
             print(f"   ❌ main 分支提交不匹配")
             print(f"   预期: {expected_commit}")
@@ -540,14 +545,16 @@ def main():
     try:
         subprocess.run(["git", "checkout", "develop"], cwd=TRACKER_DIR, check=True)
         print("✅ 已切换到 develop 分支")
+        
+        # 删除 flag 文件
+        flag_file = os.path.join(TRACKER_DIR, '.release_ready')
+        if os.path.exists(flag_file):
+            os.remove(flag_file)
+            print("✅ Flag 文件已删除")
     except subprocess.CalledProcessError as e:
         print(f"⚠️  切换分支失败: {e}")
-    
-    # 删除 flag 文件
-    flag_file = os.path.join(TRACKER_DIR, '.release_ready')
-    if os.path.exists(flag_file):
-        os.remove(flag_file)
-        print("✅ Flag 文件已删除")
+        print("⚠️  请手动切换到 develop 分支并删除 flag 文件")
+        return  # 添加返回，避免继续执行
 
 if __name__ == '__main__':
     main()
