@@ -248,7 +248,7 @@ def update_systemd_service(version, dry_run=False):
     
     release_dir = os.path.join(RELEASE_BASE, version)
     service_content = f"""[Unit]
-Description=Chip Verification Tracker v0.3
+Description=Chip Verification Tracker {version}
 After=network.target
 
 [Service]
