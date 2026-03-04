@@ -517,7 +517,63 @@ DEBUG=pw:api npx playwright test --project=firefox
 
 ---
 
-## 9. 快速调试命令
+## 10. v0.8.3 测试调试经验
+
+### 10.1 选择器错误：找不到"新建项目"按钮
+
+**问题**: 测试使用 `button:has-text("新建项目")` 找不到按钮
+
+**根因**: 按钮实际 ID 是 `#projectManageBtn`，文本是 "📁 项目"
+
+**解决方案**:
+```typescript
+// 错误
+await page.click('button:has-text("新建项目")');
+
+// 正确 - 使用 ID 选择器
+await page.click('#projectManageBtn');
+```
+
+### 10.2 选择器错误：找不到登出按钮
+
+**问题**: 测试使用 `#logoutBtn` 找不到按钮
+
+**根因**: 登出按钮没有 ID，只有 `onclick="logout()"`
+
+**解决方案**:
+```typescript
+// 错误
+await page.click('#logoutBtn');
+
+// 正确 - 使用文本选择器
+await page.click('button:has-text("退出")');
+```
+
+### 10.3 选择器匹配多个元素
+
+**问题**: 使用宽泛选择器导致 `strict mode violation`
+
+**根因**: 选择器 `#projectSelect, .project-selector, select` 匹配到 14 个元素
+
+**解决方案**:
+```typescript
+// 错误 - 匹配多个元素
+await expect(page.locator('#projectSelect, .project-selector, select')).toBeVisible();
+
+// 正确 - 使用精确 ID
+await expect(page.locator('#projectSelector')).toBeVisible();
+```
+
+### 10.4 项目管理流程
+
+在 Tracker 项目中，创建项目的流程是：
+1. 点击 `#projectManageBtn` (项目管理按钮)
+2. 在弹出的模态框中填写项目信息
+3. 点击 "创建" 按钮
+
+---
+
+## 11. 快速调试命令
 
 ```bash
 # 运行单个测试
