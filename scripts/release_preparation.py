@@ -269,7 +269,6 @@ def create_release_ready_flag(version, repo_root):
         cwd=repo_root, capture_output=True, text=True
     ).stdout.strip()
     
-    from datetime import datetime
     content = f"""VERSION={version}
 PREPARED_AT={datetime.now().isoformat()}
 MAIN_COMMIT={current_commit}

@@ -160,7 +160,7 @@ def get_current_release_version():
         return version
     return None
 
-def create_release(src_dir, version, dry_run=False):
+def create_release(src_dir, version, dry_run=False, force=False):
     """创建发布版本"""
     release_dir = os.path.join(RELEASE_BASE, version)
     action = "演练" if dry_run else "发布"
@@ -179,7 +179,7 @@ def create_release(src_dir, version, dry_run=False):
     
     # 如果发布目录已存在，询问是否覆盖
     if os.path.exists(release_dir):
-        if not args.force:
+        if not force:
             confirm = input(f"\n⚠️  版本 {version} 已存在，是否覆盖? (y/N): ")
             if confirm.lower() != 'y':
                 print("已取消")
@@ -310,9 +310,9 @@ def restart_service(dry_run=False):
             print(f"   ⚠️  服务状态异常")
             return False
     else:
-        print(f"   ⚠️  服务 'tracker' 不存在")
+        print(f"   ❌ 服务 'tracker' 不存在")
         print(f"   💡 请先运行: sudo systemctl enable tracker")
-        return None
+        return False
 
 def generate_release_notes(version, release_dir, dry_run=False):
     """生成发布报告"""
@@ -490,7 +490,11 @@ def rollback(dry_run=False):
     # 更新软链接
     update_current_symlink(target_version)
     update_systemd_service(target_version)
-    restart_service()
+    
+    # 重启服务并检查状态
+    if not restart_service():
+        print(f"   ❌ 服务启动失败，回滚可能未成功")
+        return False
     
     print(f"\n✅ 已回滚到 {target_version}")
     return True
@@ -558,7 +562,7 @@ def main():
     release_dir = os.path.join(RELEASE_BASE, version)
     
     # 1. 创建发布版本
-    create_release(src_dir, version)
+    create_release(src_dir, version, force=args.force)
     
     # 2. 更新 current 软链接
     update_current_symlink(version)
