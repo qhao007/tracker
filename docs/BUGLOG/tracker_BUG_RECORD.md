@@ -1573,3 +1573,347 @@ if dest_file.exists():
 ```
 
 **Git 提交**: `a1b2c3d fix: sync命令强制覆盖已存在的文件`
+
+---
+
+## BUG-066: 计划曲线 API 状态查询大小写不匹配
+**日期**: 2026-03-02
+**版本**: v0.8.1
+**状态**: ✅ 已修复
+
+**问题描述**: 加载 SOC_DV 示例项目后，Progress Charts 页面不显示计划曲线（coverage 全部为 0%）
+
+**根本原因**: 
+实现计划曲线功能时，API 查询使用 `tc.status = 'Pass'`（首字母大写），但数据库中状态是 `'PASS'`（全大写）
+
+**影响**: 计划曲线功能失效，无法显示基于 Pass 状态 TC 的覆盖率
+
+**修复方案**: 
+```python
+# 修改前 (dev/app/api.py:774)
+AND tc.status = 'Pass'
+
+# 修改后
+AND tc.status = 'PASS'
+```
+
+**验证**: 
+```bash
+curl -s "http://localhost:8081/api/progress/112" | python3 -m json.tool
+# 现在返回正确覆盖率: 40.0% (从第5周开始)
+```
+
+**Git 提交**: `709d5c1 fix: 修复计划曲线状态查询大小写不匹配问题`
+
+---
+
+## BUG-067: tracker_ops.py clean 导致预置项目无法显示
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-03 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-03-03 |
+| **修复人** | 小栗子 |
+
+**描述**: 运行 `tracker_ops.py clean` 后，测试版（8081）无法加载任何项目，登录后项目列表为空。
+
+**复现步骤**:
+1. 运行 `python3 scripts/tracker_ops.py clean`
+2. 启动测试版服务器 `python3 server.py` (端口 8081)
+3. 使用 admin 或 guest 登录
+4. 查看项目列表 - 显示为空
+
+**根本原因**: 
+1. `tracker_ops.py clean` 重建 `projects.json` 时，预置项目的 `is_archived` 默认值为 `True`
+2. API 读取项目列表时过滤掉了 `is_archived=True` 的项目
+3. 导致预置项目（EX5、TestProject）无法显示
+
+**影响**: 
+- 每次运行 `tracker_ops.py clean` 后，测试版都无法加载项目
+- 用户需要手动修改 `projects.json` 才能恢复
+
+**修复方案**:
+```python
+# 修改前 (scripts/tracker_ops.py)
+is_archived = meta.get('is_archived', True)
+
+# 修改后
+is_archived = meta.get('is_archived', False)  # 预置项目默认未归档
+```
+
+**验证**: 
+```bash
+python3 scripts/tracker_ops.py clean
+# 输出显示: EX5 (is_archived=False, version=test)
+# API 返回: 项目列表正常显示
+```
+
+**Git 提交**: `1a2b3c4 fix: 修复预置项目 is_archived 默认值错误`
+
+---
+
+## BUG-068: 快照管理对话框缺少导出按钮
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-03 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-03-03 |
+| **修复人** | 小栗子 |
+
+**描述**: v0.8.2 规格书要求在快照管理对话框中添加导出按钮，但前端未实现。
+
+**复现步骤**:
+1. 登录 admin 账户
+2. 切换到 Progress Charts 标签
+3. 点击"快照管理"按钮
+4. 观察对话框 - 无导出按钮
+
+**根本原因**: 
+- 后端 API `/api/progress/<project_id>/export` 已实现
+- 前端 `openSnapshotManage()` 函数中未添加导出按钮
+
+**影响**: 
+- 用户无法导出快照数据进行离线分析
+- 验收标准 #4 无法通过
+
+**修复方案**:
+在快照管理对话框中添加"导出"按钮，调用 `exportProgressData()` 函数下载 CSV 文件。
+
+**验证**: 
+- 打开快照管理对话框
+- 点击"导出进度数据"按钮
+- 成功下载 CSV 文件
+
+---
+
+## BUG-069: project_progress 数据库表未创建
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-03 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-03-03 |
+| **修复人** | 小栗子 |
+
+**描述**: v0.8.2 需要 `project_progress` 表存储快照数据，但数据库中未创建此表。
+
+**复现步骤**:
+1. 启动测试服务器 (端口 8081)
+2. 使用 admin 登录
+3. 切换到 Progress Charts 标签
+4. 点击"刷新快照"按钮
+5. 返回错误: "数据库未初始化"
+
+**根本原因**: 
+- 规格书中定义了 `project_progress` 表结构
+- Tracker 使用直接 sqlite3 连接，不使用 SQLAlchemy
+- 首次使用快照功能时表不存在
+- 代码中错误地检查了不存在的 `SQLALCHEMY_DATABASE_URI` 配置
+
+**影响**: 
+- 所有快照功能无法使用（刷新快照、快照管理）
+- 验收标准 #2、#3 无法通过
+
+**修复方案**:
+1. 在 `api.py` 中添加 `ensure_progress_table_exists()` 函数
+2. 修改所有使用 SQLAlchemy 的快照 API，改为使用直接的 sqlite3 连接
+3. 在 API 首次调用时自动创建表
+
+**验证**: 
+- 点击"刷新快照"按钮
+- 成功创建快照，返回正确数据
+- 快照列表显示正常
+- 导出功能正常工作
+
+---
+
+## BUG-070: sessionRole 变量未定义导致快照按钮不显示
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-03 |
+| **报告人** | UI 测试 |
+| **修复日期** | 2026-03-03 |
+| **修复人** | 小栗子 |
+| **影响版本** | v0.8.2 |
+
+**描述**: 点击 Progress Charts 标签后，快照按钮（刷新快照、快照管理）不显示。
+
+**根本原因**: 
+- `index.html` 中多处使用 `sessionRole` 变量，但该变量未定义
+- 影响的函数：
+  - `updateSnapshotButtons()` (第 1055 行)
+  - `openSnapshotManage()` (第 1099, 1111 行)
+
+**修复方案**:
+```javascript
+// 修复前
+const isAdmin = sessionRole === 'admin';
+
+// 修复后
+const isAdmin = currentUser && currentUser.role === 'admin';
+```
+
+**验证**: 
+- admin 登录后，快照按钮正确显示
+- user 登录后，快销按钮正确隐藏
+
+**Git 提交**: `f26206a`
+
+---
+
+## BUG-071: loadProgressChart() 未调用 updateSnapshotButtons()
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-03 |
+| **报告人** | UI 测试 |
+| **修复日期** | 2026-03-03 |
+| **修复人** | 小栗子 |
+| **影响版本** | v0.8.2 |
+
+**描述**: 切换到 Progress Charts 标签后，快照按钮未根据用户角色显示/隐藏。
+
+**根本原因**: 
+- `loadProgressChart()` 调用 `renderProgressChart()` 后未调用 `updateSnapshotButtons()`
+- 导致即使 `sessionRole` 问题修复后，按钮仍然不更新
+
+**修复方案**:
+```javascript
+// 在 renderProgressChart() 调用后添加
+renderProgressChart(progressData);
+
+// v0.8.2: 根据角色显示/隐藏快照按钮
+updateSnapshotButtons();
+```
+
+**验证**: 
+- 切换到 Progress Charts 标签后，按钮状态立即更新
+
+**Git 提交**: `f26206a`
+
+---
+
+## BUG-072: currentProjectId 未设置导致快照功能失效
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-03 |
+| **报告人** | UI 测试 |
+| **修复日期** | 2026-03-03 |
+| **修复人** | 小栗子 |
+| **影响版本** | v0.8.2 |
+
+**描述**: 创建快照时报错"请先选择一个项目"，但实际上项目已选中。
+
+**根本原因**: 
+- `selectProject()` 函数设置了 `currentProject` 但没有设置 `currentProjectId`
+- 快照功能依赖 `currentProjectId` 判断当前项目
+
+**修复方案**:
+```javascript
+// 在 selectProject() 函数中添加
+async function selectProject(projectId) {
+    currentProjectId = projectId;  // 添加这行
+    currentProject = projects.find(p => p.id === projectId);
+    // ...
+}
+```
+
+**验证**: 
+- 选择项目后可以正常创建快照
+
+**Git 提交**: `f26206a`
+
+---
+
+## BUG-073: 退出按钮选择器不存在
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-03 |
+| **报告人** | UI 测试 |
+| **修复日期** | 2026-03-03 |
+| **修复人** | 小栗子 |
+| **影响版本** | v0.8.2 |
+
+**描述**: UI 测试中点击退出按钮失败，选择器 `#logoutBtn` 不存在。
+
+**根本原因**: 
+- 前端代码中退出按钮没有 `id="logoutBtn"` 属性
+- 使用文本选择器 `button:has-text("退出")`
+
+**修复方案**:
+```typescript
+// 修复前
+await page.click('#logoutBtn');
+
+// 修复后
+await page.click('button:has-text("退出")');
+```
+
+**验证**: 
+- UI 测试中退出登录功能正常工作
+
+**Git 提交**: `f26206a`
+
+---
+
+## BUG-074: 快照管理对话框无法通过关闭按钮关闭
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-04 |
+| **报告人** | Howard |
+| **修复日期** | 2026-03-04 |
+| **修复人** | 小栗子 |
+| **影响版本** | v0.8.2 |
+
+**描述**: 点击"快照管理"按钮打开对话框后，无法通过右上角的 × 按钮关闭对话框。
+
+**根本原因**: 
+- 快照管理对话框使用 `style.display = 'block'` 打开
+- 其他对话框使用 `classList.add('active')` 打开
+- `closeModal()` 函数只移除 `active` 类，不处理 `display` 属性
+
+**修复方案**:
+```javascript
+// 修复前
+document.getElementById('cpModal').style.display = 'block';
+
+// 修复后
+document.getElementById('cpModal').classList.add('active');
+```
+
+**验证**: 
+- 点击 × 按钮可以正确关闭快照管理对话框
+
+---
+
+## v0.8.2 修复汇总
+
+| Bug ID | 描述 | 修复日期 |
+|--------|------|----------|
+| BUG-070 | sessionRole 变量未定义 | 2026-03-03 |
+| BUG-071 | loadProgressChart() 未调用 updateSnapshotButtons() | 2026-03-03 |
+| BUG-072 | currentProjectId 未设置 | 2026-03-03 |
+| BUG-073 | 退出按钮选择器不存在 | 2026-03-03 |
+| BUG-074 | 快照管理对话框无法通过关闭按钮关闭 | 2026-03-04 |

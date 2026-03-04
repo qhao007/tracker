@@ -771,7 +771,7 @@ def calculate_planned_coverage(project_name, start_date, end_date):
                 WHERE tc.project_id = ?
                 AND tc.target_date IS NOT NULL
                 AND tc.target_date <= ?
-                AND tc.status = 'Pass'
+                AND tc.status = 'PASS'
             ),
             covered_cps AS (
                 SELECT DISTINCT cp.id
@@ -823,18 +823,428 @@ def get_progress(project_id):
     # 计算计划曲线
     planned = calculate_planned_coverage(project["name"], start_date, end_date)
 
-    # v0.8.0 基础版：返回空数据（后续版本返回计划/实际曲线）
+    # v0.8.1: 返回计划曲线
+    # v0.8.2: 添加实际曲线
+    actual = []
+    # 确保表存在并获取快照
+    try:
+        ensure_progress_table_exists(project["name"])
+        conn = get_db(project["name"])
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT snapshot_date, actual_coverage 
+            FROM project_progress 
+            WHERE project_id = ? 
+            ORDER BY snapshot_date
+        """, (project_id,))
+        for row in cursor.fetchall():
+            actual.append({
+                'week': row[0],
+                'coverage': row[1]
+            })
+    except Exception as e:
+        print(f"Warning: Could not load actual curve: {e}")
+    
     return jsonify({
         "project_id": project_id,
         "project_name": project["name"],
         "start_date": project.get("start_date", ""),
         "end_date": project.get("end_date", ""),
         "planned": planned,
-        "actual": []
+        "actual": actual
     })
 
 
-# ============ Cover Points ============
+# ============ Progress Snapshots (v0.8.2) ============
+
+
+def ensure_progress_table_exists(project_name):
+    """
+    确保 project_progress 表存在，如不存在则创建
+    
+    Returns:
+        bool: 表是否存在或创建成功
+    """
+    conn = get_db(project_name)
+    cursor = conn.cursor()
+    
+    # 检查表是否存在
+    cursor.execute("""
+        SELECT name FROM sqlite_master 
+        WHERE type='table' AND name='project_progress'
+    """)
+    
+    if cursor.fetchone():
+        return True  # 表已存在
+    
+    # 创建表
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS project_progress (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            snapshot_date TEXT NOT NULL,
+            actual_coverage REAL,
+            tc_pass_count INTEGER,
+            tc_total INTEGER,
+            cp_covered INTEGER,
+            cp_total INTEGER,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT,
+            updated_by TEXT,
+            UNIQUE(project_id, snapshot_date)
+        )
+    """)
+    conn.commit()
+    return True
+
+
+def calculate_current_coverage(project_name):
+    """
+    计算当前覆盖率（用于快照）
+    
+    Returns:
+        dict: {actual_coverage, tc_pass_count, tc_total, cp_covered, cp_total}
+    """
+    # 确保 project_progress 表存在
+    try:
+        ensure_progress_table_exists(project_name)
+    except Exception:
+        return None
+    
+    # 获取项目 ID
+    projects = load_projects()
+    project = next((p for p in projects if p["name"] == project_name), None)
+    if not project:
+        return None
+    
+    conn = get_db(project_name)
+    cursor = conn.cursor()
+    
+    # 获取总 CP 数
+    cursor.execute("SELECT COUNT(*) FROM cover_point")
+    total_cp = cursor.fetchone()[0]
+    
+    if total_cp == 0:
+        return {
+            'actual_coverage': 0,
+            'tc_pass_count': 0,
+            'tc_total': 0,
+            'cp_covered': 0,
+            'cp_total': total_cp
+        }
+    
+    # 获取 Pass 状态的 TC
+    cursor.execute("SELECT COUNT(*) FROM test_case WHERE status = 'PASS'")
+    tc_pass = cursor.fetchone()[0]
+    
+    # 获取总 TC 数
+    cursor.execute("SELECT COUNT(*) FROM test_case")
+    tc_total = cursor.fetchone()[0]
+    
+    # 获取 Pass TC 关联的 CP（去重）
+    cursor.execute("""
+        SELECT DISTINCT cp.id
+        FROM test_case tc
+        INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+        INNER JOIN cover_point cp ON tcc.cp_id = cp.id
+        WHERE tc.status = 'PASS'
+    """)
+    result = cursor.fetchone()
+    covered_cps = result[0] if result else 0
+    
+    coverage = round((covered_cps / total_cp) * 100, 1) if total_cp > 0 else 0
+    
+    return {
+        'actual_coverage': coverage,
+        'tc_pass_count': tc_pass,
+        'tc_total': tc_total,
+        'cp_covered': covered_cps,
+        'cp_total': total_cp
+    }
+
+
+@api.route("/api/progress/<int:project_id>/snapshot", methods=["POST"])
+@admin_required
+def create_snapshot(project_id):
+    """手动创建进度快照"""
+    from datetime import datetime
+    
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+    
+    if not project:
+        return jsonify({"error": "项目不存在"}), 404
+    
+    # 确保表存在
+    ensure_progress_table_exists(project["name"])
+    
+    # 计算当前覆盖率
+    coverage_data = calculate_current_coverage(project["name"])
+    if coverage_data is None:
+        return jsonify({"error": "数据库未初始化"}), 500
+    
+    today = datetime.now().strftime('%Y-%m-%d')
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
+    
+    # 检查是否已存在当周快照
+    cursor.execute("""
+        SELECT id FROM project_progress 
+        WHERE project_id = ? AND snapshot_date = ?
+    """, (project_id, today))
+    existing = cursor.fetchone()
+    
+    if existing:
+        # 更新现有快照
+        cursor.execute("""
+            UPDATE project_progress SET 
+                actual_coverage = ?,
+                tc_pass_count = ?,
+                tc_total = ?,
+                cp_covered = ?,
+                cp_total = ?,
+                updated_at = ?,
+                updated_by = ?
+            WHERE project_id = ? AND snapshot_date = ?
+        """, (
+            coverage_data['actual_coverage'],
+            coverage_data['tc_pass_count'],
+            coverage_data['tc_total'],
+            coverage_data['cp_covered'],
+            coverage_data['cp_total'],
+            today,
+            session.get('username', 'admin'),
+            project_id,
+            today
+        ))
+        conn.commit()
+        snapshot_id = existing[0]
+    else:
+        # 创建新快照
+        cursor.execute("""
+            INSERT INTO project_progress (
+                project_id, snapshot_date, actual_coverage,
+                tc_pass_count, tc_total, cp_covered, cp_total
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            project_id,
+            today,
+            coverage_data['actual_coverage'],
+            coverage_data['tc_pass_count'],
+            coverage_data['tc_total'],
+            coverage_data['cp_covered'],
+            coverage_data['cp_total']
+        ))
+        conn.commit()
+        snapshot_id = cursor.lastrowid
+    
+    # 获取创建的快照
+    cursor.execute("SELECT * FROM project_progress WHERE id = ?", (snapshot_id,))
+    row = cursor.fetchone()
+    snapshot = {
+        'id': row[0],
+        'snapshot_date': row[2],
+        'actual_coverage': row[3],
+        'tc_pass_count': row[4],
+        'tc_total': row[5],
+        'cp_covered': row[6],
+        'cp_total': row[7],
+        'created_at': row[8]
+    }
+    
+    return jsonify({
+        "success": True,
+        "snapshot": snapshot
+    })
+
+
+@api.route("/api/progress/<int:project_id>/snapshots", methods=["GET"])
+@login_required
+def get_snapshots(project_id):
+    """获取项目快照列表"""
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+    
+    if not project:
+        return jsonify({"error": "项目不存在"}), 404
+    
+    # 确保表存在
+    ensure_progress_table_exists(project["name"])
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT id, snapshot_date, actual_coverage, tc_pass_count, tc_total, 
+               cp_covered, cp_total, created_at
+        FROM project_progress 
+        WHERE project_id = ?
+        ORDER BY snapshot_date DESC
+    """, (project_id,))
+    
+    snapshots = []
+    for row in cursor.fetchall():
+        snapshots.append({
+            'id': row[0],
+            'snapshot_date': row[1],
+            'actual_coverage': row[2],
+            'tc_pass_count': row[3],
+            'tc_total': row[4],
+            'cp_covered': row[5],
+            'cp_total': row[6],
+            'created_at': row[7]
+        })
+    
+    return jsonify({
+        "snapshots": snapshots
+    })
+
+
+@api.route("/api/progress/snapshots/<int:snapshot_id>", methods=["DELETE"])
+@admin_required
+def delete_snapshot(snapshot_id):
+    """删除快照"""
+    from datetime import datetime
+    
+    # 先获取快照信息
+    conn = None
+    for project in load_projects():
+        try:
+            temp_conn = get_db(project["name"])
+            temp_cursor = temp_conn.cursor()
+            temp_cursor.execute("SELECT project_id, snapshot_date FROM project_progress WHERE id = ?", (snapshot_id,))
+            row = temp_cursor.fetchone()
+            if row:
+                conn = temp_conn
+                project_id = row[0]
+                snapshot_date = row[1]
+                break
+        except Exception:
+            continue
+    
+    if not conn:
+        return jsonify({"error": "快照不存在"}), 404
+    
+    # 检查是否当周快照
+    today = datetime.now().strftime('%Y-%m-%d')
+    is_current_week = snapshot_date == today
+    
+    # 删除快照
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM project_progress WHERE id = ?", (snapshot_id,))
+    conn.commit()
+    
+    return jsonify({
+        "success": True,
+        "message": "Snapshot deleted",
+        "is_current_week": is_current_week
+    })
+
+
+@api.route("/api/progress/<int:project_id>/export", methods=["GET"])
+@login_required
+def export_progress(project_id):
+    """导出项目进度数据"""
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+    
+    if not project:
+        return jsonify({"error": "项目不存在"}), 404
+    
+    # 确保表存在
+    ensure_progress_table_exists(project["name"])
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT snapshot_date, actual_coverage, tc_pass_count, tc_total, 
+               cp_covered, cp_total, created_at
+        FROM project_progress 
+        WHERE project_id = ?
+        ORDER BY snapshot_date
+    """, (project_id,))
+    
+    # CSV 格式导出
+    csv_lines = ["snapshot_date,actual_coverage,tc_pass_count,tc_total,cp_covered,cp_total,created_at"]
+    for row in cursor.fetchall():
+        csv_lines.append(f"{row[0]},{row[1]},{row[2]},{row[3]},{row[4]},{row[5]},{row[6]}")
+    
+    return "\n".join(csv_lines), 200, {
+        'Content-Type': 'text/csv',
+        'Content-Disposition': f'attachment; filename=progress_{project["name"]}.csv'
+    }
+
+
+# v0.8.2: 定时任务接口（需要 API Token）
+@api.route("/api/cron/progress-snapshot", methods=["POST"])
+def cron_progress_snapshot():
+    """定时任务：批量创建所有项目的快照"""
+    # 验证 API Token
+    token = request.headers.get('X-API-Token')
+    expected_token = current_app.config.get('CRON_API_TOKEN')
+    
+    if not token or token != expected_token:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    if not expected_token:
+        return jsonify({"error": "Cron not configured"}), 500
+    
+    projects = load_projects()
+    created_count = 0
+    today = datetime.now().strftime('%Y-%m-%d')
+    
+    for project in projects:
+        if project.get('is_archived'):
+            continue
+        
+        project_name = project["name"]
+        project_id = project["id"]
+        
+        # 检查项目是否有日期
+        if not project.get('start_date') or not project.get('end_date'):
+            continue
+        
+        # 确保表存在
+        try:
+            ensure_progress_table_exists(project_name)
+        except Exception:
+            continue
+        
+        # 计算覆盖率
+        coverage_data = calculate_current_coverage(project_name)
+        if coverage_data is None:
+            continue
+        
+        # 检查是否已存在当周快照
+        conn = get_db(project_name)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id FROM project_progress 
+            WHERE project_id = ? AND snapshot_date = ?
+        """, (project_id, today))
+        
+        if not cursor.fetchone():
+            cursor.execute("""
+                INSERT INTO project_progress (
+                    project_id, snapshot_date, actual_coverage,
+                    tc_pass_count, tc_total, cp_covered, cp_total
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                project_id,
+                today,
+                coverage_data['actual_coverage'],
+                coverage_data['tc_pass_count'],
+                coverage_data['tc_total'],
+                coverage_data['cp_covered'],
+                coverage_data['cp_total']
+            ))
+            conn.commit()
+            created_count += 1
+    
+    return jsonify({
+        "success": True,
+        "message": "Snapshots created",
+        "count": created_count
+    })
 
 
 @api.route("/api/cp", methods=["GET"])

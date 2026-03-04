@@ -32,11 +32,11 @@ test.describe('Progress Charts (v0.8.0)', () => {
   test('UI-CHART-003: 空项目提示显示', async ({ page }) => {
     // 切换到 Progress Charts
     await page.click('button.tab:has-text("Progress Charts")');
-    
-    // 验证空状态提示
+
+    // 验证空状态提示 - SOC_DV 已选中但无日期，显示日期设置提示
     const emptyState = page.locator('#progressEmptyState');
     await expect(emptyState).toBeVisible();
-    await expect(emptyState).toContainText('请选择一个项目');
+    await expect(emptyState).toContainText('请先设置项目起止日期');
   });
 
   test('UI-ISSUE-001: 项目选择框宽度固定为 200px', async ({ page }) => {
@@ -55,9 +55,8 @@ test.describe('Progress Charts (v0.8.0)', () => {
   });
 
   test('UI-PROJ-001: 创建项目带日期', async ({ page }) => {
-    // 打开项目对话框 - 先确保项目选择器可见
-    await page.click('#projectSelector');
-    await page.click('button:has-text("项目管理")');
+    // 打开项目对话框
+    await page.click('#projectManageBtn');
 
     // 输入项目名称
     const projectName = `Test_Progress_${Date.now()}`;
@@ -76,8 +75,7 @@ test.describe('Progress Charts (v0.8.0)', () => {
 
   test('UI-PROJ-003: 项目列表显示日期', async ({ page }) => {
     // 打开项目对话框
-    await page.click('#projectSelector');
-    await page.click('button:has-text("项目管理")');
+    await page.click('#projectManageBtn');
 
     // 创建一个带日期的项目
     const projectName = `Test_Date_${Date.now()}`;
@@ -89,6 +87,10 @@ test.describe('Progress Charts (v0.8.0)', () => {
 
     // 等待弹窗关闭
     await page.waitForSelector('#projectModal', { state: 'hidden', timeout: 5000 }).catch(() => {});
+
+    // 重新打开项目管理对话框查看新项目
+    await page.click('#projectManageBtn');
+    await page.waitForTimeout(500);
 
     // 验证新创建的项目显示日期（通过项目名称查找）
     const newProjectItem = page.locator(`.project-item:has-text("${projectName}")`);

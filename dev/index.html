@@ -178,9 +178,53 @@
         .header-user-info { display: flex; align-items: center; gap: 10px; }
         .header-user-name { font-size: 12px; }
     </style>
-    <!-- Chart.js for Progress Charts (v0.8.0) -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js" onerror="window.ChartLoaded=false;console.warn('Chart.js CDN 加载失败，将使用降级模式')"></script>
-    <script>window.ChartLoaded = window.ChartLoaded !== false;</script>
+    <!-- Chart.js for Progress Charts (v0.8.0) - CDN优先，超时自动切换本地 -->
+    <script>
+        // CDN 配置
+        const CHART_CDN_URL = 'https://cdn.jsdelivr.net/npm/chart.js';
+        const CHART_LOCAL_URL = '/app_static/js/chart.min.js';
+        const CHART_TIMEOUT_MS = 3000; // 3秒超时
+
+        // 动态加载脚本
+        function loadChartScript(url) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = url;
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+
+        // 尝试加载 Chart.js：先 CDN，超时则本地
+        async function loadChartWithFallback() {
+            // 先尝试加载 CDN 版本
+            try {
+                await new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = CHART_CDN_URL;
+                    script.onload = () => {
+                        console.log('Chart.js: CDN 加载成功');
+                        window.ChartLoaded = true;
+                        resolve();
+                    };
+                    script.onerror = reject;
+                    // 设置超时
+                    const timeout = setTimeout(reject, CHART_TIMEOUT_MS);
+                    document.head.appendChild(script);
+                });
+            } catch (e) {
+                // CDN 加载失败，使用本地版本
+                console.warn('Chart.js: CDN 加载失败，使用本地版本', e);
+                await loadChartScript(CHART_LOCAL_URL);
+                window.ChartLoaded = true;
+            }
+        }
+
+        // 页面加载时异步加载 Chart.js
+        window.ChartLoaded = false;
+        loadChartWithFallback();
+    </script>
 </head>
 <body>
     <!-- 登录模态框 -->
@@ -329,6 +373,9 @@
                     <span style="color: #999;">-</span>
                     <input type="date" id="progressEndDate" style="width: 130px; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
                     <button type="button" onclick="refreshProgressChart()" style="padding: 4px 12px; margin-left: 8px; background: #2170bb; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;">应用</button>
+                    <!-- v0.8.2: 快照管理按钮 -->
+                    <button type="button" id="snapshotManageBtn" onclick="openSnapshotManage()" style="padding: 4px 12px; margin-left: 8px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; display: none;">快照管理</button>
+                    <button type="button" id="snapshotCreateBtn" onclick="createSnapshot()" style="padding: 4px 12px; margin-left: 8px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; display: none;">刷新快照</button>
                 </div>
             </div>
             <div id="progressChartContainer" style="padding: 20px;">
@@ -874,6 +921,7 @@
         }
         
         async function selectProject(projectId) {
+            currentProjectId = projectId;
             currentProject = projects.find(p => p.id === projectId);
             if (currentProject) {
                 localStorage.setItem('tracker_last_project_id', projectId);
@@ -967,8 +1015,11 @@
                 
                 document.getElementById('progressEmptyState').style.display = 'none';
                 document.getElementById('progressChart').style.display = 'block';
-                
+
                 renderProgressChart(progressData);
+
+                // v0.8.2: 根据角色显示/隐藏快照按钮
+                updateSnapshotButtons();
             } catch (e) {
                 console.error('加载进度图表失败:', e);
                 document.getElementById('progressEmptyState').innerHTML = '<p>加载失败</p>';
@@ -994,8 +1045,158 @@
                 
                 currentProgressData = progressData;
                 renderProgressChart(progressData);
+                
+                // v0.8.2: 根据角色显示/隐藏快照按钮
+                updateSnapshotButtons();
             } catch (e) {
                 console.error('刷新进度图表失败:', e);
+            }
+        }
+        
+        // v0.8.2: 快照管理
+        function updateSnapshotButtons() {
+            // 根据用户角色显示/隐藏快照按钮
+            const isAdmin = currentUser && currentUser.role === 'admin';
+            document.getElementById('snapshotManageBtn').style.display = isAdmin ? 'inline-block' : 'none';
+            document.getElementById('snapshotCreateBtn').style.display = isAdmin ? 'inline-block' : 'none';
+        }
+        
+        async function createSnapshot() {
+            if (!currentProjectId) {
+                alert('请先选择一个项目');
+                return;
+            }
+            
+            try {
+                const res = await fetch(`/api/progress/${currentProjectId}/snapshot`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    alert('快照创建成功！\n覆盖率: ' + data.snapshot.actual_coverage + '%');
+                    refreshProgressChart();
+                } else {
+                    alert('创建失败: ' + (data.error || '未知错误'));
+                }
+            } catch (e) {
+                alert('创建快照失败: ' + e.message);
+            }
+        }
+        
+        async function openSnapshotManage() {
+            if (!currentProjectId) {
+                alert('请先选择一个项目');
+                return;
+            }
+            
+            try {
+                const res = await fetch(`/api/progress/${currentProjectId}/snapshots`, {
+                    credentials: 'include'
+                });
+                const data = await res.json();
+                
+                let html = '<div style="max-height: 400px; overflow-y: auto;">';
+                html += '<table style="width: 100%; border-collapse: collapse;">';
+                html += '<tr style="background: #f5f5f5;"><th style="padding: 8px; border: 1px solid #ddd;">日期</th><th style="padding: 8px; border: 1px solid #ddd;">覆盖率</th><th style="padding: 8px; border: 1px solid #ddd;">TC</th><th style="padding: 8px; border: 1px solid #ddd;">CP</th>';
+                if (currentUser && currentUser.role === 'admin') {
+                    html += '<th style="padding: 8px; border: 1px solid #ddd;">操作</th>';
+                }
+                html += '</tr>';
+                
+                if (data.snapshots && data.snapshots.length > 0) {
+                    data.snapshots.forEach(snap => {
+                        html += '<tr>';
+                        html += `<td style="padding: 8px; border: 1px solid #ddd;">${snap.snapshot_date}</td>`;
+                        html += `<td style="padding: 8px; border: 1px solid #ddd;">${snap.actual_coverage}%</td>`;
+                        html += `<td style="padding: 8px; border: 1px solid #ddd;">${snap.tc_pass_count}/${snap.tc_total}</td>`;
+                        html += `<td style="padding: 8px; border: 1px solid #ddd;">${snap.cp_covered}/${snap.cp_total}</td>`;
+                        if (currentUser && currentUser.role === 'admin') {
+                            html += `<td style="padding: 8px; border: 1px solid #ddd;"><button onclick="deleteSnapshot(${snap.id})" style="padding: 4px 8px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">删除</button></td>`;
+                        }
+                        html += '</tr>';
+                    });
+                } else {
+                    html += '<tr><td colspan="5" style="padding: 20px; text-align: center; color: #999;">暂无快照数据</td></tr>';
+                }
+                
+                html += '</table></div>';
+                
+                // 添加导出按钮（admin 和 user 可见）
+                html += '<div style="margin-top: 16px; text-align: right;">';
+                html += `<button onclick="exportProgressData(${currentProjectId})" style="padding: 8px 16px; background: #2170bb; color: white; border: none; border-radius: 4px; cursor: pointer;">📥 导出进度数据</button>`;
+                html += '</div>';
+                
+                // 显示对话框
+                document.getElementById('cpModalTitle').textContent = '快照管理';
+                document.getElementById('cpForm').innerHTML = html;
+                document.getElementById('cpModal').classList.add('active');
+                
+            } catch (e) {
+                alert('加载快照失败: ' + e.message);
+            }
+        }
+        
+        async function deleteSnapshot(snapshotId) {
+            if (!confirm('确定要删除这个快照吗？')) {
+                return;
+            }
+            
+            try {
+                const res = await fetch(`/api/progress/snapshots/${snapshotId}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    if (data.is_current_week) {
+                        alert('已删除当周快照');
+                    }
+                    // 刷新列表
+                    openSnapshotManage();
+                    refreshProgressChart();
+                } else {
+                    alert('删除失败: ' + (data.error || '未知错误'));
+                }
+            } catch (e) {
+                alert('删除快照失败: ' + e.message);
+            }
+        }
+        
+        // 导出进度数据
+        async function exportProgressData(projectId) {
+            if (!projectId) {
+                alert('请先选择一个项目');
+                return;
+            }
+            
+            try {
+                const res = await fetch(`/api/progress/${projectId}/export`, {
+                    credentials: 'include'
+                });
+                
+                if (!res.ok) {
+                    throw new Error('导出失败');
+                }
+                
+                // 获取 CSV 内容
+                const csvContent = await res.text();
+                
+                // 创建下载链接
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `progress_${projectId}_${new Date().toISOString().slice(0,10)}.csv`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+            } catch (e) {
+                alert('导出失败: ' + e.message);
             }
         }
         
@@ -1009,8 +1210,16 @@
             
             // 准备数据
             const planned = data.planned || [];
-            const labels = planned.map(p => p.week);
+            const actual = data.actual || [];
+            
+            // 使用计划曲线的 labels，如果没有则用实际的
+            let labels = planned.map(p => p.week);
+            if (labels.length === 0) {
+                labels = actual.map(a => a.week);
+            }
+            
             const plannedData = planned.map(p => p.coverage);
+            const actualData = actual.map(a => a.coverage);
             
             // 构建 datasets
             const datasets = [];
@@ -1023,6 +1232,18 @@
                     borderColor: '#2170bb',
                     backgroundColor: 'rgba(33, 112, 187, 0.1)',
                     borderDash: [5, 5],  // 虚线
+                    fill: true,
+                    tension: 0.1
+                });
+            }
+            
+            // v0.8.2: 实际曲线（绿色实线）
+            if (actualData.length > 0) {
+                datasets.push({
+                    label: '实际曲线',
+                    data: actualData,
+                    borderColor: '#28a745',
+                    backgroundColor: 'rgba(40, 167, 69, 0.1)',
                     fill: true,
                     tension: 0.1
                 });

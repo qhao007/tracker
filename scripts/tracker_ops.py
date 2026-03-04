@@ -140,6 +140,7 @@ def clean():
         return True
     
     # 预置的原始测试数据（这些是项目自带的，需要保留）
+    # 注意：这些项目的 is_archived 必须是 false，否则前端无法显示
     PRESERVED_NAMES = ["EX5", "TestProject"]
     
     # 系统数据库文件（不删除，但也不作为项目处理）
@@ -210,7 +211,8 @@ def clean():
             
             # 优先使用原 projects.json 中的元数据
             meta = original_meta.get(project_name, {})
-            is_archived = meta.get('is_archived', True)
+            # 预置项目默认 is_archived=False，否则前端无法显示
+            is_archived = meta.get('is_archived', False)
             version = meta.get('version', 'test')
             created_at = meta.get('created_at')
             
@@ -239,7 +241,63 @@ def clean():
         print_error(f"更新 projects.json 失败: {e}")
         return False
     
+    # 清理 sessions 目录（测试产生的 session 文件）
+    print_step("步骤 4: 清理 sessions 目录")
+    sessions_dir = TEST_DATA_DIR / "sessions"
+    if sessions_dir.exists():
+        session_files = list(sessions_dir.glob("*"))
+        if session_files:
+            for sf in session_files:
+                try:
+                    sf.unlink()
+                except Exception as e:
+                    print_warn(f"删除 session 文件失败: {sf.name} - {e}")
+            print_ok(f"清理了 {len(session_files)} 个 session 文件")
+        else:
+            print_ok("sessions 目录已是空目录")
+    else:
+        print_ok("sessions 目录不存在，无需清理")
+    
+    # 步骤 5: 自动生成 demo 项目
+    print_step("步骤 5: 自动生成 Demo 项目")
+    if not generate_demo_project():
+        print_error("Demo 项目生成失败")
+        return False
+    
     return True
+
+
+def generate_demo_project():
+    """自动生成 SOC_DV Demo 项目"""
+    demo_script = REPO_ROOT / "scripts" / "create_demo_project.py"
+    
+    if not demo_script.exists():
+        print_warn(f"Demo 项目生成脚本不存在: {demo_script}")
+        return True  # 不算失败，只是跳过
+    
+    try:
+        # 调用 demo 项目生成脚本
+        result = subprocess.run(
+            [sys.executable, str(demo_script), "--force"],
+            capture_output=True,
+            text=True,
+            cwd=str(REPO_ROOT)
+        )
+        
+        if result.returncode == 0:
+            print_ok("Demo 项目生成完成")
+            # 打印关键输出
+            for line in result.stdout.split('\n'):
+                if '📋' in line or '✅' in line or '项目:' in line:
+                    print(f"   {line}")
+            return True
+        else:
+            print_error(f"Demo 项目生成失败: {result.stderr}")
+            return False
+            
+    except Exception as e:
+        print_error(f"调用 Demo 项目生成脚本失败: {e}")
+        return False
 
 
 def check():
@@ -256,6 +314,10 @@ def check():
         return False
     
     print(f"检查 {len(test_dbs)} 个数据库文件...\n")
+    
+    # 排除系统数据库文件
+    SYSTEM_DBS = ["users.db", "tracker.db"]
+    test_dbs = [f for f in test_dbs if f.name not in SYSTEM_DBS]
     
     # 必要的表和字段（注意：tc_cp_connections 没有 id 字段）
     REQUIRED_TABLES = {

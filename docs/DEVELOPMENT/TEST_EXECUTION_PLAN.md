@@ -58,7 +58,7 @@ bash check_frontent.sh
 **执行命令**:
 ```bash
 cd /projects/management/tracker/dev
-PYTHONPATH=. pytest tests/test_api/ -v
+PYTHONPATH=. pytest tests/test_api/ -v --reruns 2
 ```
 
 **冒烟用例**（提交前至少执行这些核心用例）:
@@ -138,7 +138,9 @@ cd /projects/management/tracker/dev
 PYTHONPATH=. pytest tests/test_api/ -v --tb=short
 ```
 
-**测试用例数量**: 130 个
+> **注意**：合并到 develop 分支时**不使用** `--reruns` 参数，确保测试真正稳定。如果需要重试才能通过的测试，必须修复根因。
+
+**测试用例数量**: 130+ 个
 
 **测试用例清单**:
 
@@ -501,14 +503,25 @@ TRACKER_TEST_REPORT_E2E_YYYYMMDD.md
 
 ### 8.1 命令速查
 
-| 阶段 | 命令 |
-|------|------|
-| ESLint 检查 | `cd dev && bash check_frontent.sh` |
-| API 测试 | `cd dev && PYTHONPATH=. pytest tests/test_api/ -v` |
-| 冒烟测试 | `cd dev && npx playwright test tests/test_ui/specs/smoke/ --project=firefox` |
-| 集成测试 | `cd dev && npx playwright test tests/test_ui/specs/integration/ --project=firefox` |
-| E2E 测试 | `cd dev && npx playwright test tests/test_ui/specs/e2e/ --project=firefox` |
-| 完整测试 | `cd dev && npx playwright test tests/test_ui/ --project=firefox` |
+| 阶段 | 命令 | 说明 |
+|------|------|------|
+| ESLint 检查 | `cd dev && bash check_frontent.sh` | 前端代码检查 |
+| API 测试（本地开发） | `cd dev && PYTHONPATH=. pytest tests/test_api/ -v --reruns 2` | 允许重试 2 次 |
+| API 测试（CI/CD） | `cd dev && PYTHONPATH=. pytest tests/test_api/ -v` | 不允许重试 |
+| 冒烟测试 | `cd dev && npx playwright test tests/test_ui/specs/smoke/ --project=firefox` | UI 冒烟 |
+| 集成测试 | `cd dev && npx playwright test tests/test_ui/specs/integration/ --project=firefox` | UI 集成 |
+| E2E 测试 | `cd dev && npx playwright test tests/test_ui/specs/e2e/ --project=firefox` | 端到端 |
+| 完整测试 | `cd dev && npx playwright test tests/test_ui/ --project=firefox` | 全部 UI |
+
+### 8.2 测试稳定性要求
+
+| 测试类型 | 本地开发 | CI/CD | 说明 |
+|----------|----------|-------|------|
+| API 测试 | `--reruns 2` | 无重试 | 本地允许重试，CI 必须稳定 |
+| UI 测试 | N/A | N/A | Playwright 自动等待，较稳定 |
+| ESLint | N/A | N/A | 代码静态检查，无随机性 |
+
+> **⚠️ 重要**：如果测试需要重试才能通过，说明存在根因问题。必须修复测试代码或应用代码，而不是依赖重试机制。
 
 ### 8.2 服务启动
 
@@ -522,7 +535,18 @@ cd /projects/management/tracker/dev && python3 server.py
 
 ---
 
-**文档版本**: v1.1  
+**文档版本**: v1.2  
 **创建日期**: 2026-02-15  
-**更新日期**: 2026-02-18  
+**更新日期**: 2026-03-03
+
+---
+
+## 更新日志
+
+### v1.2 (2026-03-03)
+
+- 新增测试命令速查表格，区分本地开发和 CI/CD
+- 更新 API 测试命令，添加 `--reruns 2` 参数（本地开发）
+- 明确 CI/CD 必须不使用重试，确保测试真正稳定
+- 新增测试稳定性要求表格  
 **维护者**: 小栗子 🌰

@@ -42,8 +42,33 @@ def test_project_with_dates(admin_client):
             'end_date': '2026-03-31'
         }),
         content_type='application/json')
+    
+    # 添加调试信息
+    if response.status_code != 200:
+        print(f"WARNING: Project creation failed: {response.status_code} - {response.data}")
+    
     data = json.loads(response.data)
-    return data.get('project', {}).get('id')
+    project_id = data.get('project', {}).get('id')
+    
+    # 如果 project_id 为 None，记录详细信息
+    if project_id is None:
+        print(f"WARNING: project_id is None! Response: {data}")
+        # 尝试再次登录
+        admin_client.post('/api/auth/login',
+            data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+            content_type='application/json')
+        # 重试创建项目
+        response = admin_client.post('/api/projects',
+            data=json.dumps({
+                'name': f"Progress_Test_{int(time.time())}_retry",
+                'start_date': '2026-01-01',
+                'end_date': '2026-03-31'
+            }),
+            content_type='application/json')
+        data = json.loads(response.data)
+        project_id = data.get('project', {}).get('id')
+    
+    return project_id
 
 
 class TestProgressAPI:

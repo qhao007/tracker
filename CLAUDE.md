@@ -23,6 +23,8 @@
 
 ### 服务
 
+> **⚠️ 重要**: `server.py` 是生产版本脚本，**绝对不能修改或干扰**
+
 ```bash
 # 生产 (8080) - 使用 user_data
 cd /projects/management/tracker/dev && python3 server.py
@@ -30,6 +32,13 @@ cd /projects/management/tracker/dev && python3 server.py
 # 测试 (8081) - 使用 test_data
 cd /projects/management/tracker/dev && ./start_server_test.sh
 ```
+
+**测试服务器管理**:
+- 使用 `./start_server_test.sh` 启动测试服务器（8081 端口）
+- 测试服务器使用 gunicorn 运行，修改代码后需要重启:
+  ```bash
+  pkill -9 gunicorn && gunicorn -w 2 -b 0.0.0.0:8081 'app:create_app()' --daemon
+  ```
 
 ### 测试
 

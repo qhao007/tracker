@@ -1,6 +1,6 @@
-# 芯片验证 Tracker v0.8.0 总体规格书
+# 芯片验证 Tracker v0.8.2 总体规格书
 
-> **版本**: v0.8.0 | **更新日期**: 2026-03-01 | **状态**: ✅ 已完成
+> **版本**: v0.8.2 | **更新日期**: 2026-03-04 | **状态**: ✅ 已完成
 
 ---
 
@@ -159,6 +159,78 @@
 5. **ISSUE-001 修复**：
    - 项目选择框宽度固定为 200px
 
+### 1.9 v0.8.1 重大变更 (2026-03-02)
+
+**v0.8.1 功能增强（计划曲线）：**
+
+1. **计划曲线计算算法**：
+   - 基于 TC target_date 计算每周预期覆盖率
+   - 使用 PASS 状态 TC 关联的 CP 去重计算
+   - 按周分组，返回 `[{week: 'YYYY-MM-DD', coverage: float}]` 格式
+
+2. **API 端点扩展**：
+   - `GET /api/progress/<project_id>` 返回计划曲线数据
+   - 支持 `start_date` 和 `end_date` 查询参数过滤
+
+3. **前端图表渲染**：
+   - 计划曲线使用蓝色虚线 (#2170bb, borderDash: [5, 5])
+   - 支持图例和 Tooltip 显示
+
+4. **时间段选择器**：
+   - 起始日期和结束日期输入框
+   - 应用按钮触发图表刷新
+   - 清空按钮恢复显示全周期数据
+
+5. **边界处理**：
+   - 无项目：显示"请选择一个项目查看进度图表"
+   - 无日期：显示"请先设置项目起止日期"
+   - 无数据：显示空图表占位
+
+**v0.8.1 Bug 修复：**
+
+| Bug ID | 问题 | 修复内容 |
+|--------|------|----------|
+| BUG-065 | sync 命令未覆盖已存在的预置空文件 | 强制覆盖已存在的文件 |
+| BUG-066 | 计划曲线 API 状态查询大小写不匹配 | tc.status = 'PASS' (全大写) |
+| BUG-067 | clean 导致预置项目无法显示 | is_archived 默认值改为 False |
+
+### 1.10 v0.8.2 重大变更 (2026-03-04)
+
+**v0.8.2 功能增强（实际曲线与快照）：**
+
+1. **实际曲线显示**：
+   - 绿色实线 (#28a745) 展示实际覆盖率
+   - 与蓝色虚线计划曲线同时显示
+   - 共用时间段选择器
+
+2. **快照数据采集**：
+   - 手动触发：POST /api/progress/<project_id>/snapshot
+   - 定时任务：POST /api/cron/progress-snapshot (需 Token 认证)
+   - 计算当前 Pass 状态 TC 关联的 CP 覆盖率
+
+3. **快照管理功能**：
+   - 快照列表对话框
+   - 管理员可删除快照
+   - 非管理员只能查看
+
+4. **导出功能**：
+   - 导出快照数据为 CSV/JSON 格式
+
+5. **Chart.js CDN Fallback**：
+   - 3秒超时自动切换本地
+   - window.ChartLoaded 状态标志
+
+**v0.8.2 Bug 修复：**
+
+| Bug ID | 问题 | 修复内容 |
+|--------|------|----------|
+| BUG-068 | 快照管理对话框缺少导出按钮 | 添加导出按钮 |
+| BUG-069 | project_progress 数据库表未创建 | 自动创建表 |
+| BUG-070 | sessionRole 变量未定义 | 改用 currentUser.role |
+| BUG-071 | loadProgressChart 未调用 updateSnapshotButtons | 添加调用 |
+| BUG-072 | currentProjectId 未设置 | selectProject 添加设置 |
+| BUG-073 | 退出按钮选择器不存在 | 使用文本选择器 |
+
 ---
 
 ## 2. 实现方案
@@ -299,6 +371,14 @@ python3 scripts/data_manager.py clean
 | **F028** | **备份路径自定义** | 支持上传本地备份文件恢复 | P1 |
 | **F029** | **CP 详情下拉** | 展开 CP 完整信息和关联 TC 列表 | P0 |
 | **F030** | **TC 过滤** | 多字段过滤 Test Cases 列表 | P0 |
+| **F031** | **计划曲线显示** | 基于 TC target_date 的预期覆盖率曲线 | P0 |
+| **F032** | **时间段选择器** | 按日期范围过滤曲线数据 | P1 |
+| **F033** | **实际曲线显示** | 绿色实线展示实际覆盖率 | P0 |
+| **F034** | **手动快照采集** | 管理员手动触发快照 | P0 |
+| **F035** | **定时快照采集** | Cron 定时任务自动快照 | P1 |
+| **F036** **快照管理** | 查看/删除历史快照 | P0 |
+| **F037** | **导出进度数据** | 导出快照为 CSV/JSON | P1 |
+| **F038** | **Chart.js CDN Fallback** | 超时自动切换本地 | P2 |
 
 ### 3.2 Cover Point 字段
 
@@ -862,6 +942,80 @@ coverage = (CP1覆盖率 + CP2覆盖率 + ... + CPn覆盖率) / n
 
 **文件名格式**: `{项目名}_{CP/TC}_{日期}.xlsx`
 
+### 4.8 Progress Charts API (v0.8.1/v0.8.2 新增)
+
+| 方法 | 路径 | 功能 | 权限 |
+|------|------|------|------|
+| GET | `/api/progress/<project_id>` | 获取进度数据（含计划/实际曲线） | 登录 |
+| POST | `/api/progress/<project_id>/snapshot` | 手动触发快照 | admin |
+| POST | `/api/cron/progress-snapshot` | 定时任务快照 | Cron Token |
+| GET | `/api/progress/<project_id>/snapshots` | 获取快照列表 | 登录 |
+| DELETE | `/api/progress/snapshots/<id>` | 删除快照 | admin |
+| GET | `/api/progress/<project_id>/export` | 导出进度数据 | 登录 |
+
+#### 4.8.1 GET /api/progress/<project_id>
+
+获取完整进度数据，包含计划曲线和实际曲线。
+
+**响应**:
+```json
+{
+    "project_id": 1,
+    "project_name": "SOC_DV",
+    "start_date": "2026-01-06",
+    "end_date": "2026-04-18",
+    "planned": [
+        {"week": "2026-01-06", "coverage": 0},
+        {"week": "2026-01-13", "coverage": 10}
+    ],
+    "actual": [
+        {"week": "2026-01-06", "coverage": 0},
+        {"week": "2026-01-13", "coverage": 5}
+    ]
+}
+```
+
+#### 4.8.2 POST /api/progress/<project_id>/snapshot
+
+手动触发快照采集。
+
+**响应**:
+```json
+{
+    "success": true,
+    "snapshot": {
+        "id": 1,
+        "snapshot_date": "2026-03-04",
+        "actual_coverage": 45.5,
+        "tc_pass_count": 20,
+        "tc_total": 50,
+        "cp_covered": 12,
+        "cp_total": 30
+    }
+}
+```
+
+#### 4.8.3 GET /api/progress/<project_id>/snapshots
+
+获取快照列表。
+
+**响应**:
+```json
+{
+    "snapshots": [
+        {
+            "id": 1,
+            "snapshot_date": "2026-02-01",
+            "actual_coverage": 45.5,
+            "tc_pass_count": 20,
+            "tc_total": 50,
+            "cp_covered": 12,
+            "cp_total": 30
+        }
+    ]
+}
+```
+
 ---
 
 ### 4.9 API 使用说明
@@ -971,7 +1125,41 @@ UPDATE test_case SET dv_milestone = 'DV1.0' WHERE dv_milestone IS NULL;
 UPDATE cover_point SET priority = 'P0' WHERE priority IS NULL;
 ```
 
-### 5.4 v0.2 到 v0.3 迁移
+### 5.4 v0.8.2 新增表
+
+#### project_progress 表
+
+```sql
+CREATE TABLE project_progress (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    snapshot_date DATE NOT NULL,
+    actual_coverage REAL,
+    tc_pass_count INTEGER,
+    tc_total INTEGER,
+    cp_covered INTEGER,
+    cp_total INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT,
+    updated_by TEXT,
+    UNIQUE(project_id, snapshot_date)
+);
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| project_id | INTEGER | 项目 ID |
+| snapshot_date | DATE | 快照日期 |
+| actual_coverage | REAL | 实际覆盖率 (%) |
+| tc_pass_count | INTEGER | Pass 状态 TC 数 |
+| tc_total | INTEGER | 总 TC 数 |
+| cp_covered | INTEGER | 已覆盖 CP 数 |
+| cp_total | INTEGER | 总 CP 数 |
+| created_at | TIMESTAMP | 创建时间 |
+| updated_at | TEXT | 更新时间 |
+| updated_by | TEXT | 更新人 |
+
+### 5.5 v0.2 到 v0.3 迁移
 
 现有用户需要执行迁移：
 
@@ -1485,6 +1673,8 @@ journalctl -u tracker -f
 | **v0.7.0** | **2026-02-16** | **导入导出功能**：CP/TC 批量导入导出、Excel/CSV 支持、模板下载 |
 | **v0.7.1** | **2026-02-25** | **用户认证模块**：登录/访问控制、Session 管理、角色权限（admin/user/guest）、密码安全 |
 | **v0.8.0** | **2026-03-01** | **进度图表基础**：项目起止日期、Progress Charts 页面框架、Chart.js 集成、加载失败降级处理 |
+| **v0.8.1** | **2026-03-02** | **计划曲线**：基于 TC target_date 的预期覆盖率曲线、时间段选择器、Chart.js CDN Fallback |
+| **v0.8.2** | **2026-03-04** | **实际曲线与快照**：绿色实线实际曲线、手动/定时快照采集、快照管理、导出功能 |
 
 ### v0.7.0 详细变更
 

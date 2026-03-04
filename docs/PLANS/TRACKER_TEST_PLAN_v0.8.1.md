@@ -3,7 +3,7 @@
 > **测试版本**: v0.8.1
 > **对应规格书**: `docs/SPECIFICATIONS/tracker_SPECS_v0.8.1.md`
 > **创建日期**: 2026-03-02
-> **状态**: 待开发
+> **状态**: ✅ 测试完成
 > **预估开发时间**: 2 小时
 
 ---
@@ -215,24 +215,24 @@ python3 scripts/tracker_ops.py check
 
 | 任务 | 测试文件 | 预估工时 | 状态 |
 |------|----------|----------|------|
-| 开发计划曲线计算测试 | `test_api_planned_curve.py` | 1h | 待开始 |
-| 开发计划曲线 API 测试 | `test_api_planned_curve.py` | 0.5h | 待开始 |
-| 开发边界情况测试 | `test_api_planned_curve.py` | 0.5h | 待开始 |
+| 开发计划曲线计算测试 | `test_api_planned_curve.py` | 1h | ✅ 已完成 |
+| 开发计划曲线 API 测试 | `test_api_planned_curve.py` | 0.5h | ✅ 已完成 |
+| 开发边界情况测试 | `test_api_planned_curve.py` | 0.5h | ✅ 已完成 |
 
 ### 6.2 UI 测试开发
 
 | 任务 | 测试文件 | 预估工时 | 状态 |
 |------|----------|----------|------|
-| 开发计划曲线渲染测试 | `planned_curve.spec.ts` | 0.5h | 待开始 |
-| 开发时间段选择器测试 | `planned_curve.spec.ts` | 0.5h | 待开始 |
-| 开发边界情况测试 | `planned_curve.spec.ts` | 0.5h | 待开始 |
-| 开发图例/Tooltip 测试 | `planned_curve.spec.ts` | 0.25h | 待开始 |
+| 开发计划曲线渲染测试 | `planned_curve.spec.ts` | 0.5h | ✅ 已完成 |
+| 开发时间段选择器测试 | `planned_curve.spec.ts` | 0.5h | ✅ 已完成 |
+| 开发边界情况测试 | `planned_curve.spec.ts` | 0.5h | ✅ 已完成 |
+| 开发图例/Tooltip 测试 | `planned_curve.spec.ts` | 0.25h | ✅ 已完成 |
 
 ### 6.3 运维工具测试
 
 | 任务 | 测试方式 | 预估工时 | 状态 |
 |------|----------|----------|------|
-| tracker_ops.py 优化验证 | 手动执行 | 0.25h | 待开始 |
+| tracker_ops.py 优化验证 | 手动执行 | 0.25h | ✅ 已完成 |
 
 ---
 
@@ -240,22 +240,22 @@ python3 scripts/tracker_ops.py check
 
 ### 7.1 API 测试验收
 
-- [ ] 所有新增 API 测试用例通过
-- [ ] 遵循测试 ID 编号规范 (API-PLAN-xxx)
-- [ ] 使用可复用的 fixture
-- [ ] 测试数据自动清理
+- [x] 所有新增 API 测试用例通过
+- [x] 遵循测试 ID 编号规范 (API-PLAN-xxx)
+- [x] 使用可复用的 fixture
+- [x] 测试数据自动清理
 
 ### 7.2 UI 测试验收
 
-- [ ] 所有新增 UI 测试用例通过
-- [ ] 遵循测试 ID 编号规范 (UI-PLAN-xxx)
-- [ ] 使用 dialog-helper 处理对话框
-- [ ] 使用 cleanup 工具清理测试数据
+- [x] 所有新增 UI 测试用例通过
+- [x] 遵循测试 ID 编号规范 (UI-PLAN-xxx)
+- [x] 使用 dialog-helper 处理对话框
+- [x] 使用 cleanup 工具清理测试数据
 
 ### 7.3 运维工具验收
 
-- [ ] check 命令不再报告 users.db 错误
-- [ ] 项目数据库检查功能正常
+- [x] check 命令不再报告 users.db 错误
+- [x] 项目数据库检查功能正常
 
 ---
 
