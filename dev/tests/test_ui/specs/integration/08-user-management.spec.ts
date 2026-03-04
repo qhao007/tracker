@@ -189,4 +189,90 @@ test.describe('Integration - 用户管理', () => {
     // 应该有错误提示
     // 注意：前端会在提交前检查，这里验证不会成功创建
   });
+
+  // ========== v0.8.3: 使用测试用户登录 ==========
+  test('v0.8.3-USR-003: 使用测试用户登录', async ({ page }) => {
+    // 先用 admin 创建项目并获取测试用户凭据
+    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    await page.fill('#loginUsername', 'admin');
+    await page.fill('#loginPassword', 'admin123');
+    await page.click('button.login-btn');
+    await page.waitForTimeout(1500);
+
+    // 创建项目（勾选创建测试用户）
+    await page.click('button:has-text("新建项目")');
+    await page.waitForTimeout(500);
+    
+    const projectName = `Test_User_Login_${Date.now()}`;
+    await page.fill('#newProjectName', projectName);
+    await page.fill('#newProjectStartDate', '2026-01-01');
+    await page.fill('#newProjectEndDate', '2026-12-31');
+    
+    // 确认创建测试用户复选框已勾选
+    const checkbox = page.locator('#createTestUser');
+    await expect(checkbox).toBeChecked();
+    
+    // 创建项目
+    await page.click('button:has-text("创建")');
+    await page.waitForTimeout(1500);
+
+    // 登出
+    await page.click('#logoutBtn');
+    await page.waitForTimeout(500);
+
+    // 使用测试用户登录 (默认用户名: 项目名_test, 密码: test123)
+    await page.fill('#loginUsername', `${projectName}_test`);
+    await page.fill('#loginPassword', 'test123');
+    await page.click('button.login-btn');
+    await page.waitForTimeout(1500);
+
+    // 验证登录成功（应该能看到项目选择器）
+    const projectSelector = page.locator('#projectSelect, .project-selector, select');
+    await expect(projectSelector).toBeVisible();
+  });
+
+  // ========== v0.8.3: 测试用户权限受限 ==========
+  test('v0.8.3-USR-004: 测试用户权限受限', async ({ page }) => {
+    // 先用 admin 创建项目并获取测试用户凭据
+    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    await page.fill('#loginUsername', 'admin');
+    await page.fill('#loginPassword', 'admin123');
+    await page.click('button.login-btn');
+    await page.waitForTimeout(1500);
+
+    // 创建项目
+    const projectName = `Test_User_Perm_${Date.now()}`;
+    await page.click('button:has-text("新建项目")');
+    await page.waitForTimeout(500);
+    await page.fill('#newProjectName', projectName);
+    await page.fill('#newProjectStartDate', '2026-01-01');
+    await page.fill('#newProjectEndDate', '2026-12-31');
+    await page.click('button:has-text("创建")');
+    await page.waitForTimeout(1500);
+
+    // 登出
+    await page.click('#logoutBtn');
+    await page.waitForTimeout(500);
+
+    // 使用测试用户登录
+    await page.fill('#loginUsername', `${projectName}_test`);
+    await page.fill('#loginPassword', 'test123');
+    await page.click('button.login-btn');
+    await page.waitForTimeout(1500);
+
+    // 验证测试用户无 admin 功能
+    // 1. 无用户管理按钮
+    const userManageBtn = page.locator('#userManageBtn');
+    const userManageCount = await userManageBtn.count();
+    if (userManageCount > 0) {
+      await expect(userManageBtn).not.toBeVisible();
+    }
+
+    // 2. 无新建项目按钮
+    const newProjectBtn = page.locator('button:has-text("新建项目")');
+    const newProjectCount = await newProjectBtn.count();
+    if (newProjectCount > 0) {
+      await expect(newProjectBtn).not.toBeVisible();
+    }
+  });
 });
