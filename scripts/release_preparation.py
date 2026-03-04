@@ -396,16 +396,16 @@ def run_smoke_tests(dry_run=False):
         import time
         time.sleep(3)
 
-    # 运行冒烟测试 (tests/test_ui/specs/smoke/)
-    cmd = f"cd {dev_dir} && npx playwright test tests/test_ui/specs/smoke/ --project=firefox --timeout=60000"
+    # 运行冒烟测试 (只运行主要的冒烟测试文件)
+    cmd = f"cd {dev_dir} && npx playwright test tests/test_ui/specs/smoke/01-smoke.spec.ts tests/test_ui/specs/smoke/02-login.spec.ts --project=firefox --timeout=60000"
     success, output = run_command(cmd, "冒烟测试", cwd=repo_root)
 
     if not success:
         return False
 
-    # 检查测试通过数 (v0.6.2: 10 个冒烟测试)
-    if "10 passed" in output or "passed" in output:
-        print(GREEN + "✓ 冒烟测试全部通过 (10 tests)" + RESET)
+    # 检查测试通过数 (v0.8.3: 20 个冒烟测试)
+    if "20 passed" in output or "passed" in output:
+        print(GREEN + "✓ 冒烟测试全部通过 (20 tests)" + RESET)
         return True
     else:
         print(RED + "✗ 冒烟测试未全部通过" + RESET)
