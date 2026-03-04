@@ -707,10 +707,10 @@ class TestImportExportPermission:
             data=json.dumps({'username': 'admin', 'password': 'admin123'}),
             content_type='application/json')
 
-        # 创建项目
+        # 创建项目 (v0.8.3 需要日期)
         unique_name = f"testie_project_{int(time.time())}"
         client.post('/api/projects',
-            data=json.dumps({'name': unique_name}),
+            data=json.dumps({'name': unique_name, 'start_date': '2026-01-01', 'end_date': '2026-12-31'}),
             content_type='application/json')
 
         # 获取项目 ID
@@ -870,10 +870,10 @@ class TestCreatedBy:
             data=json.dumps({'username': 'admin', 'password': 'admin123'}),
             content_type='application/json')
 
-        # 创建项目
+        # 创建项目 (v0.8.3 需要日期)
         unique_name = f"testcb_project_{int(time.time())}"
         client.post('/api/projects',
-            data=json.dumps({'name': unique_name}),
+            data=json.dumps({'name': unique_name, 'start_date': '2026-01-01', 'end_date': '2026-12-31'}),
             content_type='application/json')
 
         # 获取项目 ID

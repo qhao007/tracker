@@ -46,9 +46,9 @@ def test_project():
 
         name = f"API_Test_{int(time.time())}"
 
-        # 创建项目
+        # 创建项目 (v0.8.3 需要日期)
         response = client.post('/api/projects',
-                              data=json.dumps({'name': name}),
+                              data=json.dumps({'name': name, 'start_date': '2026-01-01', 'end_date': '2026-12-31'}),
                               content_type='application/json')
 
         if response.status_code == 200:
