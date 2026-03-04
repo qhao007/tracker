@@ -221,7 +221,9 @@ def rollback_on_failure(version, results, repo_root):
 
 def notify_failure(version, failed_step, prev_tag):
     """通知用户发布失败"""
-    message = f"""🚨 **Tracker 发布失败**
+    import json
+    
+    message = f"""🚨 Tracker 发布失败
 
 版本: v{version}
 失败步骤: {failed_step}
@@ -229,8 +231,32 @@ def notify_failure(version, failed_step, prev_tag):
 
 请检查问题后重新执行发布准备。"""
     
+    # 打印到控制台
     print(f"\n{message}")
-    print(f"\n提示: 使用飞书 webhook 发送通知（待实现）")
+    
+    # 发送飞书通知
+    webhook_url = "https://open.feishu.cn/open-apis/bot/v2/hook/00f0719c-89c0-4595-9c68-1bfd3a5de3d3"
+    
+    payload = {
+        "msg_type": "text",
+        "content": {
+            "text": message
+        }
+    }
+    
+    try:
+        result = subprocess.run(
+            ["curl", "-X", "POST", webhook_url, 
+             "-H", "Content-Type: application/json",
+             "-d", json.dumps(payload)],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0:
+            print("✅ 飞书通知已发送")
+        else:
+            print(f"⚠️ 飞书通知发送失败: {result.stderr}")
+    except Exception as e:
+        print(f"⚠️ 飞书通知发送异常: {e}")
 
 
 def create_release_ready_flag(version, repo_root):

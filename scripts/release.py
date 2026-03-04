@@ -52,6 +52,45 @@ def get_version():
                     return line.split('=')[1].strip().strip('"\'')
     return f"v0.3.{datetime.now().strftime('%Y%m%d')}"
 
+def notify_success(version, release_dir):
+    """通知用户发布成功"""
+    import json
+    
+    message = f"""✅ Tracker 发布成功
+
+版本: v{version}
+发布目录: {release_dir}
+
+请验证服务正常运行。"""
+    
+    # 打印到控制台
+    print(f"\n{message}")
+    
+    # 发送飞书通知
+    webhook_url = "https://open.feishu.cn/open-apis/bot/v2/hook/00f0719c-89c0-4595-9c68-1bfd3a5de3d3"
+    
+    payload = {
+        "msg_type": "text",
+        "content": {
+            "text": message
+        }
+    }
+    
+    try:
+        result = subprocess.run(
+            ["curl", "-X", "POST", webhook_url, 
+             "-H", "Content-Type: application/json",
+             "-d", json.dumps(payload)],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0:
+            print("✅ 飞书通知已发送")
+        else:
+            print(f"⚠️ 飞书通知发送失败: {result.stderr}")
+    except Exception as e:
+        print(f"⚠️ 飞书通知发送异常: {e}")
+
+
 def check_release_ready(version):
     """检查是否满足发布条件（flag 文件）"""
     print("\n🔍 检查发布准备状态...")
@@ -539,6 +578,9 @@ def main():
     print(f"\n📄 发布目录: {release_dir}")
     print(f"🔗 当前版本: {RELEASE_CURRENT}")
     print(f"📄 发布报告: {release_dir}/RELEASE_NOTES.md")
+    
+    # 发送成功通知
+    notify_success(version, release_dir)
     
     # 切换回 develop 分支
     print("\n🔄 切换回 develop 分支...")
