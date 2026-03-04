@@ -367,6 +367,214 @@ def generate_test_cases(conn, project_id, cp_ids):
     return tc_ids
 
 
+# Demo 快照数据 - 模拟项目进行中的实际进度
+# 特点：初期偏离计划大，后期加速追赶，在计划线附近波动
+#
+# ⚠️ 重要修正：快照日期必须对齐后端的计划曲线 week 起始日！
+# 后端 calculate_planned_coverage() 使用 current.isoformat() 作为 week 字段
+#
+# 项目周期: 2026-01-06 (周二) ~ 2026-04-18
+#
+# 当前实际计划曲线（由 PASS TC 分布决定）:
+#   Week 1-4: 0% (无 PASS TC target_date 在这些周)
+#   Week 5-7: 50% (15 CP)
+#   Week 8-10: 60% (18 CP)
+#   Week 11+: 73.3% (22 CP)
+#
+# 实际曲线设计：
+# - 初期大幅落后于计划（0% vs 50%）
+# - Week 7 追赶到 45%（仍低于计划50%）
+# - Week 8 超过计划（55% vs 60%计划）
+# - 之后在计划线附近波动
+DEMO_SNAPSHOTS = [
+    # (日期对齐计划的 week 起始日, 实际覆盖率, TC_Pass, TC_Total, CP_Covered, CP_Total)
+    # Week 1: 计划0%, 实际0%
+    ("2026-01-06", 0, 0, 52, 0, 30),
+    # Week 2: 计划0%, 实际2% (开始落后)
+    ("2026-01-12", 2, 1, 52, 1, 30),
+    # Week 3: 计划0%, 实际5%
+    ("2026-01-19", 5, 3, 52, 3, 30),
+    # Week 4: 计划0%, 实际8% (最大偏离)
+    ("2026-01-26", 8, 4, 52, 4, 30),
+    # Week 5: 计划50%, 实际15% (大幅落后)
+    ("2026-02-02", 15, 8, 52, 8, 30),
+    # Week 6: 计划50%, 实际25%
+    ("2026-02-09", 25, 13, 52, 13, 30),
+    # Week 7: 计划50%, 实际45% (接近计划)
+    ("2026-02-16", 45, 22, 52, 22, 30),
+    # Week 8: 计划60%, 实际55% (被计划超过)
+    ("2026-02-23", 55, 27, 52, 27, 30),
+    # Week 9: 计划60%, 实际58% (接近计划)
+    ("2026-03-02", 58, 29, 52, 29, 30),
+    # Week 10: 计划60%, 实际65% (超过计划)
+    ("2026-03-09", 65, 32, 52, 32, 30),
+    # Week 11: 计划73.3%, 实际70% (被计划超过)
+    ("2026-03-16", 70, 35, 52, 35, 30),
+    # Week 12: 计划73.3%, 实际75%
+    ("2026-03-23", 75, 37, 52, 37, 30),
+]
+
+
+from datetime import datetime, timedelta
+
+
+def calculate_weekly_dates(project_start, project_end):
+    """计算每周的起始日期（对齐后端计划曲线算法）"""
+    dates = []
+    current = datetime.strptime(project_start, '%Y-%m-%d').date()
+    end = datetime.strptime(project_end, '%Y-%m-%d').date()
+    
+    while current <= end:
+        dates.append(current.isoformat())
+        # 计算本周的周日
+        days_until_sunday = (6 - current.weekday()) % 7
+        if days_until_sunday == 0:
+            days_until_sunday = 7
+        week_end = current + timedelta(days=days_until_sunday)
+        if week_end > end:
+            week_end = end
+        # 移到下一周
+        current = week_end + timedelta(days=1)
+    
+    return dates
+
+
+def calculate_planned_coverage_from_db(conn, project_start, project_end):
+    """从数据库计算实际计划曲线（与后端算法一致）"""
+    cursor = conn.cursor()
+    
+    # 获取总 CP 数
+    cursor.execute('SELECT COUNT(*) FROM cover_point')
+    total_cp = cursor.fetchone()[0]
+    if total_cp == 0:
+        return {}
+    
+    # 计算每周的计划覆盖率
+    weekly_dates = calculate_weekly_dates(project_start, project_end)
+    planned = {}
+    
+    for week_start in weekly_dates:
+        week_start_date = datetime.strptime(week_start, '%Y-%m-%d').date()
+        days_until_sunday = (6 - week_start_date.weekday()) % 7
+        if days_until_sunday == 0:
+            days_until_sunday = 7
+        week_end = week_start_date + timedelta(days=days_until_sunday)
+        week_end_str = week_end.isoformat()
+        
+        # 计算该周末之前的 PASS TC 关联 CP 覆盖率
+        cursor.execute('''
+            WITH pass_tcs AS (
+                SELECT DISTINCT tc.id FROM test_case tc
+                WHERE tc.status = "PASS" AND tc.target_date IS NOT NULL AND tc.target_date <= ?
+            ),
+            covered_cps AS (
+                SELECT DISTINCT cp.id FROM tc_cp_connections tcc
+                INNER JOIN pass_tcs pt ON tcc.tc_id = pt.id
+                INNER JOIN cover_point cp ON tcc.cp_id = cp.id
+            )
+            SELECT COUNT(*) FROM covered_cps
+        ''', (week_end_str,))
+        
+        covered_cp = cursor.fetchone()[0]
+        coverage = round((covered_cp / total_cp) * 100, 1)
+        planned[week_start] = coverage
+    
+    return planned
+
+
+def generate_snapshots(conn, project_id):
+    """生成 Demo 快照 - 根据实际计划曲线动态生成匹配的快照数据"""
+    
+    # 项目周期
+    project_start = "2026-01-06"
+    project_end = "2026-04-18"
+    
+    # 先计算实际计划曲线
+    print(f"\n📸 计算实际计划曲线...")
+    planned = calculate_planned_coverage_from_db(conn, project_start, project_end)
+    
+    # 获取每周日期
+    weekly_dates = calculate_weekly_dates(project_start, project_end)
+    
+    # 找到计划曲线的关键跳跃点
+    jumps = []
+    prev_coverage = 0
+    for date, coverage in planned.items():
+        if coverage != prev_coverage:
+            jumps.append((date, coverage))
+        prev_coverage = coverage
+    
+    print(f"   计划曲线关键点: {jumps}")
+    
+    # 生成匹配的快照数据
+    # 策略：初期落后于计划，后期在计划线附近波动
+    snapshots = []
+    prev_actual = 0
+    
+    for i, week_date in enumerate(weekly_dates[:12]):  # 取前12周
+        planned_cov = planned.get(week_date, 0)
+        
+        if i < 4:
+            # 前4周：计划0%，实际逐步增加
+            actual_cov = (i + 1) * 2  # 2%, 4%, 6%, 8%
+        elif i == 4:
+            # 第5周：计划跳跃后大幅落后
+            actual_cov = planned_cov * 0.3  # 30% of 计划
+        elif i == 5:
+            # 第6周：继续追赶
+            actual_cov = planned_cov * 0.5
+        elif i == 6:
+            # 第7周：接近计划
+            actual_cov = planned_cov * 0.85
+        elif i == 7:
+            # 第8周：首次超过或接近
+            actual_cov = planned_cov + 2
+        else:
+            # 之后：在计划线附近波动
+            diff = (i - 7) * 3  # 轻微波动
+            actual_cov = min(planned_cov + diff, 95)  # 不超过95%
+        
+        actual_cov = round(actual_cov, 1)
+        tc_pass = int(actual_cov * 52 / 100)  # 估算
+        cp_covered = int(actual_cov * 30 / 100)  # 估算
+        
+        snapshots.append((week_date, actual_cov, tc_pass, 52, cp_covered, 30))
+        prev_actual = actual_cov
+    
+    # 插入快照数据
+    cursor = conn.cursor()
+    
+    # 确保 project_progress 表存在
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS project_progress (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            snapshot_date TEXT NOT NULL,
+            actual_coverage REAL,
+            tc_pass_count INTEGER,
+            tc_total INTEGER,
+            cp_covered INTEGER,
+            cp_total INTEGER,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT,
+            updated_by TEXT,
+            UNIQUE(project_id, snapshot_date)
+        )
+    """)
+    
+    for date, coverage, tc_pass, tc_total, cp_covered, cp_total in snapshots:
+        cursor.execute("""
+            INSERT OR REPLACE INTO project_progress 
+            (project_id, snapshot_date, actual_coverage, 
+             tc_pass_count, tc_total, cp_covered, cp_total)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (project_id, date, coverage, tc_pass, tc_total, cp_covered, cp_total))
+    
+    conn.commit()
+    print(f"   ✅ 已生成 {len(snapshots)} 个历史快照")
+    print(f"   📈 初期偏离计划，后期加速追赶")
+
+
 def main():
     parser = argparse.ArgumentParser(description="创建 SOC_DV 示例项目")
     parser.add_argument("--force", "-f", action="store_true", 
@@ -414,6 +622,9 @@ def main():
     
     # 生成 TC
     tc_ids = generate_test_cases(conn, project_id, cp_ids)
+    
+    # 生成 Demo 快照
+    generate_snapshots(conn, project_id)
     
     conn.close()
     

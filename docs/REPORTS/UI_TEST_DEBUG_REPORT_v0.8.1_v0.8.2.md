@@ -270,7 +270,202 @@ await page.waitForFunction(() => window.ChartLoaded === true, { timeout: 10000 }
 
 ---
 
-## 8. 参考文档
+### 2.5 sessionRole 变量未定义 bug
+
+**问题**: 快照按钮不显示
+
+**根因**: `updateSnapshotButtons()` 函数使用 `sessionRole` 变量，但该变量未定义
+
+**修复**:
+```javascript
+// 错误
+const isAdmin = sessionRole === 'admin';
+
+// 正确
+const isAdmin = currentUser && currentUser.role === 'admin';
+```
+
+**修改文件**: `dev/index.html` 第 1055 行
+
+### 2.6 sessionRole 变量未定义 bug (第二次修复)
+
+**问题**: `openSnapshotManage()` 函数中仍然使用未定义的 `sessionRole` 变量
+
+**根因**:
+- 第一次修复只修复了 `updateSnapshotButtons()` 函数 (line 1055)
+- `openSnapshotManage()` 函数中的快照管理对话框 (line 1099, 1111) 仍使用 `sessionRole`
+
+**修复**:
+```javascript
+// 错误
+if (sessionRole === 'admin') {
+
+// 正确
+if (currentUser && currentUser.role === 'admin') {
+```
+
+**修改文件**: `dev/index.html` 第 1099, 1111 行
+
+---
+
+## 9. v0.8.1 代码审查结果
+
+### v0.8.1 规格书要求 vs 实现
+
+根据 `tracker_SPECS_v0.8.1.md` 规格书，v0.8.1 需要实现以下功能：
+
+| 任务 ID | 功能 | 规格要求 | 实现状态 | 位置 |
+|---------|------|----------|----------|------|
+| T1 | 覆盖率计算算法 | 基于 TC target_date 计算 | ✅ 已实现 | api.py:703-796 |
+| T2 | API 完善 | /api/progress/<project_id> 返回计划曲线 | ✅ 已实现 | api.py:799-855 |
+| T3 | 前端计划曲线渲染 | 蓝色虚线 | ✅ 已实现 | index.html:1223-1234 |
+| T4 | 时间段选择器 | 起始/结束日期过滤 | ✅ 已实现 | index.html:371-375 |
+| T5 | 图例和 Tooltip | 鼠标悬停显示详情 | ✅ 已实现 | index.html:1284-1290 |
+| T6 | 边界处理 | 无项目/TC/CP/日期提示 | ✅ 已实现 | index.html:998-1002 |
+| T8 | tracker_ops.py 优化 | 跳过系统数据库检查 | ✅ 已实现 | tracker_ops.py:319-320 |
+
+### 详细检查
+
+#### 1. 后端覆盖率计算算法 (T1)
+- **位置**: `dev/app/api.py:703-796`
+- **功能**: `calculate_planned_coverage(project_name, start_date, end_date)`
+- **算法**:
+  - 按周分组计算覆盖率
+  - 使用 `target_date <= week_end` 且 `status = 'PASS'` 过滤 TC
+  - 使用 CTE 查询关联 CP，去重计算覆盖率
+- **测试**: 11/11 通过 ✅
+
+#### 2. API 端点 (T2)
+- **位置**: `dev/app/api.py:799-855`
+- **端点**: `GET /api/progress/<project_id>?start_date=...&end_date=...`
+- **返回**:
+  ```json
+  {
+    "project_id": 1,
+    "project_name": "SOC_DV",
+    "start_date": "2026-01-06",
+    "end_date": "2026-04-18",
+    "planned": [{"week": "2026-01-06", "coverage": 0}, ...],
+    "actual": []
+  }
+  ```
+
+#### 3. 前端计划曲线渲染 (T3)
+- **位置**: `dev/index.html:1223-1234`
+- **样式**:
+  - 颜色: `#2170bb` (蓝色)
+  - 线型: `borderDash: [5, 5]` (虚线)
+  - 填充: `fill: true`
+
+#### 4. 时间段选择器 (T4)
+- **位置**: `dev/index.html:371-375`
+- **功能**:
+  - 起始日期输入框 (`#progressStartDate`)
+  - 结束日期输入框 (`#progressEndDate`)
+  - 应用按钮触发 `refreshProgressChart()`
+- **API 调用**: 添加 `start_date` 和 `end_date` 查询参数
+
+#### 5. 图例和 Tooltip (T5)
+- **位置**: `dev/index.html:1279-1291`
+- **Title**: 显示 "CP 覆盖率进度"
+- **Tooltip**: 格式化为 `{曲线名}: {覆盖率}%`
+
+#### 6. 边界处理 (T6)
+| 场景 | 处理方式 | 位置 |
+|------|----------|------|
+| 无项目 | 显示 "请选择一个项目查看进度图表" | index.html:383 |
+| 无日期 | 显示 "请先设置项目起止日期" | index.html:999 |
+| 无数据 | 显示 "暂无数据" 作为图表标签 | index.html:1263 |
+
+#### 7. tracker_ops.py 优化 (T8)
+- **位置**: `scripts/tracker_ops.py:319-320`
+- **功能**: 跳过系统数据库 `users.db` 和 `tracker.db` 的检查
+
+### API 测试结果
+
+```
+tests/test_api/test_api_planned_curve.py: 11/11 通过
+```
+
+### 结论
+
+v0.8.1 代码完整实现了规格书中的所有功能：
+- ✅ 计划曲线计算算法
+- ✅ API 端点及日期过滤
+- ✅ 前端图表渲染（蓝色虚线）
+- ✅ 时间段选择器
+- ✅ 图例和 Tooltip
+- ✅ 边界处理（无项目/日期/数据提示）
+- ✅ tracker_ops.py 优化
+- ✅ 11/11 API 测试通过
+
+---
+
+## 10. v0.8.2 代码审查结果
+
+### API 实现检查
+
+| 功能 | API 端点 | 状态 | 测试结果 |
+|------|----------|------|----------|
+| 实际曲线显示 | GET /api/progress/<project_id> | ✅ 已实现 | 11/11 通过 |
+| 手动快照 | POST /api/progress/<project_id>/snapshot | ✅ 已实现 | 通过 |
+| 定时快照 | POST /api/cron/progress-snapshot | ✅ 已实现 | 通过 |
+| 快照列表 | GET /api/progress/<project_id>/snapshots | ✅ 已实现 | 通过 |
+| 删除快照 | DELETE /api/progress/snapshots/<id> | ✅ 已实现 | 通过 |
+| 导出数据 | GET /api/progress/<project_id>/export | ✅ 已实现 | 通过 |
+
+### 前端实现检查
+
+| 功能 | 规格要求 | 状态 |
+|------|----------|------|
+| 实际曲线 | 绿色实线 #28a745 | ✅ |
+| 计划曲线 | 蓝色虚线 #2170bb dashed | ✅ |
+| 刷新快照按钮 | 仅admin可见 | ✅ |
+| 快照管理入口 | 仅admin可见 | ✅ |
+| 导出按钮 | admin/user可见 | ✅ |
+| 非admin不可删除 | 检查 sessionRole | ✅ 已修复 |
+
+### 发现的 Bug
+
+- `sessionRole` 变量未定义 → 已修复为 `currentUser && currentUser.role`
+
+---
+
+## 10. v0.8.2 UI 测试调试进度
+
+### 测试用例状态
+
+| 测试 ID | 测试名称 | 状态 | 备注 |
+|---------|----------|------|------|
+| UI-ACT-001 | 实际曲线显示 | ✅ 通过 | 需等待 Chart.js 加载 |
+| UI-ACT-002 | 实际曲线颜色 | ✅ 通过 | 需等待 Chart.js 加载 |
+| UI-ACT-003 | 双曲线同时显示 | ✅ 通过 | 需等待 Chart.js 加载 |
+| UI-ACT-010 | 刷新快照按钮 admin 可见 | 🔄 调试中 | 登录后未正确选中项目 |
+| UI-ACT-011 | 点击创建快照 | 🔄 调试中 | 依赖 UI-ACT-010 |
+| UI-ACT-012 | user 看不到刷新按钮 | 🔄 调试中 | 依赖 UI-ACT-010 |
+| UI-ACT-020 | 快照管理入口 admin 可见 | 🔄 调试中 | 依赖 UI-ACT-010 |
+| UI-ACT-021 | 快照列表显示 | 🔄 调试中 | 依赖 UI-ACT-010 |
+| UI-ACT-022 | admin 可删除快照 | 🔄 调试中 | 依赖 UI-ACT-010 |
+| UI-ACT-023 | user 只能查看不能删除 | 🔄 调试中 | 依赖 UI-ACT-010 |
+| UI-ACT-030 | 导出按钮可见 | 🔄 调试中 | 依赖 UI-ACT-010 |
+
+### 当前问题
+
+1. **Chart.js 加载**: 已添加 `waitForChartLoaded()` 等待函数 ✅
+2. **快照按钮显示**: 发现 `sessionRole` 变量未定义 bug，已修复 ✅
+3. **项目选择问题**: 登录后 `currentProjectId` 为 undefined，项目选择未生效
+
+**调试发现**:
+- `page.selectOption()` 在沙箱环境中可能不触发 onchange 事件
+- 需要使用更可靠的方式选择项目
+
+### 已修改文件
+
+- `dev/playwright.config.ts` - 保持 `waitUntil: 'domcontentloaded'`
+- `dev/index.html` - 修复 `sessionRole` → `currentUser.role`
+- `dev/tests/test_ui/specs/integration/actual_curve.spec.ts` - 添加 Chart.js 等待逻辑
+
+---
 
 - [Playwright 调试最佳实践](../DEVELOPMENT/playwright_debug_best_practices.md)
 - [API 测试策略](../DEVELOPMENT/API_TESTING_STRATEGY.md)

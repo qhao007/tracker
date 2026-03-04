@@ -1052,7 +1052,7 @@
         // v0.8.2: 快照管理
         function updateSnapshotButtons() {
             // 根据用户角色显示/隐藏快照按钮
-            const isAdmin = sessionRole === 'admin';
+            const isAdmin = currentUser && currentUser.role === 'admin';
             document.getElementById('snapshotManageBtn').style.display = isAdmin ? 'inline-block' : 'none';
             document.getElementById('snapshotCreateBtn').style.display = isAdmin ? 'inline-block' : 'none';
         }
@@ -1096,7 +1096,7 @@
                 let html = '<div style="max-height: 400px; overflow-y: auto;">';
                 html += '<table style="width: 100%; border-collapse: collapse;">';
                 html += '<tr style="background: #f5f5f5;"><th style="padding: 8px; border: 1px solid #ddd;">日期</th><th style="padding: 8px; border: 1px solid #ddd;">覆盖率</th><th style="padding: 8px; border: 1px solid #ddd;">TC</th><th style="padding: 8px; border: 1px solid #ddd;">CP</th>';
-                if (sessionRole === 'admin') {
+                if (currentUser && currentUser.role === 'admin') {
                     html += '<th style="padding: 8px; border: 1px solid #ddd;">操作</th>';
                 }
                 html += '</tr>';
@@ -1108,7 +1108,7 @@
                         html += `<td style="padding: 8px; border: 1px solid #ddd;">${snap.actual_coverage}%</td>`;
                         html += `<td style="padding: 8px; border: 1px solid #ddd;">${snap.tc_pass_count}/${snap.tc_total}</td>`;
                         html += `<td style="padding: 8px; border: 1px solid #ddd;">${snap.cp_covered}/${snap.cp_total}</td>`;
-                        if (sessionRole === 'admin') {
+                        if (currentUser && currentUser.role === 'admin') {
                             html += `<td style="padding: 8px; border: 1px solid #ddd;"><button onclick="deleteSnapshot(${snap.id})" style="padding: 4px 8px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">删除</button></td>`;
                         }
                         html += '</tr>';
