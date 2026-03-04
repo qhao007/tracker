@@ -52,6 +52,46 @@ def get_version():
                     return line.split('=')[1].strip().strip('"\'')
     return f"v0.3.{datetime.now().strftime('%Y%m%d')}"
 
+def check_release_ready(version):
+    """检查是否满足发布条件（flag 文件）"""
+    print("\n🔍 检查发布准备状态...")
+    
+    flag_file = os.path.join(TRACKER_DIR, '.release_ready')
+    
+    # 1. 检查 flag 文件是否存在
+    if not os.path.exists(flag_file):
+        print(f"   ❌ Flag 文件不存在: {flag_file}")
+        print(f"   提示: 请先执行 release_preparation.py")
+        return False
+    
+    # 2. 检查版本是否匹配
+    with open(flag_file, 'r') as f:
+        content = f.read()
+    
+    expected_version_line = f"VERSION={version}"
+    if expected_version_line not in content:
+        print(f"   ❌ 版本不匹配")
+        print(f"   Flag 内容: {content}")
+        return False
+    
+    # 3. 检查 main 分支是否是预期提交
+    current_commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=TRACKER_DIR, capture_output=True, text=True
+    ).stdout.strip()
+    
+    if "MAIN_COMMIT=" in content:
+        expected_commit = content.split("MAIN_COMMIT=")[1].split("\n")[0]
+        if current_commit != expected_commit:
+            print(f"   ❌ main 分支提交不匹配")
+            print(f"   预期: {expected_commit}")
+            print(f"   实际: {current_commit}")
+            return False
+    
+    print(f"   ✅ Flag 检查通过")
+    return True
+
+
 def check_data_structure():
     """检查数据目录结构"""
     print("\n🔍 检查数据目录结构...")
@@ -432,6 +472,11 @@ def main():
     # 获取版本号
     version = args.version or get_version()
     
+    # 检查 flag 文件
+    if not check_release_ready(version):
+        print("\n❌ 未满足发布条件，请先执行 release_preparation.py")
+        return
+    
     if args.rollback:
         # 回滚
         if not args.force:
@@ -489,6 +534,20 @@ def main():
     print(f"\n📄 发布目录: {release_dir}")
     print(f"🔗 当前版本: {RELEASE_CURRENT}")
     print(f"📄 发布报告: {release_dir}/RELEASE_NOTES.md")
+    
+    # 切换回 develop 分支
+    print("\n🔄 切换回 develop 分支...")
+    try:
+        subprocess.run(["git", "checkout", "develop"], cwd=TRACKER_DIR, check=True)
+        print("✅ 已切换到 develop 分支")
+    except subprocess.CalledProcessError as e:
+        print(f"⚠️  切换分支失败: {e}")
+    
+    # 删除 flag 文件
+    flag_file = os.path.join(TRACKER_DIR, '.release_ready')
+    if os.path.exists(flag_file):
+        os.remove(flag_file)
+        print("✅ Flag 文件已删除")
 
 if __name__ == '__main__':
     main()
