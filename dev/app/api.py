@@ -304,11 +304,18 @@ def create_project():
     name = data.get("name", "").strip()
     start_date = data.get("start_date", "").strip()
     end_date = data.get("end_date", "").strip()
+    create_test_user = data.get("create_test_user", False)  # v0.8.3: 自动创建测试用户
 
     if not name:
         return jsonify({"error": "项目名称不能为空"}), 400
 
-    # 校验日期（如果提供了日期）
+    # v0.8.3: 日期必填验证
+    if not start_date:
+        return jsonify({"error": "开始日期不能为空"}), 400
+    if not end_date:
+        return jsonify({"error": "结束日期不能为空"}), 400
+
+    # 校验日期格式
     if start_date and end_date:
         try:
             start = datetime.strptime(start_date, "%Y-%m-%d")
@@ -338,7 +345,40 @@ def create_project():
     projects.append(project)
     save_projects(projects)
 
-    return jsonify({"success": True, "project": project})
+    # v0.8.3: 如果需要，自动创建测试用户
+    test_user_info = None
+    if create_test_user:
+        # 生成测试用户名
+        test_username = f"test_user_{name.replace(' ', '_').lower()}"
+        test_password = "test_user123"
+        
+        # 检查用户是否已存在
+        existing = auth.get_user_by_username(test_username)
+        if not existing:
+            try:
+                user_id = auth.create_user(test_username, test_password, "user")
+                test_user_info = {
+                    "username": test_username,
+                    "password": test_password,
+                    "role": "user"
+                }
+            except Exception as e:
+                # 用户创建失败不影响项目创建
+                pass
+        else:
+            # 用户已存在
+            test_user_info = {
+                "username": test_username,
+                "password": test_password,
+                "role": "user",
+                "note": "用户已存在"
+            }
+
+    response = {"success": True, "project": project}
+    if test_user_info:
+        response["test_user"] = test_user_info
+    
+    return jsonify(response)
 
 
 @api.route("/api/projects/<int:project_id>", methods=["PUT"])

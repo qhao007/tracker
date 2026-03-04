@@ -457,8 +457,14 @@
                 <div class="form-group"><label>创建新项目</label>
                     <input type="text" class="form-control" id="newProjectName" placeholder="项目名称" style="margin-bottom: 10px;">
                     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-                        <input type="date" class="form-control" id="newProjectStartDate" placeholder="开始日期 (可选)">
-                        <input type="date" class="form-control" id="newProjectEndDate" placeholder="结束日期 (可选)">
+                        <input type="date" class="form-control" id="newProjectStartDate" placeholder="开始日期 *" required>
+                        <input type="date" class="form-control" id="newProjectEndDate" placeholder="结束日期 *" required>
+                    </div>
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="createTestUser" checked>
+                            <span>同时创建测试用户 (test_user / test_user123)</span>
+                        </label>
                     </div>
                     <button class="btn btn-primary" onclick="createProject()">创建</button>
                 </div>
@@ -1993,15 +1999,31 @@
             const name = document.getElementById('newProjectName').value.trim();
             const startDate = document.getElementById('newProjectStartDate').value;
             const endDate = document.getElementById('newProjectEndDate').value;
+            const createTestUser = document.getElementById('createTestUser').checked;
+            
             if (!name) { alert('请输入项目名称'); return; }
+            if (!startDate) { alert('请输入开始日期'); return; }
+            if (!endDate) { alert('请输入结束日期'); return; }
+            
             try {
                 const res = await fetch('/api/projects', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({name, start_date: startDate, end_date: endDate})
+                    body: JSON.stringify({
+                        name, 
+                        start_date: startDate, 
+                        end_date: endDate,
+                        create_test_user: createTestUser
+                    })
                 });
                 const result = await res.json();
                 if (result.success) {
+                    // 显示测试用户信息
+                    if (result.test_user) {
+                        alert(`项目创建成功！\n\n测试用户凭据：\n用户名：${result.test_user.username}\n密码：${result.test_user.password}\n角色：${result.test_user.role}`);
+                    } else {
+                        alert('项目创建成功！');
+                    }
                     closeModal('projectModal');
                     // 清空输入框
                     document.getElementById('newProjectName').value = '';

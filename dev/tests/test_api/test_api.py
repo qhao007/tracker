@@ -89,7 +89,11 @@ class TestProjectsAPI:
         """POST /api/projects - 创建项目"""
         name = f"Test_{int(time.time())}"
         response = admin_client.post('/api/projects',
-                              data=json.dumps({'name': name}),
+                              data=json.dumps({
+                                  'name': name,
+                                  'start_date': '2026-01-01',
+                                  'end_date': '2026-12-31'
+                              }),
                               content_type='application/json')
         assert response.status_code == 200
         data = json.loads(response.data)
