@@ -1,6 +1,6 @@
-# 芯片验证 Tracker v0.8.2 总体规格书
+# 芯片验证 Tracker v0.8.3 总体规格书
 
-> **版本**: v0.8.2 | **更新日期**: 2026-03-04 | **状态**: ✅ 已完成
+> **版本**: v0.8.3 | **更新日期**: 2026-03-04 | **状态**: ✅ 已完成
 
 ---
 
@@ -231,6 +231,36 @@
 | BUG-072 | currentProjectId 未设置 | selectProject 添加设置 |
 | BUG-073 | 退出按钮选择器不存在 | 使用文本选择器 |
 
+### 1.11 v0.8.3 重大变更 (2026-03-04)
+
+**v0.8.3 功能增强（测试便利性与代码质量）：**
+
+1. **自动创建测试用户**：
+   - 创建项目时自动创建测试用户（test_user）
+   - 新增"同时创建测试用户"复选框（默认勾选）
+   - 显示生成的测试用户名和密码
+   - 用户名格式：`test_user_{项目名}`
+   - 密码固定：`test_user123`
+
+2. **项目日期必填验证**：
+   - 创建项目时起始日期和结束日期必填
+   - 前端添加 required 标记和提交前验证
+   - 后端 API 验证日期必填
+   - 结束日期必须晚于起始日期
+
+3. **前端常量管理**：
+   - 新增 `app_constants.js` 文件
+   - 统一管理 Session keys（USER, PROJECT, PROJECT_ID）
+   - 统一管理 API endpoints（LOGIN, PROJECTS, TC, CP 等）
+   - 便于后续维护和修改
+
+**v0.8.3 Bug 修复：**
+
+| Bug ID | 问题 | 修复内容 |
+|--------|------|----------|
+| BUG-074 | 创建项目缺少日期字段验证 | 添加 start_date/end_date 必填验证 |
+| BUG-075 | 前端 Session key 分散 | 统一到 app_constants.js 管理 |
+
 ---
 
 ## 2. 实现方案
@@ -379,6 +409,9 @@ python3 scripts/data_manager.py clean
 | **F036** **快照管理** | 查看/删除历史快照 | P0 |
 | **F037** | **导出进度数据** | 导出快照为 CSV/JSON | P1 |
 | **F038** | **Chart.js CDN Fallback** | 超时自动切换本地 | P2 |
+| **F039** | **自动创建测试用户** | 创建项目时自动创建测试用户 | P1 |
+| **F040** | **项目日期必填验证** | 创建/编辑项目时日期必填校验 | P1 |
+| **F041** | **前端常量管理** | 统一管理 Session keys 和 API 端点常量 | P2 |
 
 ### 3.2 Cover Point 字段
 
@@ -610,6 +643,41 @@ Body: file=@backup.json
 ```json
 {
   "error": "项目 \"xxx\" 已存在，无法恢复"
+}
+```
+
+**POST /api/projects 请求体** (v0.8.3 新增字段):
+```json
+{
+  "name": "项目名称",
+  "start_date": "2026-01-01",
+  "end_date": "2026-12-31",
+  "create_test_user": true
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| name | string | ✅ | 项目名称 |
+| start_date | string | ✅ | 开始日期 (YYYY-MM-DD) |
+| end_date | string | ✅ | 结束日期 (YYYY-MM-DD) |
+| create_test_user | boolean | ❌ | 是否同时创建测试用户（默认 false） |
+
+**POST /api/projects 响应** (v0.8.3 新增):
+```json
+{
+  "success": true,
+  "project": {
+    "id": 1,
+    "name": "项目名称",
+    "start_date": "2026-01-01",
+    "end_date": "2026-12-31"
+  },
+  "test_user": {
+    "username": "test_user_项目名称",
+    "password": "test_user123",
+    "role": "user"
+  }
 }
 ```
 
@@ -1675,8 +1743,9 @@ journalctl -u tracker -f
 | **v0.8.0** | **2026-03-01** | **进度图表基础**：项目起止日期、Progress Charts 页面框架、Chart.js 集成、加载失败降级处理 |
 | **v0.8.1** | **2026-03-02** | **计划曲线**：基于 TC target_date 的预期覆盖率曲线、时间段选择器、Chart.js CDN Fallback |
 | **v0.8.2** | **2026-03-04** | **实际曲线与快照**：绿色实线实际曲线、手动/定时快照采集、快照管理、导出功能 |
+| **v0.8.3** | **2026-03-04** | **测试便利性**：创建项目自动创建测试用户、项目日期必填验证、前端常量管理 |
 
-### v0.7.0 详细变更
+### v0.8.3 详细变更
 
 1. **CP 导入功能**：
    - 按钮位置：CP 页面工具栏 [+ 添加 CP] 旁边
