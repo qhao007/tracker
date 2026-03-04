@@ -130,9 +130,10 @@
 |------|------|
 | **发现日期** | 2026-02-25 |
 | **优先级** | P3 |
-| **状态** | 待处理 |
+| **状态** | ⚠️ 部分完成 |
 | **问题描述** | 前端代码缺少常量管理，Session key 分散在代码中 |
 | **建议方案** | 提取常量到单独文件，如 `const SESSION_KEYS = { USER: 'user_id', USERNAME: 'username', ROLE: 'role' }` |
+| **更新 (2026-03-04)** | v0.8.3 已创建 `app_constants.js` 文件，但代码中仍使用硬编码值，未实际引用常量 |
 
 ### ISSUE-010
 
@@ -160,9 +161,10 @@
 |------|------|
 | **发现日期** | 2026-02-25 |
 | **优先级** | P3 |
-| **状态** | 待处理 |
+| **状态** | ⚠️ 部分完成 |
 | **问题描述** | Session key 命名分散，应统一管理 |
 | **建议方案** | 在 `app/constants.py` 中统一管理所有常量，包括 SESSION_USER_KEY, SESSION_USERNAME_KEY, SESSION_ROLE_KEY 等 |
+| **更新 (2026-03-04)** | 前端常量已创建 `app_constants.js`，但未实际使用（见 ISSUE-015） |
 
 ---
 
@@ -187,3 +189,17 @@
 | **状态** | 待处理 |
 | **问题描述** | 前端 switchTab 函数依赖全局 event 对象，在某些边缘情况下可能失效 |
 | **建议方案** | 修改为传递 event 参数：`switchTab(tab, event)` 并使用 `event.currentTarget` 替代 `event.target` |
+
+## v0.8.3 代码审查发现的问题 (2026-03-04)
+
+### ISSUE-015
+
+| 属性 | 内容 |
+|------|------|
+| **发现日期** | 2026-03-04 |
+| **优先级** | P2 |
+| **状态** | 待处理 |
+| **问题描述** | app_constants.js 已创建但未实际使用，代码中仍使用硬编码值 |
+| **详细说明** | v0.8.3 创建了 `dev/static/js/app_constants.js` 文件，定义了 SESSION_KEYS、API_ENDPOINTS、UI_CONSTANTS、MESSAGES、COLORS 等常量，并已在 index.html 中引入。但 index.html 代码中仍使用硬编码字符串常量，未替换为常量引用。 |
+| **影响范围** | 不影响功能运行，属于代码质量改进 |
+| **建议方案** | 后续版本迭代中逐步将硬编码值替换为常量引用：<br>- 将 `'currentUser'` 替换为 `SESSION_KEYS.USER`<br>- 将 `'/api/projects'` 替换为 `API_ENDPOINTS.PROJECTS`<br>- 将状态颜色替换为 `COLORS.STATUS_PASS` 等 |
