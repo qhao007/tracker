@@ -56,3 +56,8 @@ node_modules/
 
 # ========== 归档文件 ==========
 dev/archives/*.json
+
+# ========== 开发临时文件 ==========
+CLAUDE_TODO.md
+dev/cookies.txt
+archives/

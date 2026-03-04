@@ -921,6 +921,7 @@
         }
         
         async function selectProject(projectId) {
+            currentProjectId = projectId;
             currentProject = projects.find(p => p.id === projectId);
             if (currentProject) {
                 localStorage.setItem('tracker_last_project_id', projectId);
@@ -1014,8 +1015,11 @@
                 
                 document.getElementById('progressEmptyState').style.display = 'none';
                 document.getElementById('progressChart').style.display = 'block';
-                
+
                 renderProgressChart(progressData);
+
+                // v0.8.2: 根据角色显示/隐藏快照按钮
+                updateSnapshotButtons();
             } catch (e) {
                 console.error('加载进度图表失败:', e);
                 document.getElementById('progressEmptyState').innerHTML = '<p>加载失败</p>';

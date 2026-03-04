@@ -453,7 +453,7 @@ v0.8.1 代码完整实现了规格书中的所有功能：
 
 1. **Chart.js 加载**: 已添加 `waitForChartLoaded()` 等待函数 ✅
 2. **快照按钮显示**: 发现 `sessionRole` 变量未定义 bug，已修复 ✅
-3. **项目选择问题**: 登录后 `currentProjectId` 为 undefined，项目选择未生效
+3. **项目选择问题**: 登录后 `currentProjectId` 为 undefined，项目选择未生效 ✅ 已修复
 
 **调试发现**:
 - `page.selectOption()` 在沙箱环境中可能不触发 onchange 事件
@@ -464,6 +464,115 @@ v0.8.1 代码完整实现了规格书中的所有功能：
 - `dev/playwright.config.ts` - 保持 `waitUntil: 'domcontentloaded'`
 - `dev/index.html` - 修复 `sessionRole` → `currentUser.role`
 - `dev/tests/test_ui/specs/integration/actual_curve.spec.ts` - 添加 Chart.js 等待逻辑
+
+---
+
+## 11. v0.8.2 UI 测试调试完成
+
+### 测试结果
+
+**所有 11 个测试用例全部通过！**
+
+| 测试 ID | 测试名称 | 状态 |
+|---------|----------|------|
+| UI-ACT-001 | 实际曲线显示 | ✅ 通过 |
+| UI-ACT-002 | 实际曲线颜色 | ✅ 通过 |
+| UI-ACT-003 | 双曲线同时显示 | ✅ 通过 |
+| UI-ACT-010 | 刷新快照按钮 admin 可见 | ✅ 通过 |
+| UI-ACT-011 | 点击创建快照 | ✅ 通过 |
+| UI-ACT-012 | user 看不到刷新按钮 | ✅ 通过 |
+| UI-ACT-020 | 快照管理入口 admin 可见 | ✅ 通过 |
+| UI-ACT-021 | 快照列表显示 | ✅ 通过 |
+| UI-ACT-022 | admin 可删除快照 | ✅ 通过 |
+| UI-ACT-023 | user 只能查看不能删除 | ✅ 通过 |
+| UI-ACT-030 | 导出按钮可见 | ✅ 通过 |
+
+### 修复的 Bug 总结
+
+#### Bug 1: sessionRole 变量未定义（第二次）
+
+**位置**: `dev/index.html:1099, 1111`
+
+**根因**: `openSnapshotManage()` 函数中仍然使用未定义的 `sessionRole` 变量
+
+**修复**:
+```javascript
+// 修复前
+if (sessionRole === 'admin') {
+
+// 修复后
+if (currentUser && currentUser.role === 'admin') {
+```
+
+#### Bug 2: loadProgressChart() 未调用 updateSnapshotButtons()
+
+**位置**: `dev/index.html:1018`
+
+**根因**: 点击 "Progress Charts" 标签时调用 `loadProgressChart()`，但该函数没有调用 `updateSnapshotButtons()` 来显示快照按钮
+
+**修复**:
+```javascript
+// 在 renderProgressChart() 调用后添加
+renderProgressChart(progressData);
+
+// v0.8.2: 根据角色显示/隐藏快照按钮
+updateSnapshotButtons();
+```
+
+#### Bug 3: currentProjectId 未设置
+
+**位置**: `dev/index.html:923`
+
+**根因**: `selectProject()` 函数设置了 `currentProject` 但没有设置 `currentProjectId`，导致快照相关功能无法使用
+
+**修复**:
+```javascript
+async function selectProject(projectId) {
+    currentProjectId = projectId;  // 添加这行
+    currentProject = projects.find(p => p.id === projectId);
+    ...
+}
+```
+
+### 测试修复
+
+#### 测试修复 1: guest 账户密码设置
+
+**问题**: 测试数据库中没有 user 账户，guest 账户无法登录
+
+**解决**: 为 guest 账户设置密码 `guest123`
+
+```python
+# 使用 Python 脚本设置
+password_hash = hash_password('guest123')
+update_user(user_id, password_hash=password_hash)
+```
+
+#### 测试修复 2: 选择器冲突
+
+**问题**: `button:has-text("删除")` 匹配了 CP 列表和快照管理对话框中的多个删除按钮
+
+**解决**: 使用更精确的选择器
+```typescript
+// 修复前
+const deleteBtn = page.locator('button:has-text("删除")');
+
+// 修复后
+const deleteBtn = page.locator('#cpModal button:has-text("删除")');
+```
+
+#### 测试修复 3: 退出按钮选择器
+
+**问题**: `#logoutBtn` 选择器不存在
+
+**解决**: 使用文本选择器
+```typescript
+// 修复前
+await page.click('#logoutBtn');
+
+// 修复后
+await page.click('button:has-text("退出")');
+```
 
 ---
 

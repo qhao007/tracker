@@ -1732,3 +1732,154 @@ python3 scripts/tracker_ops.py clean
 - 成功创建快照，返回正确数据
 - 快照列表显示正常
 - 导出功能正常工作
+
+---
+
+## BUG-070: sessionRole 变量未定义导致快照按钮不显示
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-03 |
+| **报告人** | UI 测试 |
+| **修复日期** | 2026-03-03 |
+| **修复人** | 小栗子 |
+| **影响版本** | v0.8.2 |
+
+**描述**: 点击 Progress Charts 标签后，快照按钮（刷新快照、快照管理）不显示。
+
+**根本原因**: 
+- `index.html` 中多处使用 `sessionRole` 变量，但该变量未定义
+- 影响的函数：
+  - `updateSnapshotButtons()` (第 1055 行)
+  - `openSnapshotManage()` (第 1099, 1111 行)
+
+**修复方案**:
+```javascript
+// 修复前
+const isAdmin = sessionRole === 'admin';
+
+// 修复后
+const isAdmin = currentUser && currentUser.role === 'admin';
+```
+
+**验证**: 
+- admin 登录后，快照按钮正确显示
+- user 登录后，快销按钮正确隐藏
+
+**Git 提交**: `f26206a`
+
+---
+
+## BUG-071: loadProgressChart() 未调用 updateSnapshotButtons()
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-03 |
+| **报告人** | UI 测试 |
+| **修复日期** | 2026-03-03 |
+| **修复人** | 小栗子 |
+| **影响版本** | v0.8.2 |
+
+**描述**: 切换到 Progress Charts 标签后，快照按钮未根据用户角色显示/隐藏。
+
+**根本原因**: 
+- `loadProgressChart()` 调用 `renderProgressChart()` 后未调用 `updateSnapshotButtons()`
+- 导致即使 `sessionRole` 问题修复后，按钮仍然不更新
+
+**修复方案**:
+```javascript
+// 在 renderProgressChart() 调用后添加
+renderProgressChart(progressData);
+
+// v0.8.2: 根据角色显示/隐藏快照按钮
+updateSnapshotButtons();
+```
+
+**验证**: 
+- 切换到 Progress Charts 标签后，按钮状态立即更新
+
+**Git 提交**: `f26206a`
+
+---
+
+## BUG-072: currentProjectId 未设置导致快照功能失效
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-03 |
+| **报告人** | UI 测试 |
+| **修复日期** | 2026-03-03 |
+| **修复人** | 小栗子 |
+| **影响版本** | v0.8.2 |
+
+**描述**: 创建快照时报错"请先选择一个项目"，但实际上项目已选中。
+
+**根本原因**: 
+- `selectProject()` 函数设置了 `currentProject` 但没有设置 `currentProjectId`
+- 快照功能依赖 `currentProjectId` 判断当前项目
+
+**修复方案**:
+```javascript
+// 在 selectProject() 函数中添加
+async function selectProject(projectId) {
+    currentProjectId = projectId;  // 添加这行
+    currentProject = projects.find(p => p.id === projectId);
+    // ...
+}
+```
+
+**验证**: 
+- 选择项目后可以正常创建快照
+
+**Git 提交**: `f26206a`
+
+---
+
+## BUG-073: 退出按钮选择器不存在
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-03 |
+| **报告人** | UI 测试 |
+| **修复日期** | 2026-03-03 |
+| **修复人** | 小栗子 |
+| **影响版本** | v0.8.2 |
+
+**描述**: UI 测试中点击退出按钮失败，选择器 `#logoutBtn` 不存在。
+
+**根本原因**: 
+- 前端代码中退出按钮没有 `id="logoutBtn"` 属性
+- 使用文本选择器 `button:has-text("退出")`
+
+**修复方案**:
+```typescript
+// 修复前
+await page.click('#logoutBtn');
+
+// 修复后
+await page.click('button:has-text("退出")');
+```
+
+**验证**: 
+- UI 测试中退出登录功能正常工作
+
+**Git 提交**: `f26206a`
+
+---
+
+## v0.8.2 修复汇总
+
+| Bug ID | 描述 | 修复日期 |
+|--------|------|----------|
+| BUG-070 | sessionRole 变量未定义 | 2026-03-03 |
+| BUG-071 | loadProgressChart() 未调用 updateSnapshotButtons() | 2026-03-03 |
+| BUG-072 | currentProjectId 未设置 | 2026-03-03 |
+| BUG-073 | 退出按钮选择器不存在 | 2026-03-03 |
