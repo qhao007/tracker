@@ -61,3 +61,4 @@ dev/archives/*.json
 CLAUDE_TODO.md
 dev/cookies.txt
 archives/
+smoke/archives/
