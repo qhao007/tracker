@@ -592,10 +592,10 @@ class TestProjectPermission:
             data=json.dumps({'username': 'admin', 'password': 'admin123'}),
             content_type='application/json')
 
-        # 创建项目
+        # 创建项目 (v0.8.3 需要日期)
         unique_name = f"testproject_{int(time.time())}"
         response = client.post('/api/projects',
-            data=json.dumps({'name': unique_name}),
+            data=json.dumps({'name': unique_name, 'start_date': '2026-01-01', 'end_date': '2026-12-31'}),
             content_type='application/json')
 
         # 创建成功（返回 200）
@@ -620,7 +620,7 @@ class TestProjectPermission:
 
         # 尝试创建项目
         response = client.post('/api/projects',
-            data=json.dumps({'name': f"project_{int(time.time())}"}),
+            data=json.dumps({'name': f"project_{int(time.time())}", 'start_date': '2026-01-01', 'end_date': '2026-12-31'}),
             content_type='application/json')
 
         assert response.status_code == 403
@@ -632,7 +632,7 @@ class TestProjectPermission:
 
         # 尝试创建项目
         response = client.post('/api/projects',
-            data=json.dumps({'name': f"guestproject_{int(time.time())}"}),
+            data=json.dumps({'name': f"guestproject_{int(time.time())}", 'start_date': '2026-01-01', 'end_date': '2026-12-31'}),
             content_type='application/json')
 
         assert response.status_code == 403
@@ -644,10 +644,10 @@ class TestProjectPermission:
             data=json.dumps({'username': 'admin', 'password': 'admin123'}),
             content_type='application/json')
 
-        # 创建项目
+        # 创建项目 (v0.8.3 需要日期)
         unique_name = f"testproject_del_{int(time.time())}"
         create_resp = client.post('/api/projects',
-            data=json.dumps({'name': unique_name}),
+            data=json.dumps({'name': unique_name, 'start_date': '2026-01-01', 'end_date': '2026-12-31'}),
             content_type='application/json')
 
         # 获取项目 ID
@@ -673,10 +673,10 @@ class TestProjectPermission:
             data=json.dumps({'username': unique_name, 'password': 'test123', 'role': 'user'}),
             content_type='application/json')
 
-        # 创建项目
+        # 创建项目 (v0.8.3 需要日期)
         project_name = f"testproject_userdel_{int(time.time())}"
         client.post('/api/projects',
-            data=json.dumps({'name': project_name}),
+            data=json.dumps({'name': project_name, 'start_date': '2026-01-01', 'end_date': '2026-12-31'}),
             content_type='application/json')
 
         # 获取项目 ID
@@ -790,14 +790,14 @@ class TestImportExportPermission:
 
     def test_guest_cannot_delete_project(self, client):
         """访客不能删除项目"""
-        # 用 admin 登录创建项目
+        # 用 admin 登录创建项目 (v0.8.3 需要日期)
         client.post('/api/auth/login',
             data=json.dumps({'username': 'admin', 'password': 'admin123'}),
             content_type='application/json')
 
         project_name = f"testproject_guestdel_{int(time.time())}"
         client.post('/api/projects',
-            data=json.dumps({'name': project_name}),
+            data=json.dumps({'name': project_name, 'start_date': '2026-01-01', 'end_date': '2026-12-31'}),
             content_type='application/json')
 
         # 获取项目 ID
@@ -837,10 +837,10 @@ class TestProjectDelete:
             data=json.dumps({'username': 'admin', 'password': 'admin123'}),
             content_type='application/json')
 
-        # 创建项目
+        # 创建项目 (v0.8.3 需要日期)
         unique_name = f"testproject_backup_{int(time.time())}"
         client.post('/api/projects',
-            data=json.dumps({'name': unique_name}),
+            data=json.dumps({'name': unique_name, 'start_date': '2026-01-01', 'end_date': '2026-12-31'}),
             content_type='application/json')
 
         # 获取项目 ID
