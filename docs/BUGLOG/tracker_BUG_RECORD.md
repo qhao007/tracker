@@ -1875,6 +1875,39 @@ await page.click('button:has-text("退出")');
 
 ---
 
+## BUG-074: 快照管理对话框无法通过关闭按钮关闭
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-04 |
+| **报告人** | Howard |
+| **修复日期** | 2026-03-04 |
+| **修复人** | 小栗子 |
+| **影响版本** | v0.8.2 |
+
+**描述**: 点击"快照管理"按钮打开对话框后，无法通过右上角的 × 按钮关闭对话框。
+
+**根本原因**: 
+- 快照管理对话框使用 `style.display = 'block'` 打开
+- 其他对话框使用 `classList.add('active')` 打开
+- `closeModal()` 函数只移除 `active` 类，不处理 `display` 属性
+
+**修复方案**:
+```javascript
+// 修复前
+document.getElementById('cpModal').style.display = 'block';
+
+// 修复后
+document.getElementById('cpModal').classList.add('active');
+```
+
+**验证**: 
+- 点击 × 按钮可以正确关闭快照管理对话框
+
+---
+
 ## v0.8.2 修复汇总
 
 | Bug ID | 描述 | 修复日期 |
@@ -1883,3 +1916,4 @@ await page.click('button:has-text("退出")');
 | BUG-071 | loadProgressChart() 未调用 updateSnapshotButtons() | 2026-03-03 |
 | BUG-072 | currentProjectId 未设置 | 2026-03-03 |
 | BUG-073 | 退出按钮选择器不存在 | 2026-03-03 |
+| BUG-074 | 快照管理对话框无法通过关闭按钮关闭 | 2026-03-04 |

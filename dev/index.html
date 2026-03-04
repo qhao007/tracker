@@ -1131,7 +1131,7 @@
                 // 显示对话框
                 document.getElementById('cpModalTitle').textContent = '快照管理';
                 document.getElementById('cpForm').innerHTML = html;
-                document.getElementById('cpModal').style.display = 'block';
+                document.getElementById('cpModal').classList.add('active');
                 
             } catch (e) {
                 alert('加载快照失败: ' + e.message);
