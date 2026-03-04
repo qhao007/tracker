@@ -139,27 +139,27 @@ dev/tests/test_ui/specs/
 
 #### 4.2.1 测试用户创建测试
 
-| 测试 ID | 测试方法 | 测试目标 | 预期结果 | 对应规格 |
-|---------|----------|----------|----------|----------|
-| UI-USR-001 | test_create_project_with_test_user | 创建项目时创建测试用户 | 复选框默认勾选 | REQ-083-001 |
-| UI-USR-002 | test_test_user_credentials | 创建后显示测试用户凭据 | 显示用户名密码 | REQ-083-001 |
-| UI-USR-003 | test_login_with_test_user | 使用测试用户登录 | 登录成功 | REQ-083-001 |
-| UI-USR-004 | test_test_user_permissions | 测试用户权限受限 | 无 admin 功能 | REQ-083-001 |
+| 测试 ID | 测试方法 | 测试目标 | 预期结果 | 对应规格 | 状态 |
+|---------|----------|----------|----------|----------|------|
+| UI-USR-001 | test_create_project_with_test_user | 创建项目时创建测试用户 | 复选框默认勾选 | REQ-083-001 | ✅ 已实现 |
+| UI-USR-002 | test_test_user_credentials | 创建后显示测试用户凭据 | 显示用户名密码 | REQ-083-001 | ✅ 已实现 |
+| UI-USR-003 | test_login_with_test_user | 使用测试用户登录 | 登录成功 | REQ-083-001 | ✅ 已实现 |
+| UI-USR-004 | test_test_user_permissions | 测试用户权限受限 | 无 admin 功能 | REQ-083-001 | ✅ 已实现 |
 
 #### 4.2.2 项目日期验证测试
 
-| 测试 ID | 测试方法 | 测试目标 | 预期结果 | 对应规格 |
-|---------|----------|----------|----------|----------|
-| UI-PRJ-001 | test_create_project_no_dates | 创建项目不填日期 | 显示错误提示 | REQ-083-002 |
-| UI-PRJ-002 | test_create_project_with_dates | 创建项目填有效日期 | 创建成功 | REQ-083-002 |
-| UI-PRJ-003 | test_create_project_invalid_dates | 结束日期早于开始日期 | 显示错误提示 | REQ-083-002 |
+| 测试 ID | 测试方法 | 测试目标 | 预期结果 | 对应规格 | 状态 |
+|---------|----------|----------|----------|----------|------|
+| UI-PRJ-001 | test_create_project_no_dates | 创建项目不填日期 | 显示错误提示 | REQ-083-002 | ✅ 已实现 |
+| UI-PRJ-002 | test_create_project_with_dates | 创建项目填有效日期 | 创建成功 | REQ-083-002 | ✅ 已实现 |
+| UI-PRJ-003 | test_create_project_invalid_dates | 结束日期早于开始日期 | 显示错误提示 | REQ-083-002 | ✅ 已实现 |
 
 #### 4.2.3 常量管理测试
 
-| 测试 ID | 测试方法 | 测试目标 | 预期结果 | 对应规格 |
-|---------|----------|----------|----------|----------|
-| UI-CONST-001 | test_login_flow | 登录流程正常 | 登录成功 | REQ-083-003 |
-| UI-CONST-002 | test_project_crud | 项目 CRUD 正常 | 功能正常 | REQ-083-003 |
+| 测试 ID | 测试方法 | 测试目标 | 预期结果 | 对应规格 | 状态 |
+|---------|----------|----------|----------|----------|------|
+| UI-CONST-001 | test_login_flow | 登录流程正常 | 登录成功 | REQ-083-003 | ✅ 已实现 |
+| UI-CONST-002 | test_project_crud | 项目 CRUD 正常 | 功能正常 | REQ-083-003 | ✅ 已实现 |
 
 ### 4.3 UI 测试代码示例
 
