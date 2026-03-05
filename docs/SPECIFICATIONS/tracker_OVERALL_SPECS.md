@@ -165,7 +165,7 @@
 
 1. **计划曲线计算算法**：
    - 基于 TC target_date 计算每周预期覆盖率
-   - 使用 PASS 状态 TC 关联的 CP 去重计算
+   - 使用所有非 REMOVED 状态 TC 关联的 CP 去重计算
    - 按周分组，返回 `[{week: 'YYYY-MM-DD', coverage: float}]` 格式
 
 2. **API 端点扩展**：
