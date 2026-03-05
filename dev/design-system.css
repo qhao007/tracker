@@ -251,13 +251,13 @@ input, select, textarea {
 }
 
 .badge-coded {
-  background: #fff3e0;
-  color: #f57c00;
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
 }
 
 .badge-removed {
-  background: #f5f5f5;
-  color: #9e9e9e;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-muted);
   text-decoration: line-through;
 }
 
@@ -346,6 +346,7 @@ input, select, textarea {
   width: 90%;
   max-height: 80vh;
   overflow-y: auto;
+  animation: modalIn 200ms ease-out;
 }
 
 .modal-header-v2 {
@@ -399,12 +400,7 @@ input, select, textarea {
   }
 }
 
-.modal-content-v2 {
-  animation: modalIn 200ms ease-out;
-}
-
-/* ===== 表单组件 ===== */
-.form-group {
+.modal-header-v2 {
   margin-bottom: var(--space-4);
 }
 
@@ -594,9 +590,11 @@ input, select, textarea {
 }
 
 .tab.active {
-  background: var(--color-primary);
-  color: white;
+  background: transparent;
+  color: var(--color-primary);
   font-weight: 600;
+  border-bottom: 2px solid var(--color-primary);
+  margin-bottom: -2px;
 }
 
 /* ===== Toolbar 组件 ===== */
@@ -873,7 +871,8 @@ select option {
 }
 
 .btn:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 .btn:active {
@@ -881,8 +880,8 @@ select option {
 }
 
 .btn-primary:hover {
-  transform: scale(1.02);
-  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
 }
 
 .btn-primary:active {
@@ -890,11 +889,11 @@ select option {
 }
 
 .btn-secondary:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
 }
 
 .btn-ghost:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
 }
 
 .btn-danger:hover {
