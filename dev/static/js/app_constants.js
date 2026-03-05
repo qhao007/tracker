@@ -118,31 +118,47 @@ const MESSAGES = {
 };
 
 // ==================== 颜色常量 ====================
+// 使用 CSS 变量 + JS 兜底方案，确保与 design-system.css 同步
 const COLORS = {
-    // 状态颜色
+    // 状态颜色 - 优先使用 CSS 变量，回退到固定值
     STATUS: {
-        PASS: '#4CAF50',
-        FAIL: '#f44336',
-        BLOCKED: '#ff9800',
-        NOT_RUN: '#9e9e9e',
+        PASS: 'var(--color-success, #22c55e)',
+        FAIL: 'var(--color-error, #ef4444)',
+        BLOCKED: 'var(--color-warning, #f59e0b)',
+        NOT_RUN: 'var(--color-text-muted, #a1a1aa)',
         N/A: '#607d8b'
     },
     
     // 优先级颜色
     PRIORITY: {
-        P0: '#f44336',
-        P1: '#ff9800',
-        P2: '#2196F3',
-        P3: '#9e9e9e'
+        P0: 'var(--color-error, #ef4444)',
+        P1: 'var(--color-warning, #f59e0b)',
+        P2: 'var(--color-info, #3b82f6)',
+        P3: 'var(--color-text-muted, #a1a1aa)'
     },
     
     // 覆盖率颜色
     COVERAGE: {
-        HIGH: '#4CAF50',    // > 80%
-        MEDIUM: '#ff9800',  // 50-80%
-        LOW: '#f44336'      // < 50%
+        HIGH: 'var(--color-success, #22c55e)',
+        MEDIUM: 'var(--color-warning, #f59e0b)',
+        LOW: 'var(--color-error, #ef4444)'
     }
 };
+
+// 获取实际颜色值的辅助函数（在 Canvas 等需要实际颜色值时使用）
+function getColorValue(colorVar) {
+    if (colorVar.startsWith('var(')) {
+        // 提取 CSS 变量名
+        const match = colorVar.match(/var\(--([^,]+),?\s*([^)]*)?\)/);
+        if (match) {
+            const varName = '--' + match[1];
+            const fallback = match[2] ? match[2].trim() : null;
+            const value = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+            return value || fallback || '#000000';
+        }
+    }
+    return colorVar;
+}
 
 // 导出供外部使用
 if (typeof module !== 'undefined' && module.exports) {
