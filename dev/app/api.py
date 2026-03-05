@@ -811,7 +811,7 @@ def calculate_planned_coverage(project_name, start_date, end_date):
                 WHERE tc.project_id = ?
                 AND tc.target_date IS NOT NULL
                 AND tc.target_date <= ?
-                AND tc.status = 'PASS'
+                AND tc.status != 'REMOVED'
             ),
             covered_cps AS (
                 SELECT DISTINCT cp.id
@@ -987,7 +987,7 @@ def calculate_current_coverage(project_name):
         FROM test_case tc
         INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
         INNER JOIN cover_point cp ON tcc.cp_id = cp.id
-        WHERE tc.status = 'PASS'
+        WHERE tc.status != 'REMOVED'
     """)
     result = cursor.fetchone()
     covered_cps = result[0] if result else 0
