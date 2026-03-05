@@ -1,0 +1,111 @@
+/* ========================================
+   Tracker Design System v0.9.0
+   增量式 CSS 变量系统
+   ======================================== */
+
+/* ===== 颜色系统 ===== */
+:root {
+  /* 主色调 */
+  --color-primary: #4f46e5;
+  --color-primary-hover: #4338ca;
+  --color-primary-light: #e0e7ff;
+
+  /* 背景色 */
+  --color-bg-primary: #fafafa;
+  --color-bg-secondary: #f4f4f5;
+  --color-bg-card: #ffffff;
+  --color-bg-dark: #18181b;
+
+  /* 文字色 */
+  --color-text-primary: #18181b;
+  --color-text-secondary: #71717a;
+  --color-text-muted: #a1a1aa;
+  --color-text-inverse: #fafafa;
+
+  /* 状态色 */
+  --color-success: #22c55e;
+  --color-success-bg: #dcfce7;
+  --color-success-text: #15803d;
+  --color-warning: #f59e0b;
+  --color-warning-bg: #fef3c7;
+  --color-warning-text: #b45309;
+  --color-error: #ef4444;
+  --color-error-bg: #fee2e2;
+  --color-error-text: #b91c1c;
+  --color-info: #3b82f6;
+  --color-info-bg: #dbeafe;
+  --color-info-text: #1d4ed8;
+
+  /* 边框色 */
+  --color-border: #e4e4e7;
+  --color-border-strong: #d4d4d8;
+
+  /* 原有兼容颜色（保留） */
+  --color-blue: #2170bb;
+  --color-blue-dark: #1a5a94;
+  --color-green: #4caf50;
+  --color-orange: #ff9800;
+}
+
+/* ===== 字体系统 ===== */
+:root {
+  /* 主字体 - 系统字体兜底 */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  
+  /* 代码字体 */
+  --font-mono: 'Cascadia Code', 'Fira Code', Consolas, 'Microsoft YaHei Mono', monospace;
+}
+
+/* ===== 字号层次 ===== */
+:root {
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+}
+
+/* ===== 间距系统 ===== */
+:root {
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+}
+
+/* ===== 圆角系统 ===== */
+:root {
+  --radius-sm: 0.25rem;
+  --radius: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-full: 9999px;
+}
+
+/* ===== 阴影系统 ===== */
+:root {
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+}
+
+/* ===== 过渡动画 ===== */
+:root {
+  --transition-fast: 100ms ease;
+  --transition: 150ms ease;
+  --transition-slow: 200ms ease;
+}
+
+/* ===== 容器宽度 ===== */
+:root {
+  --container-max: 1400px;
+}
