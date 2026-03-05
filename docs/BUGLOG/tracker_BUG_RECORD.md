@@ -2025,3 +2025,59 @@ N/A: 'N/A'
 |--------|------|----------|
 | BUG-076 | design-system.css 无法加载 | 2026-03-05 |
 | BUG-077 | app_constants.js JavaScript 语法错误 | 2026-03-05 |
+
+---
+
+## BUG-078: 备份按钮权限控制缺失
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-05 |
+| **报告人** | Howard |
+| **修复日期** | 2026-03-05 |
+| **修复人** | 小栗子 |
+| **影响版本** | v0.9.0 |
+
+**描述**: guest 和普通用户可以看到备份按钮，应该只有 admin 才能看到和使用。
+
+**根本原因**: 
+1. 前端备份按钮未添加到权限控制数组
+2. 后端 API 缺少权限装饰器
+
+**修复方案**:
+
+前端 (index.html):
+```javascript
+// 添加按钮 ID
+<button class="header-btn" id="backupBtn" onclick="showArchiveModal()">💾 备份</button>
+
+// 添加到权限控制数组
+const writeButtons = ['btnImportCP', 'btnExportCP', 'btnImportTC', 'btnExportTC', 
+                     'btnBatchStatus', 'btnBatchTargetDate', 'btnBatchDvMilestone', 'backupBtn'];
+```
+
+后端 (api.py):
+```python
+# archive_project 添加 @admin_required
+@api.route("/api/projects/<int:project_id>/archive", methods=["POST"])
+@admin_required
+def archive_project(project_id):
+
+# list_archives 添加 @login_required  
+@api.route("/api/projects/archive/list", methods=["GET"])
+@login_required
+def list_archives():
+```
+
+**影响范围**:
+- `index.html` 第 162 行：备份按钮 ID
+- `index.html` 第 701 行：writeButtons 数组
+- `api.py` 第 429 行：archive_project 权限装饰器
+- `api.py` 第 471 行：list_archives 权限装饰器
+
+**验证**: 
+- guest 用户登录后备份按钮不可见 ✅
+- 普通用户登录后备份按钮不可见 ✅
+- admin 用户登录后备份按钮可见 ✅
