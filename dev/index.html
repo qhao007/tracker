@@ -8,15 +8,10 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: Microsoft YaHei, -apple-system, sans-serif; background: #f5f5f5; font-size: 13px; color: #333; }
-        .header { background: linear-gradient(135deg, #2170bb 0%, #1a5a94 100%); color: white; padding: 8px 15px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .header-left { display: flex; align-items: center; gap: 15px; }
         .logo { font-size: 16px; font-weight: bold; }
         .version-tag { background: #4CAF50; padding: 2px 8px; border-radius: 3px; font-size: 11px; }
         .version-tag.test { background: #ff9800; }
         .project-selector { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 5px 10px; border-radius: 3px; cursor: pointer; width: 200px; }
-        .header-actions { display: flex; gap: 8px; }
-        .header-btn { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 5px 12px; border-radius: 3px; cursor: pointer; font-size: 12px; }
-        .header-btn:hover { background: rgba(255,255,255,0.25); }
         .container { padding: 10px; }
         .tabs { display: flex; background: #e0e0e0; border-bottom: 2px solid #2170bb; margin-bottom: 10px; }
         .tab { padding: 8px 20px; background: #e0e0e0; border: none; cursor: pointer; font-size: 13px; color: #666; }
@@ -176,8 +171,6 @@
         .guest-login-btn:hover { background: #388e3c; }
         .login-error { color: #d32f2f; font-size: 12px; margin-top: 10px; text-align: center; display: none; }
         .login-error.show { display: block; }
-        .header-user-info { display: flex; align-items: center; gap: 10px; }
-        .header-user-name { font-size: 12px; }
     </style>
     <!-- Chart.js for Progress Charts (v0.8.0) - CDN优先，超时自动切换本地 -->
     <script>
