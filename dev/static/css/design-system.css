@@ -1069,3 +1069,40 @@ select {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ===== 状态徽章兼容映射 ===== */
+/* 兼容旧的 .status-* 类名 */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: var(--radius-full);
+}
+
+.status-OPEN {
+  background: var(--color-info-bg);
+  color: var(--color-info-text);
+}
+
+.status-PASS {
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.status-FAIL {
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
+}
+
+.status-CODED {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+}
+
+.status-REMOVED {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-muted);
+  text-decoration: line-through;
+}
