@@ -79,7 +79,7 @@ const UI_CONSTANTS = {
         PASS: 'PASS',
         FAIL: 'FAIL',
         BLOCKED: 'BLOCKED',
-        N/A: 'N/A',
+        'N/A': 'N/A',
         NOT_RUN: 'NOT_RUN'
     },
     
@@ -126,7 +126,7 @@ const COLORS = {
         FAIL: 'var(--color-error, #ef4444)',
         BLOCKED: 'var(--color-warning, #f59e0b)',
         NOT_RUN: 'var(--color-text-muted, #a1a1aa)',
-        N/A: '#607d8b'
+        'N/A': '#607d8b'
     },
     
     // 优先级颜色
