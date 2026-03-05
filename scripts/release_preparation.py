@@ -65,7 +65,15 @@ def print_result(status, message=""):
 
 
 def run_command(cmd, description, cwd=None, check=True):
-    """执行命令并返回结果"""
+    """执行命令并返回结果
+    
+    注意: 仅用于脚本内部命令，不接受外部输入。
+    所有命令来源必须是可信的（无用户输入拼接）。
+    """
+    # 安全检查：确保 cmd 是非空字符串
+    if not isinstance(cmd, str) or not cmd:
+        raise ValueError("cmd must be a non-empty string")
+    
     print(f"执行: {cmd}")
     print(f"目录: {cwd or '当前目录'}")
 
