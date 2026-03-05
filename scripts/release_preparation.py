@@ -322,7 +322,7 @@ def merge_and_tag(version, dry_run=False):
 
     # 2. 拉取最新
     print("\n2. 拉取 main 分支最新...")
-    cmd = "git pull origin main 2>/dev/null || git pull main 2>/dev/null || true"
+    cmd = "timeout 10 git pull origin main 2>/dev/null || timeout 10 git pull main 2>/dev/null || true"
     subprocess.run(cmd, shell=True, cwd=repo_root)
     print("✓ 拉取完成")
 
