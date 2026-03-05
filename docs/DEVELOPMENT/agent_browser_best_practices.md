@@ -193,6 +193,54 @@ agent-browser errors
 agent-browser console --clear
 ```
 
+### 4.3 检查 CSS 样式（计算后样式）
+
+调试 UI 样式问题时，可以使用 `eval` 获取元素的计算后样式：
+
+```bash
+# 获取元素背景色
+agent-browser eval "getComputedStyle(document.querySelector('.tab.active')).backgroundColor"
+
+# 获取边框颜色
+agent-browser eval "getComputedStyle(document.querySelector('.tab.active')).borderBottomColor"
+
+# 获取文字颜色
+agent-browser eval "getComputedStyle(document.querySelector('.header')).color"
+
+# 获取 CSS 变量值
+agent-browser eval "getComputedStyle(document.documentElement).getPropertyValue('--color-primary')"
+```
+
+**常用计算样式属性**：
+
+| 属性 | 说明 |
+|------|------|
+| `backgroundColor` | 背景色 |
+| `color` | 文字颜色 |
+| `borderBottomColor` | 下边框颜色 |
+| `borderBottomWidth` | 下边框宽度 |
+| `padding` | 内边距 |
+| `margin` | 外边距 |
+| `fontSize` | 字体大小 |
+| `fontWeight` | 字体粗细 |
+
+### 4.4 验证 CSS 是否生效流程
+
+1. **截图确认** - 初步视觉检查
+2. **计算样式验证** - 使用 `eval` 获取实际样式值
+3. **CSS 文件检查** - 确认服务器返回正确 CSS
+
+```bash
+# 步骤1: 截图
+agent-browser screenshot /path/to/screenshot.png
+
+# 步骤2: 检查计算样式
+agent-browser eval "getComputedStyle(document.querySelector('.your-class')).backgroundColor"
+
+# 步骤3: 确认 CSS 文件可访问
+curl http://localhost:8081/static/css/design-system.css | grep ".your-class"
+```
+
 ### 4.3 高亮元素
 
 ```bash
