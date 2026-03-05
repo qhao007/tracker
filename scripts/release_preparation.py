@@ -27,6 +27,7 @@ Tracker 发布前准备脚本
 """
 
 import os
+import re
 import sys
 import subprocess
 import argparse
@@ -40,6 +41,12 @@ RED = '\033[91m'
 BLUE = '\033[94m'
 RESET = '\033[0m'
 BOLD = '\033[1m'
+
+
+def extract_test_count(output):
+    """从测试输出中提取 passed 数量"""
+    match = re.search(r'(\d+)\s+passed', output)
+    return int(match.group(1)) if match else 0
 
 
 def print_step(step_num, title):
@@ -372,9 +379,10 @@ def run_api_tests(dry_run=False):
     if not success:
         return False
 
-    # 检查测试通过数 (v0.6.2: 29 个 API 测试)
+    # 检查测试通过数
     if "passed" in output and "failed" not in output:
-        print(GREEN + "✓ API 测试全部通过 (29 tests)" + RESET)
+        passed_count = extract_test_count(output)
+        print(GREEN + f"✓ API 测试全部通过 ({passed_count} tests)" + RESET)
         return True
     else:
         print(RED + "✗ API 测试未全部通过" + RESET)
@@ -403,9 +411,10 @@ def run_smoke_tests(dry_run=False):
     if not success:
         return False
 
-    # 检查测试通过数 (v0.8.3: 20 个冒烟测试)
+    # 检查测试通过数
     if "passed" in output and "failed" not in output:
-        print(GREEN + "✓ 冒烟测试全部通过 (20 tests)" + RESET)
+        passed_count = extract_test_count(output)
+        print(GREEN + f"✓ 冒烟测试全部通过 ({passed_count} tests)" + RESET)
         return True
     else:
         print(RED + "✗ 冒烟测试未全部通过" + RESET)
