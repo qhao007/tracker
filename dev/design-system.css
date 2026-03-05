@@ -864,3 +864,209 @@ select option {
   border-color: var(--color-primary);
   color: var(--color-primary);
 }
+
+/* ===== Phase 5: 动画增强 ===== */
+
+/* ===== 按钮动画 ===== */
+.btn {
+  transition: all var(--transition);
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn-primary:hover {
+  transform: scale(1.02);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+.btn-secondary:hover {
+  transform: translateY(-1px);
+}
+
+.btn-ghost:hover {
+  transform: translateY(-1px);
+}
+
+.btn-danger:hover {
+  transform: scale(1.02);
+}
+
+/* ===== 卡片动画 ===== */
+.card {
+  transition: all var(--transition-slow);
+}
+
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+
+.card-hover:active {
+  transform: translateY(-2px);
+}
+
+/* ===== 链接动画 ===== */
+a {
+  transition: color var(--transition);
+}
+
+/* ===== 输入框动画 ===== */
+.form-control,
+.search-input,
+select {
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.form-control:focus,
+.search-input:focus {
+  transition: border-color var(--transition), box-shadow var(--transition) 150ms;
+}
+
+/* ===== Tab 动画 ===== */
+.tab {
+  transition: all var(--transition);
+}
+
+/* ===== 模态框动画 ===== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 模态框淡入 */
+.modal.active .modal-content-v2 {
+  animation: scaleIn 200ms ease-out;
+}
+
+/* 统计数字动画 */
+.stat-value {
+  transition: color var(--transition);
+}
+
+/* ===== 状态徽章动画 ===== */
+.badge {
+  transition: all var(--transition);
+}
+
+/* ===== 操作按钮动画 ===== */
+.action-btn {
+  transition: all var(--transition-fast);
+}
+
+.action-btn:hover {
+  transform: scale(1.1);
+}
+
+.action-btn:active {
+  transform: scale(0.95);
+}
+
+/* ===== 页面加载动画 ===== */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* 加载占位符 */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-bg-secondary) 25%,
+    var(--color-bg-card) 50%,
+    var(--color-bg-secondary) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius);
+}
+
+/* ===== 工具提示动画 ===== */
+@keyframes tooltipIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ===== 过渡效果类 ===== */
+.fade-in {
+  animation: fadeIn 200ms ease-out;
+}
+
+.fade-in-up {
+  animation: fadeInUp 300ms ease-out;
+}
+
+.slide-in-right {
+  animation: slideInRight 300ms ease-out;
+}
+
+.scale-in {
+  animation: scaleIn 200ms ease-out;
+}
+
+/* ===== 禁用动画（尊重用户偏好）====== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
