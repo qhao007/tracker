@@ -159,7 +159,7 @@
         </div>
         <div class="header-actions" id="headerActions">
             <button class="header-btn" id="projectManageBtn" onclick="showProjectModal()">📁 项目</button>
-            <button class="header-btn" onclick="showArchiveModal()">💾 备份</button>
+            <button class="header-btn" id="backupBtn" onclick="showArchiveModal()">💾 备份</button>
             <button class="header-btn" onclick="showVersionInfo()">ℹ️ 关于</button>
             <a href="/manual" target="_blank" class="header-btn" style="text-decoration: none;">❓ 帮助</a>
             <button class="header-btn" id="loginHeaderBtn" onclick="showLoginModal()">🔑 登录</button>
@@ -698,7 +698,7 @@
             // 根据角色控制导入/导出/批量操作按钮（guest 禁止使用）
             const isGuest = currentUser.role === 'guest';
             const writeButtons = ['btnImportCP', 'btnExportCP', 'btnImportTC', 'btnExportTC', 
-                                 'btnBatchStatus', 'btnBatchTargetDate', 'btnBatchDvMilestone'];
+                                 'btnBatchStatus', 'btnBatchTargetDate', 'btnBatchDvMilestone', 'backupBtn'];
             writeButtons.forEach(id => {
                 const btn = document.getElementById(id);
                 if (btn) {
