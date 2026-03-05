@@ -780,3 +780,87 @@ input, select, textarea {
   cursor: pointer;
   accent-color: var(--color-primary);
 }
+
+/* ===== 搜索输入框 ===== */
+.search-input {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  width: 180px;
+  font-size: var(--text-sm);
+  background: var(--color-bg-card);
+  color: var(--color-text-primary);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+.search-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* ===== 下拉选择框 ===== */
+select {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: var(--text-sm);
+  background: var(--color-bg-card);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: border-color var(--transition);
+}
+
+select:hover,
+select:focus {
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+select option {
+  background-color: var(--color-bg-card);
+  color: var(--color-text-primary);
+  padding: var(--space-2);
+}
+
+/* ===== 操作按钮组 ===== */
+.action-btns {
+  display: flex;
+  gap: 1px;
+}
+
+.action-btn {
+  padding: 2px 6px;
+  font-size: var(--text-xs);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-card);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition);
+}
+
+.action-btn:hover {
+  background: var(--color-bg-secondary);
+}
+
+.action-btn.edit {
+  color: var(--color-primary);
+}
+
+.action-btn.delete {
+  color: var(--color-error);
+}
+
+.action-btn.toggle {
+  color: var(--color-success);
+}
+
+.action-btn.active {
+  background: var(--color-primary-light);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
