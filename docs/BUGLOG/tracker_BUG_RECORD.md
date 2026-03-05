@@ -1908,12 +1908,44 @@ document.getElementById('cpModal').classList.add('active');
 
 ---
 
-## v0.8.2 修复汇总
+## BUG-075: 计划曲线算法错误：依赖 PASS 状态
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-05 |
+| **报告人** | Howard |
+| **修复日期** | 2026-03-05 |
+| **修复人** | 小栗子 |
+| **影响版本** | v0.8.1 |
+
+**描述**: 计划曲线算法只统计 PASS 状态的 TC 关联的 CP，导致计划曲线覆盖率远低于预期。
+
+**根本原因**: 
+- API `calculate_planned_coverage()` 函数中使用了 `tc.status = 'PASS'`
+- 正确的逻辑应该是：计划曲线基于所有 TC 的 target_date，排除 REMOVED 状态即可
+
+**修复方案**:
+```python
+# 修复前
+AND tc.status = 'PASS'
+
+# 修复后  
+AND tc.status != 'REMOVED'
+```
+
+**影响范围**:
+- `api.py` 第 814 行：`calculate_planned_coverage()` 函数
+- `api.py` 第 990 行：`get_progress()` 函数
+
+**验证**: 
+- 重新生成 Demo 数据后，计划曲线覆盖率从 46.9% 提升到 83.3%
+
+---
+
+## v0.8.3 修复汇总
 
 | Bug ID | 描述 | 修复日期 |
 |--------|------|----------|
-| BUG-070 | sessionRole 变量未定义 | 2026-03-03 |
-| BUG-071 | loadProgressChart() 未调用 updateSnapshotButtons() | 2026-03-03 |
-| BUG-072 | currentProjectId 未设置 | 2026-03-03 |
-| BUG-073 | 退出按钮选择器不存在 | 2026-03-03 |
-| BUG-074 | 快照管理对话框无法通过关闭按钮关闭 | 2026-03-04 |
+| BUG-075 | 计划曲线算法错误：依赖 PASS 状态 | 2026-03-05 |
