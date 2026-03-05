@@ -373,7 +373,7 @@ def run_api_tests(dry_run=False):
         return False
 
     # 检查测试通过数 (v0.6.2: 29 个 API 测试)
-    if "29 passed" in output or "passed" in output:
+    if "passed" in output and "failed" not in output:
         print(GREEN + "✓ API 测试全部通过 (29 tests)" + RESET)
         return True
     else:
@@ -396,15 +396,15 @@ def run_smoke_tests(dry_run=False):
         import time
         time.sleep(3)
 
-    # 运行冒烟测试 (只运行主要的冒烟测试文件)
-    cmd = f"cd {dev_dir} && npx playwright test tests/test_ui/specs/smoke/01-smoke.spec.ts tests/test_ui/specs/smoke/02-login.spec.ts --project=firefox --timeout=60000"
+    # 运行冒烟测试 (自动匹配所有 smoke 目录下的测试文件)
+    cmd = f"cd {dev_dir} && npx playwright test tests/test_ui/specs/smoke/*.spec.ts --project=firefox --timeout=60000"
     success, output = run_command(cmd, "冒烟测试", cwd=repo_root)
 
     if not success:
         return False
 
     # 检查测试通过数 (v0.8.3: 20 个冒烟测试)
-    if "20 passed" in output or "passed" in output:
+    if "passed" in output and "failed" not in output:
         print(GREEN + "✓ 冒烟测试全部通过 (20 tests)" + RESET)
         return True
     else:
@@ -436,6 +436,8 @@ def run_compatibility_tests(dry_run=False):
 
 
 def main():
+    repo_root = Path(__file__).parent.parent
+
     parser = argparse.ArgumentParser(
         description="Tracker 发布前准备脚本",
         formatter_class=argparse.RawDescriptionHelpFormatter,
