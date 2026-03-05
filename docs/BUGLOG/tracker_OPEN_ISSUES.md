@@ -133,9 +133,12 @@
 |------|------|
 | **发现日期** | 2026-02-25 |
 | **优先级** | P2 |
-| **状态** | 待处理 |
+| **状态** | ⚠️ 部分完成（后端已实现，待前端） |
 | **问题描述** | 规格书要求 admin 账户首次登录后必须修改密码（must_change_password=True），但当前未强制检查 |
-| **建议方案** | 在登录流程中检查 `must_change_password`，如为 true 则强制跳转到修改密码页面 |
+| **详细说明** | 后端已在 v0.7.x 实现 must_change_password 字段和逻辑，但前端未实现强制跳转。登录成功后返回 must_change_password 标志，前端未处理。 |
+| **已完成后端** | users 表 must_change_password 字段、登录接口返回标志、修改密码接口 |
+| **待前端实现** | 登录成功后检查 must_change_password，如为 true 强制跳转到修改密码页面，禁用其他操作 |
+| **建议方案** | 在登录成功回调中检查 `data.user.must_change_password === true`，如为 true 则显示修改密码弹窗并禁用导航 |
 
 ### ISSUE-009
 
@@ -216,3 +219,15 @@
 | **详细说明** | v0.8.3 创建了 `dev/static/js/app_constants.js` 文件，定义了 SESSION_KEYS、API_ENDPOINTS、UI_CONSTANTS、MESSAGES、COLORS 等常量，并已在 index.html 中引入。但 index.html 代码中仍使用硬编码字符串常量，未替换为常量引用。 |
 | **影响范围** | 不影响功能运行，属于代码质量改进 |
 | **建议方案** | 后续版本迭代中逐步将硬编码值替换为常量引用：<br>- 将 `'currentUser'` 替换为 `SESSION_KEYS.USER`<br>- 将 `'/api/projects'` 替换为 `API_ENDPOINTS.PROJECTS`<br>- 将状态颜色替换为 `COLORS.STATUS_PASS` 等 |
+
+### ISSUE-016
+
+| 属性 | 内容 |
+|------|------|
+| **发现日期** | 2026-03-05 |
+| **优先级** | P2 |
+| **状态** | 待处理 |
+| **问题描述** | v0.8.3 需求中要求创建项目时日期必填，但对于已有项目（缺少日期）没有提供批量设置日期的功能 |
+| **需求来源** | v0.8.3 需求文档、review_feedback#2 |
+| **详细说明** | 项目起止日期字段是 Progress Charts 的必要条件，现有项目需要手动逐个设置日期，效率低下 |
+| **建议方案** | 添加批量设置项目日期功能：<br>- 后端：新增批量更新项目日期 API（如 PATCH /api/projects/batch/dates）<br>- 前端：在项目列表页面添加批量设置日期功能 |

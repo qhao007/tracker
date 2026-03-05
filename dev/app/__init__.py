@@ -8,7 +8,7 @@ import secrets
 
 
 def create_app(testing=False):
-    app = Flask(__name__)
+    app = Flask(__name__, static_folder=None)  # 禁用默认静态路由，使用自定义路由
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     data_dir = os.path.join(base_dir, 'data')
 

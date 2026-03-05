@@ -1,6 +1,6 @@
 # 测试数据生成工具 - Demo Project Generator
 
-> **版本**: v1.1 | **创建日期**: 2026-03-02 | **状态**: 规划中
+> **版本**: v1.2 | **创建日期**: 2026-03-02 | **状态**: ✅ 已完成
 
 ---
 
@@ -205,31 +205,50 @@ python3 scripts/create_demo_project.py --help
 | 建立关联 | 自动建立 TC-CP 关联关系 |
 | 设置日期 | 设置项目起止日期 (15周) |
 | 清理旧数据 | --force 时清理旧项目 |
+| **生成 Demo 快照** | **生成 project_progress 表数据，模拟项目实际进度** |
 
 ### 4.4 代码结构
 
+脚本采用函数式实现，主要函数如下：
+
 ```python
-class DemoProjectGenerator:
-    def __init__(self, data_dir):
-        self.data_dir = data_dir
+# 主函数
+def main():
+    """入口函数"""
     
-    def create_project(self, name="SOC_DV"):
-        """创建项目"""
-        
-    def generate_cover_points(self, project_id):
-        """生成 Cover Points (32个)"""
-        
-    def generate_test_cases(self, project_id):
-        """生成 Test Cases (52个)"""
-        
-    def create_connections(self, project_id):
-        """建立 TC-CP 关联"""
-        
-    def set_project_dates(self, project_id):
-        """设置项目日期 (15周)"""
-        
-    def cleanup(self, name="SOC_DV"):
-        """清理旧项目"""
+# 辅助函数
+def get_db_path(project_name):
+    """获取项目数据库路径"""
+    
+def init_db(db_path):
+    """初始化数据库（创建表结构）"""
+    
+def load_projects():
+    """加载项目列表"""
+    
+def save_projects(projects):
+    """保存项目列表"""
+    
+def cleanup():
+    """清理旧项目"""
+    
+def create_project_record(project_id):
+    """创建项目记录"""
+    
+def generate_cover_points(conn, project_id):
+    """生成 Cover Points (32个)"""
+    
+def calculate_target_date(dv_milestone, project_start, project_end):
+    """根据 DV Milestone 计算目标日期"""
+    
+def generate_test_cases(conn, project_id, cp_ids):
+    """生成 Test Cases (52个)"""
+    
+def generate_snapshots(conn, project_id):
+    """生成 Demo 快照（模拟项目实际进度）"""
+    
+def calculate_planned_coverage_from_db(conn, project_start, project_end):
+    """从数据库计算计划曲线（与后端算法一致）"""
 ```
 
 ---
@@ -238,26 +257,33 @@ class DemoProjectGenerator:
 
 ### 5.1 功能验收
 
-- [ ] 成功创建 SOC_DV 项目
-- [ ] 项目包含 32 个 CP
-- [ ] 项目包含 52 个 TC
-- [ ] TC 状态分布符合设计
-- [ ] TC 有合理的目标日期分布
-- [ ] TC-CP 关联关系正确建立
-- [ ] 项目起止日期设置正确 (15周)
+- [x] 成功创建 SOC_DV 项目
+- [x] 项目包含 32 个 CP
+- [x] 项目包含 52 个 TC
+- [x] TC 状态分布符合设计
+- [x] TC 有合理的目标日期分布
+- [x] TC-CP 关联关系正确建立
+- [x] 项目起止日期设置正确 (15周)
 
 ### 5.2 数据质量
 
-- [ ] CP 覆盖主要功能模块
-- [ ] TC 命名符合规范
-- [ ] PASS 状态的 TC 都有 CP 关联
-- [ ] 覆盖率可计算（60-80%）
+- [x] CP 覆盖主要功能模块
+- [x] TC 命名符合规范
+- [x] PASS 状态的 TC 都有 CP 关联
+- [x] 覆盖率可计算（60-80%）
 
 ### 5.3 工具验收
 
-- [ ] 可正常执行
-- [ ] --force 选项正常工作
-- [ ] 不影响现有数据
+- [x] 可正常执行
+- [x] --force 选项正常工作
+- [x] 不影响现有数据
+
+### 5.4 Demo 快照验收
+
+- [x] 生成 project_progress 表数据
+- [x] 快照数据与计划曲线匹配
+- [x] 初期偏离计划（0%→45%）
+- [x] 后期加速追赶（45%→75%）
 
 ---
 
@@ -284,6 +310,7 @@ class DemoProjectGenerator:
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| v1.3 | 2026-03-05 | 更新：完成状态，添加 Demo 快照功能，代码结构改为函数式 |
 | v1.2 | 2026-03-02 | 更新：DV Milestone 含义说明（与项目进度相关） |
 | v1.1 | 2026-03-02 | 更新：DV Milestone使用系统选项，CP 32个，TC 52个，周期15周 |
 | v1.0 | 2026-03-02 | 初版规划 |

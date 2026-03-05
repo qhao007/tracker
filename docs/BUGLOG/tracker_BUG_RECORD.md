@@ -1908,12 +1908,176 @@ document.getElementById('cpModal').classList.add('active');
 
 ---
 
-## v0.8.2 修复汇总
+## BUG-075: 计划曲线算法错误：依赖 PASS 状态
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-05 |
+| **报告人** | Howard |
+| **修复日期** | 2026-03-05 |
+| **修复人** | 小栗子 |
+| **影响版本** | v0.8.1 |
+
+**描述**: 计划曲线算法只统计 PASS 状态的 TC 关联的 CP，导致计划曲线覆盖率远低于预期。
+
+**根本原因**: 
+- API `calculate_planned_coverage()` 函数中使用了 `tc.status = 'PASS'`
+- 正确的逻辑应该是：计划曲线基于所有 TC 的 target_date，排除 REMOVED 状态即可
+
+**修复方案**:
+```python
+# 修复前
+AND tc.status = 'PASS'
+
+# 修复后  
+AND tc.status != 'REMOVED'
+```
+
+**影响范围**:
+- `api.py` 第 814 行：`calculate_planned_coverage()` 函数
+- `api.py` 第 990 行：`get_progress()` 函数
+
+**验证**: 
+- 重新生成 Demo 数据后，计划曲线覆盖率从 46.9% 提升到 83.3%
+
+---
+
+## v0.8.3 修复汇总
 
 | Bug ID | 描述 | 修复日期 |
 |--------|------|----------|
-| BUG-070 | sessionRole 变量未定义 | 2026-03-03 |
-| BUG-071 | loadProgressChart() 未调用 updateSnapshotButtons() | 2026-03-03 |
-| BUG-072 | currentProjectId 未设置 | 2026-03-03 |
-| BUG-073 | 退出按钮选择器不存在 | 2026-03-03 |
-| BUG-074 | 快照管理对话框无法通过关闭按钮关闭 | 2026-03-04 |
+| BUG-075 | 计划曲线算法错误：依赖 PASS 状态 | 2026-03-05 |
+
+---
+
+## BUG-076: design-system.css 无法加载
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-05 |
+| **报告人** | Howard |
+| **修复日期** | 2026-03-05 |
+| **修复人** | 小栗子 |
+| **影响版本** | v0.9.0 |
+
+**描述**: 执行 T1 迁移后，design-system.css 未正确加载，页面仍显示蓝色 Header。
+
+**根本原因**: 
+1. `design-system.css` 位于 `/dev/` 根目录
+2. Flask 默认 `/static/<path>` 路由指向不存在的 `app/static` 目录
+3. 导致自定义的 `/static/<path>` 路由被默认路由覆盖
+
+**修复方案**:
+1. 移动文件：`mv dev/design-system.css dev/static/css/`
+2. 更新 HTML 引用：`href="/static/css/design-system.css"`
+3. 修复 Flask 路由：`app = Flask(__name__, static_folder=None)`
+
+**影响范围**:
+- `index.html` 第 7 行：CSS 引用路径
+- `app/__init__.py` 第 11 行：Flask 静态路由配置
+
+**验证**: 
+- CSS 文件可正确访问：`curl http://localhost:8081/static/css/design-system.css` 返回 200
+
+---
+
+## BUG-077: app_constants.js JavaScript 语法错误
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-05 |
+| **报告人** | Howard |
+| **修复日期** | 2026-03-05 |
+| **修复人** | 小栗子 |
+| **影响版本** | v0.9.0 |
+
+**描述**: 浏览器控制台报错 `Uncaught SyntaxError: Unexpected token '/'`
+
+**根本原因**: JavaScript 对象键名不能包含 `/` 字符（会被解析为除法运算符）
+
+**修复方案**:
+```javascript
+// 修复前
+N/A: 'N/A'
+
+// 修复后
+'N/A': 'N/A'
+```
+
+**影响范围**:
+- `static/js/app_constants.js` 第 82 行：STATUS 对象的 N/A 键名
+- `static/js/app_constants.js` 第 129 行：PRIORITY 对象的 N/A 键名
+
+**验证**: 
+- 浏览器控制台无 JavaScript 语法错误
+
+---
+
+## v0.9.0 修复汇总
+
+| Bug ID | 描述 | 修复日期 |
+|--------|------|----------|
+| BUG-076 | design-system.css 无法加载 | 2026-03-05 |
+| BUG-077 | app_constants.js JavaScript 语法错误 | 2026-03-05 |
+
+---
+
+## BUG-078: 备份按钮权限控制缺失
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-05 |
+| **报告人** | Howard |
+| **修复日期** | 2026-03-05 |
+| **修复人** | 小栗子 |
+| **影响版本** | v0.9.0 |
+
+**描述**: guest 和普通用户可以看到备份按钮，应该只有 admin 才能看到和使用。
+
+**根本原因**: 
+1. 前端备份按钮未添加到权限控制数组
+2. 后端 API 缺少权限装饰器
+
+**修复方案**:
+
+前端 (index.html):
+```javascript
+// 添加按钮 ID
+<button class="header-btn" id="backupBtn" onclick="showArchiveModal()">💾 备份</button>
+
+// 添加到权限控制数组
+const writeButtons = ['btnImportCP', 'btnExportCP', 'btnImportTC', 'btnExportTC', 
+                     'btnBatchStatus', 'btnBatchTargetDate', 'btnBatchDvMilestone', 'backupBtn'];
+```
+
+后端 (api.py):
+```python
+# archive_project 添加 @admin_required
+@api.route("/api/projects/<int:project_id>/archive", methods=["POST"])
+@admin_required
+def archive_project(project_id):
+
+# list_archives 添加 @login_required  
+@api.route("/api/projects/archive/list", methods=["GET"])
+@login_required
+def list_archives():
+```
+
+**影响范围**:
+- `index.html` 第 162 行：备份按钮 ID
+- `index.html` 第 701 行：writeButtons 数组
+- `api.py` 第 429 行：archive_project 权限装饰器
+- `api.py` 第 471 行：list_archives 权限装饰器
+
+**验证**: 
+- guest 用户登录后备份按钮不可见 ✅
+- 普通用户登录后备份按钮不可见 ✅
+- admin 用户登录后备份按钮可见 ✅

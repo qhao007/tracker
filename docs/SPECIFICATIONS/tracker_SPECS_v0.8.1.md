@@ -54,7 +54,7 @@
 1. 分析需求文档中的 SQL 算法
 2. 在 `api.py` 中实现 `calculate_planned_coverage(project_id, start_date, end_date)` 函数
 3. 实现按周分组的算法
-4. 实现 Pass 状态 TC 关联 CP 的去重计算
+4. 实现非 REMOVED 状态 TC 关联 CP 的去重计算
 5. 单元测试验证算法正确性
 
 **验证**:
