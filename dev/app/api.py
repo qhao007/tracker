@@ -426,6 +426,7 @@ def update_project(project_id):
 
 
 @api.route("/api/projects/<int:project_id>/archive", methods=["POST"])
+@admin_required
 def archive_project(project_id):
     """备份项目"""
     projects = load_projects()
@@ -466,6 +467,7 @@ def archive_project(project_id):
 
 
 @api.route("/api/projects/archive/list", methods=["GET"])
+@login_required
 def list_archives():
     """获取归档列表"""
     archives_dir = "archives"

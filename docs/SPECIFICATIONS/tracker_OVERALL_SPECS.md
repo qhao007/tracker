@@ -1,6 +1,6 @@
-# 芯片验证 Tracker v0.8.3 总体规格书
+# 芯片验证 Tracker v0.9.0 总体规格书
 
-> **版本**: v0.8.3 | **更新日期**: 2026-03-04 | **状态**: ✅ 已完成
+> **版本**: v0.9.0 | **更新日期**: 2026-03-05 | **状态**: ✅ 已完成
 
 ---
 
@@ -42,14 +42,24 @@
 | Test Cases 的增删改查 | 芯片仿真功能 |
 | TC 与 CP 的多对多关联管理 | |
 | 状态跟踪（OPEN/CODED/FAIL/PASS） | |
-| **用户权限管理（admin/user/guest）** | |
+| 用户权限管理（admin/user/guest） | |
 | 项目备份/恢复（Archive） | |
 | 测试版本和正式版本分离 | |
 | 进度/覆盖率统计面板 | |
 | 数据持久化到 SQLite 数据库 | |
 | systemd 正式版部署 | |
+| **v0.9.0 前端界面优化** | |
 
-### 1.4 v0.6.0 重大变更
+### 1.4 v0.9.0 重大变更
+
+**v0.9.0 前端界面优化：**
+
+- **设计系统**：建立统一的 CSS 变量系统（颜色、字体、间距、圆角、阴影）
+- **视觉风格**：采用现代 Vercel/Linear 风格，主蓝色改为色调从紫色 (#4f46e5)
+- **组件重构**：Header、Tabs、Table、Modal 等核心组件样式全面升级
+- **交互体验**：添加微交互动画（按钮悬停、卡片悬浮、模态框动画）
+- **兼容处理**：添加 CSS 类名兼容映射，确保平滑迁移
+- **用户偏好**：尊重用户减少动画偏好 (prefers-reduced-motion)
 
 **v0.6.0 第一阶段功能增强：**
 
@@ -1744,6 +1754,7 @@ journalctl -u tracker -f
 | **v0.8.1** | **2026-03-02** | **计划曲线**：基于 TC target_date 的预期覆盖率曲线、时间段选择器、Chart.js CDN Fallback |
 | **v0.8.2** | **2026-03-04** | **实际曲线与快照**：绿色实线实际曲线、手动/定时快照采集、快照管理、导出功能 |
 | **v0.8.3** | **2026-03-04** | **测试便利性**：创建项目自动创建测试用户、项目日期必填验证、前端常量管理 |
+| **v0.9.0** | **2026-03-05** | **前端界面优化**：设计系统 CSS 变量（紫色主题 Vercel/Linear 风格）、组件样式重构（Header/Tabs/Table/Modal）、微交互动画、兼容映射 |
 
 ### v0.8.3 详细变更
 
@@ -1870,6 +1881,51 @@ journalctl -u tracker -f
    - BUG-034: TC Status/DV Milestone 缺少全部选项
    - BUG-035: TC DV Milestone 过滤选项不动态加载
    - BUG-036: projectSelector ID 拼写错误
+
+### v0.9.0 详细变更
+
+1. **设计系统 CSS 变量**：
+   - 新建 `dev/static/css/design-system.css`
+   - 颜色系统：主色 #4f46e5、成功/警告/错误/信息色、背景色、文字色
+   - 字体系统：系统字体兜底（-apple-system, BlinkMacSystemFont, Segoe UI, Microsoft YaHei）
+   - 间距系统：基于 4px 基准（--space-1 到 --space-12）
+   - 圆角系统：--radius-sm/-/-lg/-xl/-full
+   - 阴影系统：--shadow-sm/-/-md/-lg/-xl
+
+2. **核心组件样式重构**：
+   - Header：紫色渐变背景 (#4f46e5 → #4338ca)
+   - Tabs：透明背景 + 紫色底部指示器
+   - Buttons：主按钮紫色、悬停阴影动画
+   - Toolbar：使用 CSS 变量
+
+3. **数据展示组件**：
+   - Table：白色卡片背景、圆角边框、悬停效果
+   - Stats Bar：统计数字紫色 (#4f46e5)
+   - Filter Panel：白色卡片背景、圆角边框
+
+4. **表单组件优化**：
+   - Input/Select：聚焦时紫色边框 + 阴影
+   - Modal：紫色头部背景、圆角边框、scaleIn 动画
+
+5. **动画增强**：
+   - 按钮悬停：translateY(-2px) + shadow
+   - 按钮点击：scale(0.98)
+   - 卡片悬浮：translateY(-4px) + shadow-lg
+   - 模态框：scaleIn 缩放淡入
+   - 尊重用户偏好：prefers-reduced-motion
+
+6. **app_constants.js 整合**：
+   - 颜色使用 CSS 变量 + 固定值兜底
+   - 修复 N/A 键名语法错误
+
+7. **样式迁移执行**：
+   - 从 index.html 移除 68 行冗余样式
+   - 添加状态徽章兼容映射（.status-* → .badge-*）
+   - 添加模态框兼容映射
+
+8. **Bug 修复**：
+   - BUG-076: design-system.css 无法加载（移动到 static/css/）
+   - BUG-077: app_constants.js JavaScript 语法错误（N/A 键名）
 
 ### v0.5.x 详细变更
 
