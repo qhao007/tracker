@@ -502,10 +502,13 @@ def main():
 
     args = parser.parse_args()
 
+    # 去掉版本号前缀的 'v'（支持 --version v0.8.3 和 --version 0.8.3 两种格式）
+    version = args.version.lstrip('v')
+
     print(f"\n{BOLD}{BLUE}{'=' * 60}{RESET}")
     print(f"{BOLD}{BLUE}Tracker 发布前准备脚本{RESET}")
     print(f"{BOLD}{BLUE}{'=' * 60}{RESET}")
-    print(f"\n版本: {args.version}")
+    print(f"\n版本: v{version}")
     print(f"模式: {'演练模式' if args.dry_run else '执行模式'}")
     print(f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
@@ -525,7 +528,7 @@ def main():
 
     # VERSION 更新
     if not args.skip_version:
-        results["version_update"] = update_version(args.version, args.dry_run)
+        results["version_update"] = update_version(version, args.dry_run)
     else:
         print_step(0, "跳过 VERSION 更新")
         print(YELLOW + "⚠️  已跳过 VERSION 更新" + RESET)
@@ -533,7 +536,7 @@ def main():
 
     results["git_status"] = check_git_status(args.dry_run)
 
-    results["merge_tag"] = merge_and_tag(args.version, args.dry_run)
+    results["merge_tag"] = merge_and_tag(version, args.dry_run)
 
     # 汇总结果
     print(f"\n{BOLD}{'=' * 60}{RESET}")
@@ -561,7 +564,7 @@ def main():
     if not all_passed:
         # 失败时执行回滚
         print(f"{RED}{BOLD}❌ 检查未通过，触发回滚{RESET}")
-        rollback_on_failure(args.version, results, repo_root)
+        rollback_on_failure(version, results, repo_root)
         print(f"\n发现问题:")
         for step, passed in results.items():
             if not passed:
@@ -580,7 +583,7 @@ def main():
     print(f"\n下一步操作:")
     if not args.dry_run:
         print(f"  cd /projects/management/tracker")
-        print(f"  python3 scripts/release.py --version {args.version} --force")
+        print(f"  python3 scripts/release.py --version v{version} --force")
     else:
         print(f"  [演练] 发布命令已准备")
     return 0
