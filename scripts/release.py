@@ -52,6 +52,90 @@ def get_version():
                     return line.split('=')[1].strip().strip('"\'')
     return f"v0.3.{datetime.now().strftime('%Y%m%d')}"
 
+def notify_success(version, release_dir):
+    """通知用户发布成功"""
+    import json
+    
+    message = f"""✅ Tracker 发布成功
+
+版本: v{version}
+发布目录: {release_dir}
+
+请验证服务正常运行。"""
+    
+    # 打印到控制台
+    print(f"\n{message}")
+    
+    # 发送飞书通知
+    webhook_url = "https://open.feishu.cn/open-apis/bot/v2/hook/00f0719c-89c0-4595-9c68-1bfd3a5de3d3"
+    
+    payload = {
+        "msg_type": "text",
+        "content": {
+            "text": message
+        }
+    }
+    
+    try:
+        result = subprocess.run(
+            ["curl", "-X", "POST", webhook_url, 
+             "-H", "Content-Type: application/json",
+             "-d", json.dumps(payload)],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0:
+            print("✅ 飞书通知已发送")
+        else:
+            print(f"⚠️ 飞书通知发送失败: {result.stderr}")
+    except Exception as e:
+        print(f"⚠️ 飞书通知发送异常: {e}")
+
+
+def check_release_ready(version):
+    """检查是否满足发布条件（flag 文件）"""
+    print("\n🔍 检查发布准备状态...")
+    
+    flag_file = os.path.join(TRACKER_DIR, '.release_ready')
+    
+    # 1. 检查 flag 文件是否存在
+    if not os.path.exists(flag_file):
+        print(f"   ❌ Flag 文件不存在: {flag_file}")
+        print(f"   提示: 请先执行 release_preparation.py")
+        return False
+    
+    # 2. 检查版本是否匹配
+    with open(flag_file, 'r') as f:
+        content = f.read()
+    
+    expected_version_line = f"VERSION={version}"
+    if expected_version_line not in content:
+        print(f"   ❌ 版本不匹配")
+        print(f"   Flag 内容: {content}")
+        return False
+    
+    # 3. 检查 main 分支是否是预期提交
+    current_commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=TRACKER_DIR, capture_output=True, text=True
+    ).stdout.strip()
+    
+    if "MAIN_COMMIT=" in content:
+        try:
+            expected_commit = content.split("MAIN_COMMIT=")[1].split("\n")[0]
+        except IndexError:
+            print(f"   ❌ Flag 文件格式错误: MAIN_COMMIT 解析失败")
+            return False
+        
+        if current_commit != expected_commit:
+            print(f"   ❌ main 分支提交不匹配")
+            print(f"   预期: {expected_commit}")
+            print(f"   实际: {current_commit}")
+            return False
+    
+    print(f"   ✅ Flag 检查通过")
+    return True
+
+
 def check_data_structure():
     """检查数据目录结构"""
     print("\n🔍 检查数据目录结构...")
@@ -76,7 +160,7 @@ def get_current_release_version():
         return version
     return None
 
-def create_release(src_dir, version, dry_run=False):
+def create_release(src_dir, version, dry_run=False, force=False):
     """创建发布版本"""
     release_dir = os.path.join(RELEASE_BASE, version)
     action = "演练" if dry_run else "发布"
@@ -95,7 +179,7 @@ def create_release(src_dir, version, dry_run=False):
     
     # 如果发布目录已存在，询问是否覆盖
     if os.path.exists(release_dir):
-        if not args.force:
+        if not force:
             confirm = input(f"\n⚠️  版本 {version} 已存在，是否覆盖? (y/N): ")
             if confirm.lower() != 'y':
                 print("已取消")
@@ -164,7 +248,7 @@ def update_systemd_service(version, dry_run=False):
     
     release_dir = os.path.join(RELEASE_BASE, version)
     service_content = f"""[Unit]
-Description=Chip Verification Tracker v0.3
+Description=Chip Verification Tracker {version}
 After=network.target
 
 [Service]
@@ -226,9 +310,9 @@ def restart_service(dry_run=False):
             print(f"   ⚠️  服务状态异常")
             return False
     else:
-        print(f"   ⚠️  服务 'tracker' 不存在")
+        print(f"   ❌ 服务 'tracker' 不存在")
         print(f"   💡 请先运行: sudo systemctl enable tracker")
-        return None
+        return False
 
 def generate_release_notes(version, release_dir, dry_run=False):
     """生成发布报告"""
@@ -406,7 +490,11 @@ def rollback(dry_run=False):
     # 更新软链接
     update_current_symlink(target_version)
     update_systemd_service(target_version)
-    restart_service()
+    
+    # 重启服务并检查状态
+    if not restart_service():
+        print(f"   ❌ 服务启动失败，回滚可能未成功")
+        return False
     
     print(f"\n✅ 已回滚到 {target_version}")
     return True
@@ -431,6 +519,11 @@ def main():
     
     # 获取版本号
     version = args.version or get_version()
+    
+    # 检查 flag 文件
+    if not check_release_ready(version):
+        print("\n❌ 未满足发布条件，请先执行 release_preparation.py")
+        return
     
     if args.rollback:
         # 回滚
@@ -469,7 +562,7 @@ def main():
     release_dir = os.path.join(RELEASE_BASE, version)
     
     # 1. 创建发布版本
-    create_release(src_dir, version)
+    create_release(src_dir, version, force=args.force)
     
     # 2. 更新 current 软链接
     update_current_symlink(version)
@@ -489,6 +582,25 @@ def main():
     print(f"\n📄 发布目录: {release_dir}")
     print(f"🔗 当前版本: {RELEASE_CURRENT}")
     print(f"📄 发布报告: {release_dir}/RELEASE_NOTES.md")
+    
+    # 发送成功通知
+    notify_success(version, release_dir)
+    
+    # 切换回 develop 分支
+    print("\n🔄 切换回 develop 分支...")
+    try:
+        subprocess.run(["git", "checkout", "develop"], cwd=TRACKER_DIR, check=True)
+        print("✅ 已切换到 develop 分支")
+        
+        # 删除 flag 文件
+        flag_file = os.path.join(TRACKER_DIR, '.release_ready')
+        if os.path.exists(flag_file):
+            os.remove(flag_file)
+            print("✅ Flag 文件已删除")
+    except subprocess.CalledProcessError as e:
+        print(f"⚠️  切换分支失败: {e}")
+        print("⚠️  请手动切换到 develop 分支并删除 flag 文件")
+        return  # 添加返回，避免继续执行
 
 if __name__ == '__main__':
     main()

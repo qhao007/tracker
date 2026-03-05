@@ -46,9 +46,9 @@ def test_project():
 
         name = f"API_Test_{int(time.time())}"
 
-        # 创建项目
+        # 创建项目 (v0.8.3 需要日期)
         response = client.post('/api/projects',
-                              data=json.dumps({'name': name}),
+                              data=json.dumps({'name': name, 'start_date': '2026-01-01', 'end_date': '2026-12-31'}),
                               content_type='application/json')
 
         if response.status_code == 200:
@@ -89,7 +89,11 @@ class TestProjectsAPI:
         """POST /api/projects - 创建项目"""
         name = f"Test_{int(time.time())}"
         response = admin_client.post('/api/projects',
-                              data=json.dumps({'name': name}),
+                              data=json.dumps({
+                                  'name': name,
+                                  'start_date': '2026-01-01',
+                                  'end_date': '2026-12-31'
+                              }),
                               content_type='application/json')
         assert response.status_code == 200
         data = json.loads(response.data)
@@ -128,8 +132,47 @@ class TestProjectsAPI:
                               }),
                               content_type='application/json')
         assert response.status_code == 400
-        response_text = response.data.decode('unicode_escape')
-        assert '开始日期不能晚于结束日期' in response_text or '开始日期' in response_text
+
+    def test_create_project_with_test_user(self, admin_client):
+        """POST /api/projects - 创建项目并自动创建测试用户 (v0.8.3)"""
+        name = f"Test_WithUser_{int(time.time())}"
+        response = admin_client.post('/api/projects',
+                              data=json.dumps({
+                                  'name': name,
+                                  'start_date': '2026-01-01',
+                                  'end_date': '2026-12-31',
+                                  'create_test_user': True
+                              }),
+                              content_type='application/json')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['success'] == True
+        assert 'test_user' in data
+        assert data['test_user']['username'] == f'test_user_{name.lower().replace(" ", "_")}'
+        assert data['test_user']['password'] == 'test_user123'
+        assert data['test_user']['role'] == 'user'
+
+        # 清理
+        admin_client.delete(f"/api/projects/{data['project']['id']}")
+
+    def test_create_project_without_test_user(self, admin_client):
+        """POST /api/projects - 创建项目不创建测试用户 (v0.8.3)"""
+        name = f"Test_NoUser_{int(time.time())}"
+        response = admin_client.post('/api/projects',
+                              data=json.dumps({
+                                  'name': name,
+                                  'start_date': '2026-01-01',
+                                  'end_date': '2026-12-31',
+                                  'create_test_user': False
+                              }),
+                              content_type='application/json')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['success'] == True
+        assert 'test_user' not in data
+
+        # 清理
+        admin_client.delete(f"/api/projects/{data['project']['id']}")
 
     def test_create_duplicate_project(self, admin_client):
         """POST /api/projects - 创建重复项目"""

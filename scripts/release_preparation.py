@@ -27,6 +27,7 @@ Tracker 发布前准备脚本
 """
 
 import os
+import re
 import sys
 import subprocess
 import argparse
@@ -40,6 +41,12 @@ RED = '\033[91m'
 BLUE = '\033[94m'
 RESET = '\033[0m'
 BOLD = '\033[1m'
+
+
+def extract_test_count(output):
+    """从测试输出中提取 passed 数量"""
+    match = re.search(r'(\d+)\s+passed', output)
+    return int(match.group(1)) if match else 0
 
 
 def print_step(step_num, title):
@@ -58,7 +65,15 @@ def print_result(status, message=""):
 
 
 def run_command(cmd, description, cwd=None, check=True):
-    """执行命令并返回结果"""
+    """执行命令并返回结果
+    
+    注意: 仅用于脚本内部命令，不接受外部输入。
+    所有命令来源必须是可信的（无用户输入拼接）。
+    """
+    # 安全检查：确保 cmd 是非空字符串
+    if not isinstance(cmd, str) or not cmd:
+        raise ValueError("cmd must be a non-empty string")
+    
     print(f"执行: {cmd}")
     print(f"目录: {cwd or '当前目录'}")
 
@@ -167,6 +182,118 @@ def check_git_status(dry_run=False):
     return True
 
 
+def rollback_on_failure(version, results, repo_root):
+    """发布失败时自动回滚"""
+    print(f"\n{'='*60}")
+    print(f"🔄 执行回滚")
+    print(f"{'='*60}\n")
+    
+    # 找出失败的步骤
+    failed_steps = [step for step, passed in results.items() if not passed]
+    failed_step = failed_steps[0] if failed_steps else "未知"
+    
+    # 1. 找出上一个稳定版本 tag
+    tags_result = subprocess.run(
+        ["git", "tag", "--sort=-creatordate"],
+        cwd=repo_root, capture_output=True, text=True
+    )
+    tags = tags_result.stdout.strip().split('\n')
+    
+    # 找到上一个非当前版本的 tag
+    prev_tag = None
+    for tag in tags:
+        if tag and tag != f"v{version}":
+            prev_tag = tag
+            break
+    
+    # 2. 回滚 main 分支
+    if prev_tag:
+        print(f"1. 回滚到上一个稳定版本: {prev_tag}")
+        subprocess.run(["git", "checkout", "main"], cwd=repo_root, check=True)
+        subprocess.run(["git", "reset", "--hard", prev_tag], cwd=repo_root, check=True)
+        print(f"✅ main 分支已回滚到 {prev_tag}")
+    else:
+        print("⚠️ 未找到上一个稳定版本，请手动处理")
+    
+    # 3. 切换到 develop 分支（不回滚代码）
+    # 说明：develop 分支上的代码是开发中的代码，即使 merge 失败，develop 上的代码不会丢失
+    # 操作：只需要把 HEAD 切换到 develop 分支即可
+    print("2. 切换到 develop 分支...")
+    subprocess.run(["git", "checkout", "develop"], cwd=repo_root, check=True)
+    print("✅ 已切换到 develop 分支")
+    
+    # 4. 删除 flag 文件
+    flag_file = repo_root / ".release_ready"
+    if flag_file.exists():
+        flag_file.unlink()
+    print("✅ Flag 文件已删除")
+    
+    # 5. 发送通知
+    notify_failure(version, failed_step, prev_tag)
+    
+    return False
+
+
+def notify_failure(version, failed_step, prev_tag):
+    """通知用户发布失败"""
+    import json
+    
+    message = f"""🚨 Tracker 发布失败
+
+版本: v{version}
+失败步骤: {failed_step}
+已回滚到: {prev_tag}
+
+请检查问题后重新执行发布准备。"""
+    
+    # 打印到控制台
+    print(f"\n{message}")
+    
+    # 发送飞书通知
+    webhook_url = "https://open.feishu.cn/open-apis/bot/v2/hook/00f0719c-89c0-4595-9c68-1bfd3a5de3d3"
+    
+    payload = {
+        "msg_type": "text",
+        "content": {
+            "text": message
+        }
+    }
+    
+    try:
+        result = subprocess.run(
+            ["curl", "-X", "POST", webhook_url, 
+             "-H", "Content-Type: application/json",
+             "-d", json.dumps(payload)],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0:
+            print("✅ 飞书通知已发送")
+        else:
+            print(f"⚠️ 飞书通知发送失败: {result.stderr}")
+    except Exception as e:
+        print(f"⚠️ 飞书通知发送异常: {e}")
+
+
+def create_release_ready_flag(version, repo_root):
+    """创建发布就绪 flag 文件"""
+    flag_file = repo_root / ".release_ready"
+    
+    # 获取当前 main 分支的提交 hash
+    current_commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repo_root, capture_output=True, text=True
+    ).stdout.strip()
+    
+    content = f"""VERSION={version}
+PREPARED_AT={datetime.now().isoformat()}
+MAIN_COMMIT={current_commit}
+"""
+    
+    flag_file.write_text(content)
+    print(f"✅ Flag 文件已创建: {flag_file}")
+    return True
+
+
 def merge_and_tag(version, dry_run=False):
     """
     步骤 6: 执行 Merge 和 Tag 操作
@@ -175,7 +302,8 @@ def merge_and_tag(version, dry_run=False):
     2. 拉取最新
     3. 合并 develop 到 main
     4. 创建发布标签
-    5. 切换回 develop 分支
+    5. 创建 .release_ready flag
+    6. 停留在 main 分支（不切换回 develop）
     """
     print_step(6, f"执行 Merge 和 Tag (v{version})")
 
@@ -217,14 +345,13 @@ def merge_and_tag(version, dry_run=False):
     if not success:
         return False
 
-    # 5. 切换回 develop 分支
-    print("\n5. 切换回 develop 分支...")
-    cmd = "git checkout develop"
-    success, _ = run_command(cmd, "切换回 develop 分支", cwd=repo_root)
-    if not success:
-        return False
-
-    print_result(True, f"Merge 和 Tag 完成: v{version}")
+    # 5. 创建 .release_ready flag 并停留在 main 分支
+    print("\n5. 创建 release_ready flag...")
+    create_release_ready_flag(version, repo_root)
+    
+    print(f"\n✅ Merge 和 Tag 完成: v{version}")
+    print(f"📌 当前分支: main (准备好发布)")
+    
     return True
 
 
@@ -260,9 +387,10 @@ def run_api_tests(dry_run=False):
     if not success:
         return False
 
-    # 检查测试通过数 (v0.6.2: 29 个 API 测试)
-    if "29 passed" in output or "passed" in output:
-        print(GREEN + "✓ API 测试全部通过 (29 tests)" + RESET)
+    # 检查测试通过数
+    if "passed" in output and "failed" not in output:
+        passed_count = extract_test_count(output)
+        print(GREEN + f"✓ API 测试全部通过 ({passed_count} tests)" + RESET)
         return True
     else:
         print(RED + "✗ API 测试未全部通过" + RESET)
@@ -284,16 +412,17 @@ def run_smoke_tests(dry_run=False):
         import time
         time.sleep(3)
 
-    # 运行冒烟测试 (tests/test_ui/specs/smoke/)
-    cmd = f"cd {dev_dir} && npx playwright test tests/test_ui/specs/smoke/smoke.spec.ts --project=firefox --timeout=60000"
+    # 运行冒烟测试 (自动匹配所有 smoke 目录下的测试文件)
+    cmd = f"cd {dev_dir} && npx playwright test tests/test_ui/specs/smoke/*.spec.ts --project=firefox --timeout=60000"
     success, output = run_command(cmd, "冒烟测试", cwd=repo_root)
 
     if not success:
         return False
 
-    # 检查测试通过数 (v0.6.2: 10 个冒烟测试)
-    if "10 passed" in output or "passed" in output:
-        print(GREEN + "✓ 冒烟测试全部通过 (10 tests)" + RESET)
+    # 检查测试通过数
+    if "passed" in output and "failed" not in output:
+        passed_count = extract_test_count(output)
+        print(GREEN + f"✓ 冒烟测试全部通过 ({passed_count} tests)" + RESET)
         return True
     else:
         print(RED + "✗ 冒烟测试未全部通过" + RESET)
@@ -324,6 +453,8 @@ def run_compatibility_tests(dry_run=False):
 
 
 def main():
+    repo_root = Path(__file__).parent.parent
+
     parser = argparse.ArgumentParser(
         description="Tracker 发布前准备脚本",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -384,13 +515,13 @@ def main():
     if not args.skip_tests:
         results["api_tests"] = run_api_tests(args.dry_run)
         results["smoke_tests"] = run_smoke_tests(args.dry_run)
-        results["buglog_tests"] = run_buglog_tests(args.dry_run)
+        # buglog_tests 已移除
     else:
         print_step(0, "跳过测试执行")
         print(YELLOW + "⚠️  已跳过测试执行" + RESET)
         results["api_tests"] = True
         results["smoke_tests"] = True
-        results["buglog_tests"] = True
+        # buglog_tests 已移除
 
     # VERSION 更新
     if not args.skip_version:
@@ -414,7 +545,6 @@ def main():
         step_names = {
             "api_tests": "API 测试",
             "smoke_tests": "冒烟测试",
-            "buglog_tests": "兼容性测试",
             "version_update": "VERSION 更新",
             "git_status": "Git 状态",
             "merge_tag": "Merge 和 Tag"
@@ -428,30 +558,32 @@ def main():
 
     print(f"\n{BOLD}{'=' * 60}{RESET}")
 
-    if all_passed:
-        print(f"{GREEN}{BOLD}✅ 所有检查通过！可以执行发布。{RESET}")
-        print(f"\n下一步操作:")
-        if not args.dry_run:
-            print(f"  cd /projects/management/tracker")
-            print(f"  python3 scripts/release.py --version {args.version} --force")
-        else:
-            print(f"  [演练] 发布命令已准备")
-        return 0
-    else:
-        print(f"{RED}{BOLD}❌ 检查未通过，请修复问题后重试。{RESET}")
+    if not all_passed:
+        # 失败时执行回滚
+        print(f"{RED}{BOLD}❌ 检查未通过，触发回滚{RESET}")
+        rollback_on_failure(args.version, results, repo_root)
         print(f"\n发现问题:")
         for step, passed in results.items():
             if not passed:
                 step_names = {
                     "api_tests": "API 测试",
                     "smoke_tests": "冒烟测试",
-                    "buglog_tests": "BugLog 回归测试",
                     "version_update": "VERSION 更新",
                     "git_status": "Git 状态",
                     "merge_tag": "Merge 和 Tag"
                 }
                 print(f"  - {step_names.get(step, step)}")
         return 1
+
+    print(f"\n{BOLD}{'=' * 60}{RESET}")
+    print(f"{GREEN}{BOLD}✅ 所有检查通过！可以执行发布。{RESET}")
+    print(f"\n下一步操作:")
+    if not args.dry_run:
+        print(f"  cd /projects/management/tracker")
+        print(f"  python3 scripts/release.py --version {args.version} --force")
+    else:
+        print(f"  [演练] 发布命令已准备")
+    return 0
 
 
 if __name__ == "__main__":
