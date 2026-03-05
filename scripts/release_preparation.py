@@ -194,8 +194,8 @@ def rollback_on_failure(version, results, repo_root):
     # 2. 回滚 main 分支
     if prev_tag:
         print(f"1. 回滚到上一个稳定版本: {prev_tag}")
-        subprocess.run(["git", "checkout", "main"], cwd=repo_root)
-        subprocess.run(["git", "reset", "--hard", prev_tag], cwd=repo_root)
+        subprocess.run(["git", "checkout", "main"], cwd=repo_root, check=True)
+        subprocess.run(["git", "reset", "--hard", prev_tag], cwd=repo_root, check=True)
         print(f"✅ main 分支已回滚到 {prev_tag}")
     else:
         print("⚠️ 未找到上一个稳定版本，请手动处理")
@@ -204,7 +204,7 @@ def rollback_on_failure(version, results, repo_root):
     # 说明：develop 分支上的代码是开发中的代码，即使 merge 失败，develop 上的代码不会丢失
     # 操作：只需要把 HEAD 切换到 develop 分支即可
     print("2. 切换到 develop 分支...")
-    subprocess.run(["git", "checkout", "develop"], cwd=repo_root)
+    subprocess.run(["git", "checkout", "develop"], cwd=repo_root, check=True)
     print("✅ 已切换到 develop 分支")
     
     # 4. 删除 flag 文件
