@@ -697,14 +697,23 @@
             
             // 根据角色控制导入/导出/批量操作按钮（guest 禁止使用）
             const isGuest = currentUser.role === 'guest';
+            const isAdmin = currentUser.role === 'admin';
+            
+            // 导入/导出按钮：guest 禁止，user 和 admin 可用
             const writeButtons = ['btnImportCP', 'btnExportCP', 'btnImportTC', 'btnExportTC', 
-                                 'btnBatchStatus', 'btnBatchTargetDate', 'btnBatchDvMilestone', 'backupBtn'];
+                                 'btnBatchStatus', 'btnBatchTargetDate', 'btnBatchDvMilestone'];
             writeButtons.forEach(id => {
                 const btn = document.getElementById(id);
                 if (btn) {
                     btn.style.display = isGuest ? 'none' : 'inline-block';
                 }
             });
+            
+            // 备份按钮：只有 admin 可用
+            const backupBtn = document.getElementById('backupBtn');
+            if (backupBtn) {
+                backupBtn.style.display = isAdmin ? 'inline-block' : 'none';
+            }
         }
         
         function updateUIForLoggedOut() {
