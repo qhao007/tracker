@@ -2081,3 +2081,75 @@ def list_archives():
 - guest 用户登录后备份按钮不可见 ✅
 - 普通用户登录后备份按钮不可见 ✅
 - admin 用户登录后备份按钮可见 ✅
+
+---
+
+## BUG-079: CSV导入Priority字段丢失
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-06 |
+| **报告人** | Howard |
+| **修复日期** | 2026-03-06 |
+| **修复人** | 小栗子 |
+| **影响版本** | v0.9.0 |
+
+**描述**: 通过 CSV 导入 CP 数据时，Priority 字段没有被正确导入，所有 CP 的 priority 都被设置为默认值 "P0"，无论 CSV 文件中指定的值是什么。
+
+**复现步骤**:
+1. 准备包含 Priority 列的 CSV 文件（如 Feature,Sub-Feature,Cover Point,Cover Point Details,Priority,Comments）
+2. CSV 中部分 CP 的 Priority 设置为 P1 或 P2
+3. 使用 API 导入 CSV 到测试项目
+4. 检查导入后的 CP，发现所有 CP 的 priority 都是 P0
+
+**根本原因**: 
+`import_cp` 函数中存在两个问题：
+1. **Priority 字段被忽略** - 代码没有读取 CSV 中的 Priority 列
+2. **Priority 硬编码为 "P0"** - INSERT 语句中 priority 参数写死了 "P0"
+3. **Comments 列索引错误** - 由于 Priority 列未被处理，Comments 读取位置错误（使用了 Priority 列的索引）
+
+**修复方案**:
+
+修改 `dev/app/api.py` 中的 `import_cp` 函数：
+
+CSV 导入部分 (约第2555行)：
+```python
+# 添加 Priority 字段读取
+priority = (
+    row[header_map.get("Priority", 5)]
+    if header_map.get("Priority", 5) < len(row)
+    else "P0"
+)
+# 验证 Priority 值合法性
+if priority not in ["P0", "P1", "P2"]:
+    priority = "P0"
+
+# 修正 Comments 列索引 (从4改为6)
+comments = (
+    row[header_map.get("Comments", 6)]
+    if header_map.get("Comments", 6) < len(row)
+    else ""
+)
+```
+
+Excel 导入部分 (约第2610行)：
+```python
+# 添加 Priority 字段读取
+priority_cell = ws.cell(row_idx, header_map.get("Priority", 0) + 1).value
+priority = priority_cell if priority_cell in ["P0", "P1", "P2"] else "P0"
+```
+
+然后将 INSERT 语句中的 `priority` 参数从硬编码的 `"P0"` 改为变量 `priority`。
+
+**影响范围**:
+- `dev/app/api.py` 第 2555-2575 行：CSV 导入逻辑
+- `dev/app/api.py` 第 2610-2625 行：Excel 导入逻辑
+
+**验证**: 
+- 修复后重新导入包含 Priority 的 CSV 文件，P0/P1/P2 正确导入 ✅
+- API 测试通过 (206/206) ✅
+
+**相关文档**:
+- 迁移指南: `docs/MANUALS/Tracker_API_Migration_Guide_v1.0.md`

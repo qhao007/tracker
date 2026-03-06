@@ -2553,9 +2553,18 @@ def import_cp(project, ws, headers, is_csv=False, csv_data=None):
                     if header_map.get("Cover Point Details", 3) < len(row)
                     else ""
                 )
+                # Priority 字段 (v0.9.0 修复)
+                priority = (
+                    row[header_map.get("Priority", 5)]
+                    if header_map.get("Priority", 5) < len(row)
+                    else "P0"
+                )
+                # 验证 Priority 值合法性
+                if priority not in ["P0", "P1", "P2"]:
+                    priority = "P0"
                 comments = (
-                    row[header_map.get("Comments", 4)]
-                    if header_map.get("Comments", 4) < len(row)
+                    row[header_map.get("Comments", 6)]
+                    if header_map.get("Comments", 6) < len(row)
                     else ""
                 )
 
@@ -2571,7 +2580,7 @@ def import_cp(project, ws, headers, is_csv=False, csv_data=None):
                         cover_point,
                         cover_point_details,
                         comments,
-                        "P0",
+                        priority,
                         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     ),
                 )
@@ -2601,6 +2610,9 @@ def import_cp(project, ws, headers, is_csv=False, csv_data=None):
                 cover_point_details = (
                     ws.cell(row_idx, header_map.get("Cover Point Details", 0) + 1).value or ""
                 )
+                # Priority 字段 (v0.9.0 修复)
+                priority_cell = ws.cell(row_idx, header_map.get("Priority", 0) + 1).value
+                priority = priority_cell if priority_cell in ["P0", "P1", "P2"] else "P0"
                 comments = ws.cell(row_idx, header_map.get("Comments", 0) + 1).value or ""
 
                 cursor.execute(
@@ -2615,7 +2627,7 @@ def import_cp(project, ws, headers, is_csv=False, csv_data=None):
                         cover_point,
                         cover_point_details,
                         comments,
-                        "P0",
+                        priority,
                         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     ),
                 )
