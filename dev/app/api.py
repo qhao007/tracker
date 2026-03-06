@@ -151,12 +151,13 @@ def init_project_db(project_name):
         )
     """)
 
-    # 创建关联表
+    # 创建关联表 (兼容两种结构: 旧版自增ID / 新版复合主键)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS tc_cp_connections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             tc_id INTEGER,
             cp_id INTEGER,
-            PRIMARY KEY (tc_id, cp_id)
+            UNIQUE(tc_id, cp_id)
         )
     """)
 
@@ -2378,7 +2379,7 @@ def get_import_template():
         # CP 模板
         headers = ["Feature", "Sub-Feature", "Cover Point", "Cover Point Details", "Comments"]
         ws.append(headers)
-    else:
+    elif template_type == "tc":
         # TC 模板
         headers = [
             "TestBench",
@@ -2391,6 +2392,12 @@ def get_import_template():
             "Comments",
         ]
         ws.append(headers)
+    elif template_type == "connection":
+        # TC-CP 关联导入模板
+        headers = ["Test Case", "Cover Point"]
+        ws.append(headers)
+    else:
+        return jsonify({"error": "无效的模板类型"}), 400
 
     # 设置表头样式
     for cell in ws[1]:
@@ -2855,17 +2862,21 @@ def import_connections(project, ws, headers, is_csv=False, csv_data=None):
     
     for row_idx, row in enumerate(data_rows, start=2):
         try:
-            tc_name = (
-                row[header_map.get("Test Case", 0)]
-                if header_map.get("Test Case", 0) < len(row)
-                else ""
-            ).strip() if row[header_map.get("Test Case", 0)] else ""
+            # 安全获取 TC 名称 (兼容空值和 None)
+            tc_idx = header_map.get("Test Case", 0)
+            tc_name = ""
+            if tc_idx < len(row):
+                tc_val = row[tc_idx]
+                if tc_val is not None:
+                    tc_name = str(tc_val).strip()
             
-            cp_name = (
-                row[header_map.get("Cover Point", 1)]
-                if header_map.get("Cover Point", 1) < len(row)
-                else ""
-            ).strip() if row[header_map.get("Cover Point", 1)] else ""
+            # 安全获取 CP 名称 (兼容空值和 None)
+            cp_idx = header_map.get("Cover Point", 1)
+            cp_name = ""
+            if cp_idx < len(row):
+                cp_val = row[cp_idx]
+                if cp_val is not None:
+                    cp_name = str(cp_val).strip()
             
             if not tc_name or not cp_name:
                 errors.append(f"第{row_idx}行: TC 或 CP 名称为空")
