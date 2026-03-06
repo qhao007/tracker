@@ -2434,7 +2434,7 @@ def import_data():
     if not project_id or not import_type or not file_data:
         return jsonify({"error": "缺少必要参数"}), 400
 
-    if import_type not in ["cp", "tc"]:
+    if import_type not in ["cp", "tc", "connection"]:
         return jsonify({"error": "无效的导入类型"}), 400
 
     projects = load_projects()
@@ -2489,8 +2489,10 @@ def import_data():
 
         if import_type == "cp":
             return import_cp(project, ws if not is_csv else None, headers, is_csv, csv_data)
-        else:
+        elif import_type == "tc":
             return import_tc(project, ws if not is_csv else None, headers, is_csv, csv_data)
+        else:
+            return import_connections(project, ws if not is_csv else None, headers, is_csv, csv_data)
 
     except Exception as e:
         return jsonify({"error": f"导入失败: {str(e)}"}), 400
@@ -2810,6 +2812,114 @@ def import_tc(project, ws, headers, is_csv=False, csv_data=None):
         conn.commit()
 
     return jsonify({"success": True, "imported": imported, "failed": len(errors), "errors": errors})
+
+
+def import_connections(project, ws, headers, is_csv=False, csv_data=None):
+    """导入 TC-CP 关联 (v0.9.1 新增)
+    
+    CSV 格式:
+    Test Case,Cover Point
+    TC名称1,CP名称1
+    TC名称2,CP名称2
+    
+    支持多对多关联：一个 TC 可以关联多个 CP，一个 CP 可以被多个 TC 关联
+    """
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
+    
+    # 解析表头
+    header_map = {}
+    for idx, header in enumerate(headers):
+        if header:
+            header_map[header.strip()] = idx
+    
+    # 必填字段
+    required_fields = ["Test Case", "Cover Point"]
+    for field in required_fields:
+        if field not in header_map:
+            return jsonify({"error": f"缺少必填字段: {field}"}), 400
+    
+    imported = 0
+    skipped = 0
+    errors = []
+    
+    # 获取数据行
+    if is_csv and csv_data:
+        data_rows = csv_data[1:]  # 跳过 header
+    else:
+        # Excel 格式
+        data_rows = []
+        for row_idx in range(2, ws.max_row + 1):
+            row = [ws.cell(row_idx, col_idx + 1).value for col_idx in range(len(headers))]
+            data_rows.append(row)
+    
+    for row_idx, row in enumerate(data_rows, start=2):
+        try:
+            tc_name = (
+                row[header_map.get("Test Case", 0)]
+                if header_map.get("Test Case", 0) < len(row)
+                else ""
+            ).strip() if row[header_map.get("Test Case", 0)] else ""
+            
+            cp_name = (
+                row[header_map.get("Cover Point", 1)]
+                if header_map.get("Cover Point", 1) < len(row)
+                else ""
+            ).strip() if row[header_map.get("Cover Point", 1)] else ""
+            
+            if not tc_name or not cp_name:
+                errors.append(f"第{row_idx}行: TC 或 CP 名称为空")
+                continue
+            
+            # 查询 TC ID
+            cursor.execute(
+                "SELECT id FROM test_case WHERE test_name = ?", (tc_name,)
+            )
+            tc_result = cursor.fetchone()
+            if not tc_result:
+                errors.append(f"第{row_idx}行: TC '{tc_name}' 不存在")
+                continue
+            tc_id = tc_result["id"]
+            
+            # 查询 CP ID
+            cursor.execute(
+                "SELECT id FROM cover_point WHERE cover_point = ?", (cp_name,)
+            )
+            cp_result = cursor.fetchone()
+            if not cp_result:
+                errors.append(f"第{row_idx}行: CP '{cp_name}' 不存在")
+                continue
+            cp_id = cp_result["id"]
+            
+            # 检查关联是否已存在
+            cursor.execute(
+                "SELECT 1 FROM tc_cp_connections WHERE tc_id = ? AND cp_id = ?",
+                (tc_id, cp_id)
+            )
+            if cursor.fetchone():
+                skipped += 1
+                continue
+            
+            # 插入关联
+            cursor.execute(
+                "INSERT INTO tc_cp_connections (tc_id, cp_id) VALUES (?, ?)",
+                (tc_id, cp_id)
+            )
+            imported += 1
+            
+        except Exception as e:
+            errors.append(f"第{row_idx}行: {str(e)}")
+    
+    if imported > 0:
+        conn.commit()
+    
+    return jsonify({
+        "success": True,
+        "imported": imported,
+        "skipped": skipped,
+        "failed": len(errors),
+        "errors": errors
+    })
 
 
 @api.route("/api/export", methods=["GET"])
