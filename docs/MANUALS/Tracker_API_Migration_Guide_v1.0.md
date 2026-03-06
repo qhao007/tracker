@@ -910,6 +910,11 @@ curl "http://localhost:8081/api/import/template?type=cp" \
 curl "http://localhost:8081/api/import/template?type=tc" \
   -b cookies.txt \
   -o tc_template.xlsx
+
+# 下载 TC-CP 关联导入模板 (v0.9.1+)
+curl "http://localhost:8081/api/import/template?type=connection" \
+  -b cookies.txt \
+  -o connection_template.xlsx
 ```
 
 ---
@@ -1129,6 +1134,14 @@ if __name__ == "__main__":
   "errors": []
 }
 ```
+
+**字段说明**：
+| 字段 | 说明 |
+|------|------|
+| imported | 新增关联数量 |
+| skipped | 跳过数量（已存在的关联） |
+| failed | 失败数量 |
+| errors | 错误详情列表 |
 
 ### 8.4.6 常见错误
 
