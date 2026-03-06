@@ -17,6 +17,10 @@
 6. [批量操作与脚本](#6-批量操作与脚本)
 7. [CSV标准模板](#7-csv标准模板)
 8. [迁移验证](#8-迁移验证)
+   - [8.1 统计数据校验](#81-统计数据校验)
+   - [8.2 数据完整性检查脚本](#82-数据完整性检查脚本)
+   - [8.3 常见校验问题](#83-常见校验问题)
+   - [8.4 TC-CP 关联导入](#84-tc-cp-关联导入-v091-新增)
 9. [附录](#9-附录)
 
 ---
@@ -1022,6 +1026,117 @@ python3 verify.py 5 10 20
 | TC 数量不匹配 | CSV 中有重复 Test Name | 检查 CSV 去重 |
 | 未关联 CP | TC 创建时未指定 connections | 使用 PUT /api/tc 更新关联 |
 | 覆盖率显示 0/0 | TC 状态非 PASS | 更新 TC 状态为 PASS |
+
+---
+
+## 8.4 TC-CP 关联导入 (v0.9.1 新增)
+
+### 8.4.1 功能说明
+
+导入 TC 和 CP 后，可以使用关联导入功能建立它们之间的映射关系。
+
+**支持场景**：
+- **一对多**：一个 TC 关联多个 CP
+- **多对一**：多个 TC 关联同一个 CP
+- **多对多**：组合场景
+
+### 8.4.2 CSV 格式
+
+```csv
+Test Case,Cover Point
+TC名称1,CP名称1
+TC名称1,CP名称2
+TC名称2,CP名称1
+```
+
+| 列 | 必填 | 说明 |
+|----|------|------|
+| Test Case | ✅ | TC 名称（必须已存在于项目中） |
+| Cover Point | ✅ | CP 名称（必须已存在于项目中） |
+
+### 8.4.3 API 调用
+
+```bash
+# 导入关联
+curl -X POST "http://localhost:8081/api/import" \
+  -H "Content-Type: application/json" \
+  -b cookies.txt \
+  -d '{
+    "project_id": 5,
+    "type": "connection",
+    "file_data": "<base64编码的CSV内容>"
+  }'
+```
+
+**参数说明**：
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| project_id | int | 项目 ID |
+| type | string | 固定为 "connection" |
+| file_data | string | Base64 编码的 CSV 内容 |
+
+### 8.4.4 Python 脚本
+
+```python
+#!/usr/bin/env python3
+"""TC-CP 关联导入脚本"""
+import base64
+import requests
+
+BASE_URL = "http://localhost:8081"
+
+def import_connections(project_id, csv_file, cookies):
+    """导入 TC-CP 关联"""
+    with open(csv_file, "r", encoding="utf-8") as f:
+        csv_content = f.read()
+    
+    file_data = base64.b64encode(csv_content.encode("utf-8")).decode("utf-8")
+    
+    resp = requests.post(
+        f"{BASE_URL}/api/import",
+        json={
+            "project_id": project_id,
+            "type": "connection",
+            "file_data": file_data
+        },
+        cookies=cookies
+    )
+    
+    return resp.json()
+
+if __name__ == "__main__":
+    with open("cookies.txt", "r") as f:
+        cookies = {}
+        for line in f:
+            parts = line.strip().split("\t")
+            if len(parts) == 2:
+                cookies[parts[0]] = parts[1]
+    
+    result = import_connections(5, "TC_CP_Connection.csv", cookies)
+    print(f"成功: {result.get('imported')}")
+    print(f"跳过: {result.get('skipped')}")
+    print(f"失败: {result.get('failed')}")
+```
+
+### 8.4.5 响应示例
+
+```json
+{
+  "success": true,
+  "imported": 10,
+  "skipped": 2,
+  "failed": 0,
+  "errors": []
+}
+```
+
+### 8.4.6 常见错误
+
+| 错误信息 | 原因 | 解决方案 |
+|----------|------|----------|
+| TC 'xxx' 不存在 | CSV 中的 TC 名称在项目中不存在 | 先导入 TC 数据 |
+| CP 'xxx' 不存在 | CSV 中的 CP 名称在项目中不存在 | 先导入 CP 数据 |
+| 关联已存在 | 该 TC-CP 关联已经建立 | 跳过，不影响 |
 
 ---
 
