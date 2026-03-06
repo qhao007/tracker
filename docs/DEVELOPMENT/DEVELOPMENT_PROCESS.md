@@ -83,7 +83,30 @@
 
 ## 2. Git 分支管理
 
-> **注意**: 本项目使用本地仓库管理版本，**不需要推送远程仓库**。所有版本通过 release.py 发布到 /release/tracker/ 目录。
+> **注意**: 本项目已配置远程仓库，所有代码变更需要推送到远程仓库进行备份和协作。
+
+### 2.1 远程仓库配置
+
+| 配置项 | 值 |
+|--------|-----|
+| **仓库地址** | `git@github.com:qhao007/tracker.git` |
+| **分支** | `main` (稳定版), `develop` (开发版) |
+
+#### 2.1.1 首次配置
+
+```bash
+# 添加远程仓库（如果未配置）
+cd /projects/management/tracker
+git remote add origin git@github.com:qhao007/tracker.git
+
+# 推送现有分支
+git push --set-upstream origin develop
+git push --set-upstream origin main
+
+# 后续推送
+git push origin develop
+git push origin main
+```
 
 ### 2.1 分支结构
 
@@ -830,6 +853,11 @@ journalctl -u tracker -n 50
 ### Git 命令速查
 
 ```bash
+# 远程仓库配置
+git remote -v                              # 查看远程仓库
+git remote add origin git@github.com:xxx  # 添加远程仓库
+git remote set-url origin git@xxx         # 更新远程仓库地址
+
 # 分支操作
 git branch -a              # 查看所有分支
 git checkout develop       # 切换到 develop
@@ -839,7 +867,14 @@ git branch -d feature/xxx  # 删除分支
 # 代码提交
 git add .
 git commit -m "feat: xxx"
-git push origin develop
+
+# 推送（推送到远程仓库）
+git push origin develop              # 推送到 develop 分支
+git push origin main                # 推送到 main 分支
+git push --set-upstream origin develop  # 首次推送并设置上游
+
+# 拉取
+git pull origin develop             # 拉取 develop 分支
 
 # 标签操作
 git tag -a v0.4.0 -m "Release v0.4.0"
@@ -879,12 +914,19 @@ curl -s http://localhost:8081/api/version
 
 ---
 
-**文档版本**: v1.8  
-**最后更新**: 2026-03-03
+**文档版本**: v1.9  
+**最后更新**: 2026-03-06
 
 ---
 
 ## 更新日志
+
+### 2026-03-06
+
+- 新增远程仓库配置 (2.1 远程仓库配置)
+- 添加 Git 推送命令到日常开发流程
+- 更新 Git 命令速查（附录A），添加远程仓库操作
+**维护者**: 小栗子 🌰
 
 ### 2026-03-03
 
