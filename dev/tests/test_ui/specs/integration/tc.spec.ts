@@ -22,7 +22,7 @@ test.describe('TC 集成测试', () => {
    * 登录辅助函数 - v0.7.1 需要登录
    */
   async function loginAsAdmin(page: any) {
-    await page.goto(BASE_URL);
+    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
 
     // 检查是否需要登录
@@ -52,6 +52,14 @@ test.describe('TC 集成测试', () => {
     await page.click('button.header-btn:has-text("📁 项目")');
     await page.waitForSelector('#projectModal', { state: 'visible', timeout: 10000 });
     await page.fill('#newProjectName', projectName);
+    // 填写日期（必填字段）
+    const today = new Date();
+    const nextMonth = new Date(today);
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    const startDate = today.toISOString().split('T')[0];
+    const endDate = nextMonth.toISOString().split('T')[0];
+    await page.fill('#newProjectStartDate', startDate);
+    await page.fill('#newProjectEndDate', endDate);
     await page.click('#projectModal button:has-text("创建")');
     // 等待模态框关闭
     await page.waitForSelector('#projectModal', { state: 'hidden', timeout: 10000 });
@@ -72,7 +80,7 @@ test.describe('TC 集成测试', () => {
    * 刷新页面并恢复项目选择和标签页
    */
   async function reloadWithProject(page: any, projectName: string) {
-    await page.reload();
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#projectSelector', { timeout: 10000 });
     await page.selectOption('#projectSelector', { label: projectName });
     await page.waitForTimeout(500);
@@ -496,7 +504,7 @@ test.describe('TC 集成测试', () => {
 test.describe('TC 集成测试 - 数据一致性', () => {
   
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:8081');
+    await page.goto('http://localhost:8081', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
     await page.waitForSelector('#projectSelector', { timeout: 10000 });
   });
@@ -538,7 +546,7 @@ test.describe('TC 集成测试 - 数据一致性', () => {
     await page.waitForTimeout(1000);
     
     // 2. 刷新页面 - 需要处理session丢失
-    await page.reload();
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
 
     // 等待登录状态检查完成 - 检查loginOverlay是否消失或userInfo出现

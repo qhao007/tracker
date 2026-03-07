@@ -91,22 +91,39 @@ cd /projects/management/tracker/dev
 npx playwright test tests/test_ui/specs/smoke/smoke.spec.ts --project=firefox --timeout=60000
 ```
 
-**冒烟用例清单**:
+**冒烟用例清单** (共 20 个):
+
+##### 01-smoke.spec.ts (14 个用例)
 
 | 用例 ID | 说明 |
 |---------|------|
 | SMOKE-001 | 页面加载 |
-| SMOKE-002 | 项目切换 |
-| SMOKE-003 | CP 标签切换 |
-| SMOKE-004 | TC 标签切换 |
-| SMOKE-005 | 创建并验证项目 |
-| SMOKE-006 | CP 页面元素 |
-| SMOKE-007 | TC 页面元素 |
-| SMOKE-008 | 项目数据统计 |
-| SMOKE-009 | 模态框打开关闭 |
-| SMOKE-010 | CP 模态框打开关闭 |
+| SMOKE-002 | admin 登录成功 |
+| SMOKE-003 | guest 登录成功 |
+| SMOKE-004 | 错误密码提示 |
+| SMOKE-005 | 项目切换 |
+| SMOKE-006 | 创建项目 |
+| SMOKE-007 | CP 标签切换 |
+| SMOKE-008 | 创建 CP |
+| SMOKE-009 | 编辑 CP |
+| SMOKE-010 | 删除 CP |
+| SMOKE-011 | TC 标签切换 |
+| SMOKE-012 | 创建 TC |
+| SMOKE-013 | 编辑 TC |
+| SMOKE-014 | 删除 TC |
 
-**通过标准**: 10/10 用例通过
+##### 02-login.spec.ts (6 个用例)
+
+| 用例 ID | 说明 |
+|---------|------|
+| LOGIN-001 | 登录后显示用户名 |
+| LOGIN-002 | guest 无用户管理按钮 |
+| LOGIN-003 | user 无删除项目按钮 |
+| LOGIN-004 | 登录后 Cookie |
+| LOGIN-005 | 登出功能 |
+| LOGIN-006 | Progress Charts Tab |
+
+**通过标准**: 20/20 用例通过
 
 ---
 
@@ -140,7 +157,7 @@ PYTHONPATH=. pytest tests/test_api/ -v --tb=short
 
 > **注意**：合并到 develop 分支时**不使用** `--reruns` 参数，确保测试真正稳定。如果需要重试才能通过的测试，必须修复根因。
 
-**测试用例数量**: 130+ 个
+**测试用例数量**: 207 个
 
 **测试用例清单**:
 
@@ -156,8 +173,11 @@ PYTHONPATH=. pytest tests/test_api/ -v --tb=short
 | 边界条件 | 25 | 必填字段、重复检测、无效参数 |
 | 异常处理 | 16 | 无效项目ID、无效类型、空项目 |
 | 性能测试 | 24 | 响应时间、吞吐量、过滤查询 |
+| 认证模块 | ~40 | 登录、登出、权限检查、Cookie |
+| 进度图表 | ~30 | 计划曲线、实际曲线、快照管理 |
+| 认证API | ~22 | 管理员权限、用户管理 |
 
-**通过标准**: 130/130 用例通过
+**通过标准**: 207/207 用例通过
 
 ---
 
@@ -169,7 +189,7 @@ cd /projects/management/tracker/dev
 npx playwright test tests/test_ui/specs/integration/ --project=firefox --timeout=60000
 ```
 
-**测试用例数量**: 约 40+ 个
+**测试用例数量**: 110 个
 
 **测试用例清单**:
 
@@ -231,7 +251,21 @@ npx playwright test tests/test_ui/specs/integration/ --project=firefox --timeout
 | CONN-004 | 创建多个 CP |
 | CONN-005 | 创建多个 TC |
 
-**通过标准**: 所有用例通过
+##### 其他集成测试文件
+
+| 文件 | 用例数 | 说明 |
+|------|--------|------|
+| 06-permissions-api.spec.ts | 12 | API 权限验证 |
+| 07-permissions-ui.spec.ts | 9 | UI 权限验证 |
+| 08-user-management.spec.ts | 10 | 用户管理功能 |
+| 09-project-management.spec.ts | 5 | 项目管理功能 |
+| 10-help.spec.ts | 3 | 帮助手册 |
+| 11-date-validation.spec.ts | 4 | 日期验证 |
+| actual_curve.spec.ts | 11 | 实际曲线图表 |
+| planned_curve.spec.ts | 12 | 计划曲线图表 |
+| progress_charts.spec.ts | 6 | 进度图表 |
+
+**通过标准**: 110/110 用例通过
 
 ---
 
@@ -356,7 +390,14 @@ TRACKER_TEST_REPORT_NIGHTLY_YYYYMMDD.md
 
 ## 5. 手动执行测试集（E2E）
 
+> ⚠️ **重要**: E2E 测试当前已被**跳过 (Skip)**，不可执行！
+> 
+> 原因: E2E 测试使用 `test.describe.skip` 标记，已从测试套件中禁用。
+> 如需重新启用，需移除该标记并修复相关测试用例。
+
 ### 5.1 适用场景
+
+> **状态**: 暂不适用 - E2E 测试已禁用
 
 用户需要手动执行以下测试时：
 - 完整端到端业务流程验证
@@ -366,53 +407,55 @@ TRACKER_TEST_REPORT_NIGHTLY_YYYYMMDD.md
 
 ### 5.2 测试类型
 
-#### 5.2.1 E2E 完整工作流测试
+#### 5.2.1 E2E 完整工作流测试 ⚠️ 已跳过
 
-**执行命令**:
-```bash
-cd /projects/management/tracker/dev
-npx playwright test tests/test_ui/specs/e2e/full-workflow.spec.ts --project=firefox --timeout=60000
-```
+**文件**: `tests/test_ui/specs/e2e/full-workflow.spec.ts`
 
-**用例清单**:
+**状态**: 已禁用 (使用 `test.describe.skip`)
 
-| 用例 ID | 说明 |
-|---------|------|
-| E2E-001 | 完整项目创建工作流 |
-| E2E-002 | 项目切换数据隔离 |
-| E2E-003 | 批量操作完整流程 |
-| E2E-004 | 页面刷新后状态恢复 |
-| E2E-005 | 模态框打开关闭流程 |
+**用例清单** (共 5 个):
+
+| 用例 ID | 说明 | 状态 |
+|---------|------|------|
+| E2E-001 | 完整项目创建工作流 | ⏸️ 已跳过 |
+| E2E-002 | 项目切换数据隔离 | ⏸️ 已跳过 |
+| E2E-003 | 批量操作完整流程 | ⏸️ 已跳过 |
+| E2E-004 | 页面刷新后状态恢复 | ⏸️ 已跳过 |
+| E2E-005 | 模态框打开关闭流程 | ⏸️ 已跳过 |
 
 ---
 
-#### 5.2.2 E2E 数据创建测试
+#### 5.2.2 E2E 数据创建测试 ⚠️ 已跳过
 
-**执行命令**:
-```bash
-cd /projects/management/tracker/dev
-npx playwright test tests/test_ui/specs/e2e/data-creation.spec.ts --project=firefox --timeout=60000
-```
+**文件**: `tests/test_ui/specs/e2e/data-creation.spec.ts`
 
-**用例清单**:
+**状态**: 已禁用 (使用 `test.describe.skip`)
 
-| 用例 ID | 说明 |
-|---------|------|
-| E2E-006 | 批量创建 CP |
-| E2E-007 | 批量创建 TC |
-| E2E-008 | 数据一致性验证 |
+**用例清单** (共 2 个):
+
+| 用例 ID | 说明 | 状态 |
+|---------|------|------|
+| E2E-006 | 批量创建 CP | ⏸️ 已跳过 |
+| E2E-007 | 批量创建 TC | ⏸️ 已跳过 |
+| E2E-008 | 数据一致性验证 | ⏸️ 已跳过 |
 
 ---
 
-#### 5.2.3 完整 E2E 测试套件
+#### 5.2.3 完整 E2E 测试套件 ⚠️ 已跳过
 
 **执行命令**:
 ```bash
+# 注意: 由于测试已被 skip，执行将返回 0 个测试用例
 cd /projects/management/tracker/dev
 npx playwright test tests/test_ui/specs/e2e/ --project=firefox --timeout=60000
 ```
 
-**通过标准**: 所有 E2E 用例通过
+**当前状态**: 0/7 用例通过 (全部跳过)
+
+**如需重新启用 E2E 测试**:
+1. 移除 `full-workflow.spec.ts` 和 `data-creation.spec.ts` 中的 `test.describe.skip`
+2. 根据当前 v0.9.0 版本更新测试用例（认证流程、UI 变化等）
+3. 执行测试验证通过后移除本章节的"已跳过"标注
 
 ---
 
@@ -506,12 +549,12 @@ TRACKER_TEST_REPORT_E2E_YYYYMMDD.md
 | 阶段 | 命令 | 说明 |
 |------|------|------|
 | ESLint 检查 | `cd dev && bash check_frontent.sh` | 前端代码检查 |
-| API 测试（本地开发） | `cd dev && PYTHONPATH=. pytest tests/test_api/ -v --reruns 2` | 允许重试 2 次 |
-| API 测试（CI/CD） | `cd dev && PYTHONPATH=. pytest tests/test_api/ -v` | 不允许重试 |
-| 冒烟测试 | `cd dev && npx playwright test tests/test_ui/specs/smoke/ --project=firefox` | UI 冒烟 |
-| 集成测试 | `cd dev && npx playwright test tests/test_ui/specs/integration/ --project=firefox` | UI 集成 |
-| E2E 测试 | `cd dev && npx playwright test tests/test_ui/specs/e2e/ --project=firefox` | 端到端 |
-| 完整测试 | `cd dev && npx playwright test tests/test_ui/ --project=firefox` | 全部 UI |
+| API 测试（本地开发） | `cd dev && PYTHONPATH=. pytest tests/test_api/ -v --reruns 2` | 允许重试 2 次 (207 用例) |
+| API 测试（CI/CD） | `cd dev && PYTHONPATH=. pytest tests/test_api/ -v` | 不允许重试 (207 用例) |
+| 冒烟测试 | `cd dev && npx playwright test tests/test_ui/specs/smoke/01-smoke.spec.ts tests/test_ui/specs/smoke/02-login.spec.ts --project=firefox` | UI 冒烟 (20 用例) |
+| 集成测试 | `cd dev && npx playwright test tests/test_ui/specs/integration/ --project=firefox` | UI 集成 (110 用例) |
+| E2E 测试 | `cd dev && npx playwright test tests/test_ui/specs/e2e/ --project=firefox` | ⚠️ 端到端 (已跳过，7 用例) |
+| 完整测试 | `cd dev && npx playwright test tests/test_ui/ --project=firefox` | 全部 UI (不含 E2E) |
 
 ### 8.2 测试稳定性要求
 
@@ -535,13 +578,27 @@ cd /projects/management/tracker/dev && python3 server.py
 
 ---
 
-**文档版本**: v1.2  
+**文档版本**: v1.3  
 **创建日期**: 2026-02-15  
-**更新日期**: 2026-03-03
+**更新日期**: 2026-03-07
 
 ---
 
 ## 更新日志
+
+### v1.3 (2026-03-07)
+
+- 更新 API 测试用例数量: 130+ → 207
+- 更新冒烟测试用例清单: 10 → 20 个用例
+  - 新增 02-login.spec.ts (6 个用例)
+  - 更新 01-smoke.spec.ts 用例说明
+- 更新集成测试用例数量: 40+ → 110 个用例
+- 新增其他集成测试文件清单 (permissions, user-management, help, date-validation, curves 等)
+- **E2E 测试明确标注为"已跳过"**
+  - 说明跳过原因 (使用 `test.describe.skip`)
+  - 添加重新启用步骤
+- 更新快速参考命令，标注 E2E 测试状态
+**维护者**: 小栗子 🌰
 
 ### v1.2 (2026-03-03)
 

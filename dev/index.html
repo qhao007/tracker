@@ -181,7 +181,7 @@
         // CDN 配置
         const CHART_CDN_URL = 'https://cdn.jsdelivr.net/npm/chart.js';
         const CHART_LOCAL_URL = '/app_static/js/chart.min.js';
-        const CHART_TIMEOUT_MS = 3000; // 3秒超时
+        const CHART_TIMEOUT_MS = 1500; // 1.5秒超时（沙箱环境快速切换）
 
         // 动态加载脚本
         function loadChartScript(url) {
@@ -196,19 +196,29 @@
 
         // 尝试加载 Chart.js：先 CDN，超时则本地
         async function loadChartWithFallback() {
-            // 先尝试加载 CDN 版本
+            // 先尝试加载 CDN 版本（带超时）
             try {
                 await new Promise((resolve, reject) => {
                     const script = document.createElement('script');
                     script.src = CHART_CDN_URL;
+
+                    // 设置超时
+                    const timeoutId = setTimeout(() => {
+                        script.remove();
+                        reject(new Error('CDN timeout'));
+                    }, CHART_TIMEOUT_MS);
+
                     script.onload = () => {
+                        clearTimeout(timeoutId);
                         console.log('Chart.js: CDN 加载成功');
                         window.ChartLoaded = true;
                         resolve();
                     };
-                    script.onerror = reject;
-                    // 设置超时
-                    const timeout = setTimeout(reject, CHART_TIMEOUT_MS);
+                    script.onerror = (e) => {
+                        clearTimeout(timeoutId);
+                        reject(e);
+                    };
+
                     document.head.appendChild(script);
                 });
             } catch (e) {

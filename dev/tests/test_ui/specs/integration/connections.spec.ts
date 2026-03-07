@@ -18,7 +18,7 @@ test.describe('CP-TC 关联测试', () => {
    * 登录辅助函数 - v0.7.1 需要登录
    */
   async function loginAsAdmin(page: any) {
-    await page.goto('http://localhost:8081');
+    await page.goto('http://localhost:8081', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
     // 填写登录表单
     await page.fill('#loginUsername', 'admin');
@@ -159,7 +159,7 @@ test.describe('CP-TC 关联测试 - 边界场景', () => {
    * 登录辅助函数 - v0.7.1 需要登录
    */
   async function loginAsAdmin(page: any) {
-    await page.goto('http://localhost:8081');
+    await page.goto('http://localhost:8081', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
     // 填写登录表单
     await page.fill('#loginUsername', 'admin');

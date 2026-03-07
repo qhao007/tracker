@@ -157,7 +157,7 @@
         });
         
         // 加载并渲染 Markdown
-        fetch('/static/manual.md')
+        fetch('/manual.md')
             .then(response => response.text())
             .then(markdown => {
                 const html = marked.parse(markdown);

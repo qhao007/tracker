@@ -12,6 +12,26 @@ import { test, expect } from '@playwright/test';
 
 test.describe('实际曲线与快照 (v0.8.2)', () => {
 
+  const BASE_URL = 'http://localhost:8081';
+
+  // 每个测试前清理登录状态，确保测试隔离
+  test.beforeEach(async ({ page }) => {
+    // 先尝试调用 logout API 清理服务器端 session
+    try {
+      await page.request.post(`${BASE_URL}/api/auth/logout`, {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } catch (e) {
+      // 忽略错误
+    }
+    // 清理 Cookie 和本地存储
+    await page.context().clearCookies();
+    await page.addInitScript(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+    });
+  });
+
   // 等待 Chart.js 加载完成（CDN + Fallback 方案）
   async function waitForChartLoaded(page: any) {
     await page.waitForFunction(() => window.ChartLoaded === true, { timeout: 15000 });
@@ -19,7 +39,7 @@ test.describe('实际曲线与快照 (v0.8.2)', () => {
 
   // 登录辅助函数
   async function loginAs(page: any, username: string, password: string) {
-    await page.goto('http://localhost:8081');
+    await page.goto('http://localhost:8081', { waitUntil: 'domcontentloaded' });
     // 清除旧的项目选择
     await page.addInitScript(() => {
       localStorage.removeItem('tracker_last_project_id');
@@ -133,17 +153,21 @@ test.describe('实际曲线与快照 (v0.8.2)', () => {
     await page.waitForTimeout(1500);
   });
 
-  test('UI-ACT-012: user 看不到刷新按钮', async ({ page }) => {
+  // ========== UI-ACT-012: guest 看不到刷新按钮 ==========
+  test('UI-ACT-012: guest 看不到刷新按钮', async ({ page }) => {
     // 使用 guest 账户测试（非 admin 角色看不到快照按钮）
     await page.goto('http://localhost:8081', { waitUntil: 'domcontentloaded' });
-    await page.fill('#loginUsername', 'guest');
-    await page.fill('#loginPassword', 'guest123');
-    await page.click('button.login-btn');
-    await page.waitForTimeout(1500);
+    // 使用 guest 登录按钮（guest 没有密码）
+    await page.click('#guestLoginBtn');
+    // 等待登录成功并等待覆盖层消失
+    await page.waitForFunction(() => {
+      const overlay = document.getElementById('loginOverlay');
+      return !overlay || !overlay.classList.contains('show');
+    }, { timeout: 30000 });
 
     await page.click('button.tab:has-text("Progress Charts")');
     // 等待确保页面加载完成
-    await page.waitForTimeout(2000);
+    await page.waitForSelector('#progressPanel', { state: 'visible', timeout: 10000 });
     const isVisible = await page.locator('#snapshotCreateBtn').isVisible().catch(() => false);
     expect(isVisible).toBe(false);
   });
@@ -203,7 +227,8 @@ test.describe('实际曲线与快照 (v0.8.2)', () => {
     }
   });
 
-  test('UI-ACT-023: user 只能查看不能删除', async ({ page }) => {
+  // ========== UI-ACT-023: guest 只能查看不能删除 ==========
+  test('UI-ACT-023: guest 只能查看不能删除', async ({ page }) => {
     // 先用 admin 登录创建快照
     await loginAs(page, 'admin', 'admin123');
     await page.click('button.tab:has-text("Progress Charts")');
@@ -213,17 +238,18 @@ test.describe('实际曲线与快照 (v0.8.2)', () => {
 
     // 退出登录
     await page.click('button:has-text("退出")');
-    await page.waitForTimeout(1000);
+    await page.waitForSelector('#loginForm', { state: 'visible', timeout: 10000 });
 
     // 用 guest 登录（非 admin 角色看不到快照管理按钮）
-    await page.goto('http://localhost:8081', { waitUntil: 'domcontentloaded' });
-    await page.fill('#loginUsername', 'guest');
-    await page.fill('#loginPassword', 'guest123');
-    await page.click('button.login-btn');
-    await page.waitForTimeout(1500);
+    await page.click('#guestLoginBtn');
+    // 等待登录成功并等待覆盖层消失
+    await page.waitForFunction(() => {
+      const overlay = document.getElementById('loginOverlay');
+      return !overlay || !overlay.classList.contains('show');
+    }, { timeout: 30000 });
 
     await page.click('button.tab:has-text("Progress Charts")');
-    await page.waitForTimeout(1000);
+    await page.waitForSelector('#progressPanel', { state: 'visible', timeout: 10000 });
 
     // 验证快照管理按钮不可见
     const isVisible = await page.locator('#snapshotManageBtn').isVisible().catch(() => false);

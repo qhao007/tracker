@@ -8,7 +8,8 @@ test.describe('计划曲线 (v0.8.1)', () => {
     await page.fill('#loginUsername', 'admin');
     await page.fill('#loginPassword', 'admin123');
     await page.click('button.login-btn');
-    await page.waitForURL('**/', { waitUntil: 'domcontentloaded' });
+    // 等待登录成功 - 使用 DOM 元素而不是 URL
+    await page.waitForSelector('#userInfo', { timeout: 30000 });
   });
 
   test('UI-PLAN-001: 计划曲线图表显示', async ({ page }) => {
@@ -113,7 +114,8 @@ test.describe('计划曲线 (v0.8.1)', () => {
     await expect(emptyState).toContainText('请先设置项目起止日期');
   });
 
-  test('UI-PLAN-021: 无日期项目显示提示', async ({ page }) => {
+  // UI-PLAN-021: 无日期项目显示提示 - 跳过：v0.8.3 版本日期是必填，无法创建无日期项目
+  test.skip('UI-PLAN-021: 无日期项目显示提示', async ({ page }) => {
     // 点击项目管理按钮打开项目创建模态框
     await page.click('#projectManageBtn');
 
@@ -127,7 +129,7 @@ test.describe('计划曲线 (v0.8.1)', () => {
     // 选择这个无日期项目
     await page.selectOption('#projectSelector', { label: projectName });
     await page.waitForTimeout(500);
-    
+
     // 等待 Chart.js 加载完成（方案B需要等待异步加载）
     await page.waitForFunction(() => window.ChartLoaded === true, { timeout: 10000 });
 

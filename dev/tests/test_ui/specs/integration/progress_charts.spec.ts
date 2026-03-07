@@ -4,11 +4,12 @@ test.describe('Progress Charts (v0.8.0)', () => {
 
   test.beforeEach(async ({ page }) => {
     // 登录
-    await page.goto('http://localhost:8081');
+    await page.goto('http://localhost:8081', { waitUntil: 'domcontentloaded' });
     await page.fill('#loginUsername', 'admin');
     await page.fill('#loginPassword', 'admin123');
     await page.click('button.login-btn');
-    await page.waitForURL('**/');
+    // 等待登录成功 - 使用 DOM 元素而不是 URL
+    await page.waitForSelector('#userInfo', { timeout: 30000 });
   });
 
   test('UI-CHART-001: Tab 切换到 Progress Charts', async ({ page }) => {
@@ -29,7 +30,8 @@ test.describe('Progress Charts (v0.8.0)', () => {
     await expect(progressContainer).toBeVisible();
   });
 
-  test('UI-CHART-003: 空项目提示显示', async ({ page }) => {
+  // UI-CHART-003: 空项目提示显示 - 跳过：v0.8.3 版本日期是必填，无法创建无日期项目
+  test.skip('UI-CHART-003: 空项目提示显示', async ({ page }) => {
     // 切换到 Progress Charts
     await page.click('button.tab:has-text("Progress Charts")');
 
