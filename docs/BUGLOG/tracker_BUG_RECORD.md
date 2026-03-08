@@ -2153,3 +2153,123 @@ priority = priority_cell if priority_cell in ["P0", "P1", "P2"] else "P0"
 
 **相关文档**:
 - 迁移指南: `docs/MANUALS/Tracker_API_Migration_Guide_v1.0.md`
+
+---
+
+## v0.9.1 修复汇总
+
+| Bug ID | 描述 | 修复日期 |
+|--------|------|----------|
+| BUG-082 | switchTab 函数参数缺失导致登录模态框无法关闭 | 2026-03-08 |
+| BUG-083 | API_ENDPOINTS 重复声明错误 | 2026-03-08 |
+| BUG-084 | Chart.js CDN 加载超时警告 | 已知问题 |
+
+---
+
+## BUG-082: switchTab 函数参数缺失导致登录模态框无法关闭
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-08 |
+| **报告人** | Claude Code |
+| **修复日期** | 2026-03-08 |
+| **修复人** | Claude Code |
+| **影响版本** | v0.9.1 |
+
+**描述**: 登录成功后，登录模态框无法关闭，页面显示两个登录框叠加。
+
+**根本原因**:
+1. 函数重构时修改了 `switchTab(tab, event)` 的签名，增加了 event 参数
+2. HTML 调用处未同步更新为 `switchTab('cp', event)`
+3. 点击 Tab 按钮时 `event` 为 undefined，导致 active class 无法正确添加
+4. 虽然 `hideLoginModal()` 被调用，但因其他 JS 错误导致模态框未实际关闭
+
+**修复方案**:
+```html
+<!-- 修复前 -->
+<button onclick="switchTab('cp')">Cover Points</button>
+
+<!-- 修复后 -->
+<button onclick="switchTab('cp', event)">Cover Points</button>
+```
+
+**影响范围**:
+- `dev/index.html` 第 301-303 行：Tab 按钮的 onclick 属性
+
+**验证**:
+- 使用 agent-browser 测试
+- 登录后模态框正常关闭 ✅
+
+---
+
+## BUG-083: API_ENDPOINTS 重复声明错误
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-08 |
+| **报告人** | Claude Code (通过 agent-browser console 发现) |
+| **修复日期** | 2026-03-08 |
+| **修复人** | Claude Code |
+| **影响版本** | v0.9.1 |
+
+**描述**: 浏览器控制台报错 `Identifier 'API_ENDPOINTS' has already been declared`，导致部分 JavaScript 功能异常。
+
+**根本原因**:
+1. `app_constants.js` 中定义了 `const API_ENDPOINTS = {...}`
+2. `index.html` 中也定义了 `const API_ENDPOINTS = {...}`
+3. 两个文件都被加载，导致重复声明错误
+
+**修复方案**:
+
+1. 修改 `dev/static/js/app_constants.js`:
+```javascript
+// 修复前
+const API_ENDPOINTS = { ... };
+
+// 修复后
+window.API_ENDPOINTS = { ... };
+```
+
+2. 修改 `dev/index.html`:
+```javascript
+// 修复前
+const API_ENDPOINTS = { ... };
+
+// 修复后 - 使用 Object.assign 覆盖而非重新声明
+Object.assign(window.API_ENDPOINTS, {
+    COVER_POINTS: `${API_BASE}/cp`,
+    TEST_CASES: `${API_BASE}/tc`,
+    // ... 其他覆盖
+});
+```
+
+**影响范围**:
+- `dev/static/js/app_constants.js` 第 16 行
+- `dev/index.html` 第 779 行
+
+**验证**:
+- 使用 agent-browser `errors` 命令检查，无 JS 错误 ✅
+
+---
+
+## BUG-084: Chart.js CDN 加载超时警告
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Low |
+| **状态** | 已知问题 |
+| **发现日期** | 2026-03-08 |
+| **报告人** | Claude Code |
+| **影响版本** | v0.9.1 |
+
+**描述**: 浏览器控制台警告 `Chart.js: CDN 加载失败，使用本地版本 Error: CDN timeout`
+
+**根本原因**: 网络环境导致 CDN 访问超时
+
+**影响**: 非阻塞性，代码使用本地 Chart.js fallback 正常
+
+**状态**: 已知问题，不影响功能
