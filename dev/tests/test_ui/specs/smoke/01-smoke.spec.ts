@@ -71,11 +71,14 @@ test.describe('Smoke - 核心功能', () => {
   // ========== SMOKE-003: guest 登录成功 ==========
   test('SMOKE-003: guest 登录成功', async ({ page }) => {
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
-    await page.fill('#loginUsername', 'guest');
-    await page.fill('#loginPassword', 'guest123');
-    await page.click('button.login-btn');
+    // 使用 guest 登录按钮（guest 没有密码）
+    await page.click('#guestLoginBtn');
 
-    await page.waitForTimeout(1500);
+    // 等待登录成功并等待覆盖层消失
+    await page.waitForFunction(() => {
+      const overlay = document.getElementById('loginOverlay');
+      return !overlay || !overlay.classList.contains('show');
+    }, { timeout: 30000 });
 
     // 验证登录成功
     await expect(page.locator('#projectSelector')).toBeVisible();

@@ -96,7 +96,14 @@ class TestImportTemplateAPI:
     def test_get_template_invalid_type(self, admin_client, test_project):
         """测试无效的模板类型"""
         response = admin_client.get('/api/import/template?type=invalid')
-        assert response.status_code == 200  # 返回默认 CP 模板
+        assert response.status_code == 400  # 返回错误
+    
+    def test_get_template_connection(self, admin_client, test_project):
+        """测试 TC-CP 关联模板下载"""
+        response = admin_client.get('/api/import/template?type=connection')
+        assert response.status_code == 200
+        assert response.content_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        assert 'CONNECTION_import_template.xlsx' in response.headers.get('Content-Disposition', '')
 
 
 class TestImportAPI:

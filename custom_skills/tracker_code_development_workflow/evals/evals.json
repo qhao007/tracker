@@ -1,0 +1,29 @@
+{
+  "skill_name": "tracker_code_development_workflow",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "用工作流开发 docs/SPECIFICATIONS/tracker_SPECS_v0.10.0.md 中的功能，从阶段1代码开发到阶段7测试验收",
+      "expected_output": "完整执行7个阶段，输出测试报告到 docs/REPORTS/ 目录，Bug记录到 docs/BUGLOG/ 目录，新测试用例到 tests/test_api/ 和 tests/test_ui/specs/integration/",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "作为Subagent C执行API测试阶段：开发新功能的API测试用例，调试并修复失败的测试，生成测试报告",
+      "expected_output": "API测试100%通过，测试报告已生成，新测试用例已创建",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "作为Subagent D执行UI测试阶段：开发Playwright UI测试用例，调试并修复失败用例",
+      "expected_output": "UI测试通过率>=80%，测试用例已创建",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "作为Subagent F执行测试验收：验证C/D/E的输出是否符合要求，检查测试报告、Bug记录、新测试用例是否完整",
+      "expected_output": "验收报告清晰列出合格/不合格项，给出迭代建议",
+      "files": []
+    }
+  ]
+}

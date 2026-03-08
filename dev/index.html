@@ -19,7 +19,10 @@
         .cp-table th:nth-child(1) { width: 13%; } .cp-table th:nth-child(2) { width: 10%; } .cp-table th:nth-child(3) { width: 15%; } .cp-table th:nth-child(4) { width: 30%; } .cp-table th:nth-child(5) { width: 12%; } .cp-table th:nth-child(6) { width: 10%; }
         .tc-table th:nth-child(1) { width: 4%; } .tc-table th:nth-child(2) { width: 7%; } .tc-table th:nth-child(3) { width: 6%; } .tc-table th:nth-child(4) { width: 6%; } .tc-table th:nth-child(5) { width: 6%; } .tc-table th:nth-child(6) { width: 15%; } .tc-table th:nth-child(7) { width: 8%; } .tc-table th:nth-child(8) { width: 6%; } .tc-table th:nth-child(9) { width: 8%; } .tc-table th:nth-child(10) { width: 6%; }
         .coverage-badge { padding: 3px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; min-width: 45px; text-align: center; display: inline-block; }
-        .coverage-detail { display: block; font-size: 10px; color: #666; margin-top: 2px; }
+        .coverage-wrapper { display: flex; align-items: center; gap: 8px; }
+        .coverage-detail { font-size: 10px; color: #666; }
+        .tab-btn { outline: none; }
+        .tab-btn.active { font-weight: bold; }
         .priority-badge { padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: bold; min-width: 35px; text-align: center; display: inline-block; }
         .priority-P0 { background: #f44336; color: white; }
         .priority-P1 { background: #ff9800; color: white; }
@@ -181,7 +184,7 @@
         // CDN 配置
         const CHART_CDN_URL = 'https://cdn.jsdelivr.net/npm/chart.js';
         const CHART_LOCAL_URL = '/app_static/js/chart.min.js';
-        const CHART_TIMEOUT_MS = 3000; // 3秒超时
+        const CHART_TIMEOUT_MS = 1500; // 1.5秒超时（沙箱环境快速切换）
 
         // 动态加载脚本
         function loadChartScript(url) {
@@ -196,19 +199,29 @@
 
         // 尝试加载 Chart.js：先 CDN，超时则本地
         async function loadChartWithFallback() {
-            // 先尝试加载 CDN 版本
+            // 先尝试加载 CDN 版本（带超时）
             try {
                 await new Promise((resolve, reject) => {
                     const script = document.createElement('script');
                     script.src = CHART_CDN_URL;
+
+                    // 设置超时
+                    const timeoutId = setTimeout(() => {
+                        script.remove();
+                        reject(new Error('CDN timeout'));
+                    }, CHART_TIMEOUT_MS);
+
                     script.onload = () => {
+                        clearTimeout(timeoutId);
                         console.log('Chart.js: CDN 加载成功');
                         window.ChartLoaded = true;
                         resolve();
                     };
-                    script.onerror = reject;
-                    // 设置超时
-                    const timeout = setTimeout(reject, CHART_TIMEOUT_MS);
+                    script.onerror = (e) => {
+                        clearTimeout(timeoutId);
+                        reject(e);
+                    };
+
                     document.head.appendChild(script);
                 });
             } catch (e) {
@@ -285,9 +298,9 @@
             <div class="stat-item"><span class="stat-value" id="statCoverage">0%</span><span class="stat-label">覆盖率</span></div>
         </div>
         <div class="tabs">
-            <button class="tab active" onclick="switchTab('cp')">Cover Points</button>
-            <button class="tab" onclick="switchTab('tc')">Test Cases</button>
-            <button class="tab" onclick="switchTab('progress')">Progress Charts</button>
+            <button class="tab active" onclick="switchTab('cp', event)">Cover Points</button>
+            <button class="tab" onclick="switchTab('tc', event)">Test Cases</button>
+            <button class="tab" onclick="switchTab('progress', event)">Progress Charts</button>
         </div>
         <div id="cpPanel">
             <div class="toolbar">
@@ -669,13 +682,42 @@
     
     <!-- Version Modal -->
     <div class="modal" id="versionModal">
-        <div class="modal-content" style="width: 400px;">
+        <div class="modal-content" style="width: 500px; max-height: 80vh;">
             <div class="modal-header"><span>关于 Tracker</span><button class="modal-close" onclick="closeModal('versionModal')">&times;</button></div>
-            <div class="modal-body" style="text-align: center;">
+            <!-- 标签页导航 -->
+            <div style="display: flex; border-bottom: 1px solid #ddd; margin-bottom: 15px;">
+                <button class="tab-btn active" data-tab="about" onclick="switchVersionTab('about', event)" style="flex: 1; padding: 10px; border: none; background: none; cursor: pointer; font-size: 14px; color: #2170bb; border-bottom: 2px solid #2170bb;">关于</button>
+                <button class="tab-btn" data-tab="feedback" onclick="switchVersionTab('feedback', event)" style="flex: 1; padding: 10px; border: none; background: none; cursor: pointer; font-size: 14px; color: #666;">反馈</button>
+            </div>
+            <!-- 关于标签页内容 -->
+            <div id="versionAboutTab" class="version-tab-content" style="text-align: center; padding: 10px;">
                 <h2 style="color: #2170bb;">芯片验证 Tracker</h2>
                 <p style="font-size: 24px; font-weight: bold; margin: 10px 0;" id="versionDisplay">v0.0.0</p>
                 <p style="color: #4CAF50; font-weight: bold;" id="versionTypeDisplay">正式版</p>
                 <hr style="margin: 15px 0;"><p style="color: #666;" id="versionDateDisplay">发布日期: -</p>
+            </div>
+            <!-- 反馈标签页内容 -->
+            <div id="versionFeedbackTab" class="version-tab-content" style="display: none; padding: 10px;">
+                <form id="feedbackForm" onsubmit="submitFeedback(event)">
+                    <div class="form-group" style="text-align: left; margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">反馈类型</label>
+                        <select id="feedbackType" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            <option value="bug">Bug (问题缺陷)</option>
+                            <option value="feature">Feature (功能需求)</option>
+                            <option value="optimization">Optimization (优化建议)</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="text-align: left; margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">标题</label>
+                        <input type="text" id="feedbackTitle" required placeholder="请简要描述问题或建议" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+                    </div>
+                    <div class="form-group" style="text-align: left; margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">详细描述</label>
+                        <textarea id="feedbackDescription" required rows="4" placeholder="请详细描述您遇到的问题或建议..." style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; resize: vertical;"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">提交反馈</button>
+                </form>
+                <div id="feedbackMessage" style="margin-top: 15px; display: none; padding: 10px; border-radius: 4px; text-align: center;"></div>
             </div>
         </div>
     </div>
@@ -734,6 +776,21 @@
         let currentProject = null, coverPoints = [], testCases = [], projects = [], archives = [], currentTab = 'cp';
         let currentUser = null;
         const API_BASE = '/api';
+        // 覆盖 app_constants.js 中的 API_ENDPOINTS 定义，避免重复声明错误
+        // 注意：这段代码在 app_constants.js 加载之后执行，需要用 Object.assign 更新
+        Object.assign(window.API_ENDPOINTS, {
+            COVER_POINTS: `${API_BASE}/cp`,
+            TEST_CASES: `${API_BASE}/tc`,
+            PROJECT_STATS: `${API_BASE}/stats`,
+            PROJECT_CREATE: `${API_BASE}/projects`,
+            PROJECT_EXPORT: `${API_BASE}/project/export`,
+            PROJECT_BACKUP: `${API_BASE}/project/backup`,
+            PROJECT_RESTORE: `${API_BASE}/project/restore`,
+            AUTH_LOGIN: `${API_BASE}/auth/login`,
+            AUTH_LOGOUT: `${API_BASE}/auth/logout`,
+            AUTH_ME: `${API_BASE}/auth/me`,
+            FEEDBACK: `${API_BASE}/feedback`
+        });
         
         // 全局 fetch 包装，确保所有请求发送 credentials
         const originalFetch = window.fetch;
@@ -913,7 +970,7 @@
         
         async function loadProjects() {
             try {
-                const res = await fetch(`${API_BASE}/projects`, { credentials: 'include' });
+                const res = await fetch(`${API_ENDPOINTS.PROJECTS}`, { credentials: 'include' });
                 if (!res.ok) {
                     if (res.status === 401) {
                         // 未登录，跳过
@@ -936,7 +993,7 @@
         
         function updateProjectSelector() {
             const selector = document.getElementById('projectSelector');
-            selector.innerHTML = projects.map(p => `<option value="${p.id}" ${currentProject && currentProject.id === p.id ? 'selected' : ''}>${p.name}</option>`).join('');
+            selector.innerHTML = projects.map(p => `<option value="${p.id}" ${currentProject && currentProject.id === p.id ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('');
             selector.onchange = (e) => selectProject(parseInt(e.target.value));
         }
         
@@ -957,22 +1014,22 @@
         
         async function loadCP() {
             try {
-                const res = await fetch(`${API_BASE}/cp?project_id=${currentProject.id}`);
+                const res = await fetch(`${API_ENDPOINTS.COVER_POINTS}?project_id=${currentProject.id}`);
                 coverPoints = await res.json();
                 renderCP();
                 // 填充 Feature 过滤下拉框
                 const features = [...new Set(coverPoints.map(cp => cp.feature).filter(f => f))];
                 const featureSelect = document.getElementById('cpFeatureFilter');
                 if (featureSelect) {
-                    featureSelect.innerHTML = '<option value="">全部 Feature</option>' + 
+                    featureSelect.innerHTML = '<option value="">全部 Feature</option>' +
                         features.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('');
                 }
             } catch (e) { console.error('加载 CP 失败:', e); }
         }
-        
+
         async function loadTC() {
             try {
-                const res = await fetch(`${API_BASE}/tc?project_id=${currentProject.id}`);
+                const res = await fetch(`${API_ENDPOINTS.TEST_CASES}?project_id=${currentProject.id}`);
                 testCases = await res.json();
                 renderTC();
             } catch (e) { console.error('加载 TC 失败:', e); }
@@ -980,7 +1037,7 @@
         
         async function loadStats() {
             try {
-                const res = await fetch(`${API_BASE}/stats?project_id=${currentProject.id}`);
+                const res = await fetch(`${API_ENDPOINTS.PROJECT_STATS}?project_id=${currentProject.id}`);
                 const stats = await res.json();
                 document.getElementById('statCP').textContent = stats.total_cp;
                 document.getElementById('statTC').textContent = stats.total_tc;
@@ -1341,7 +1398,7 @@
                     <td>${escapeHtml(cp.sub_feature || '')}</td>
                     <td><strong>${escapeHtml(cp.cover_point)}</strong></td>
                     <td><span class="priority-badge">${cp.priority || 'P0'}</span></td>
-                    <td><span class="coverage-badge ${cp.coverage === 100 ? 'bg-green' : cp.coverage > 0 ? 'bg-yellow' : 'bg-red'}">${cp.coverage}%</span><small class="coverage-detail">${cp.coverage_detail}</small></td>
+                    <td><div class="coverage-wrapper"><span class="coverage-badge ${cp.coverage === 100 ? 'bg-green' : cp.coverage > 0 ? 'bg-yellow' : 'bg-red'}">${cp.coverage}%</span><small class="coverage-detail">${cp.coverage_detail}</small></div></td>
                     <td><div class="action-btns"><button class="action-btn" onclick="toggleCPDetail(${cp.id})">详情</button><button class="action-btn edit" onclick="editCP(${cp.id})">编辑</button><button class="action-btn delete" onclick="deleteCP(${cp.id})">删除</button></div></td>
                 </tr>
                 <tr id="cp-detail-${cp.id}" class="cp-detail-row" style="display: none;">
@@ -1601,8 +1658,91 @@
             renderTC('', value); 
         }
         function sortTC(value) { renderTC('', '', value); }
-        function switchTab(tab) { currentTab = tab; document.querySelectorAll('.tab').forEach(t => t.classList.remove('active')); event.target.classList.add('active'); document.getElementById('cpPanel').style.display = tab === 'cp' ? 'block' : 'none'; document.getElementById('tcPanel').style.display = tab === 'tc' ? 'block' : 'none'; document.getElementById('progressPanel').style.display = tab === 'progress' ? 'block' : 'none'; if (tab === 'progress') loadProgressChart(); }
+        function switchTab(tab, event) {
+            currentTab = tab;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            if (event && event.currentTarget) {
+                event.currentTarget.classList.add('active');
+            } else if (event && event.target) {
+                event.target.classList.add('active');
+            }
+            document.getElementById('cpPanel').style.display = tab === 'cp' ? 'block' : 'none';
+            document.getElementById('tcPanel').style.display = tab === 'tc' ? 'block' : 'none';
+            document.getElementById('progressPanel').style.display = tab === 'progress' ? 'block' : 'none';
+            if (tab === 'progress') loadProgressChart();
+        }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+        // 切换版本对话框中的标签页
+        function switchVersionTab(tab, event) {
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+                btn.style.color = '#666';
+                btn.style.borderBottom = 'none';
+            });
+            if (event && event.currentTarget) {
+                event.currentTarget.classList.add('active');
+                event.currentTarget.style.color = '#2170bb';
+                event.currentTarget.style.borderBottom = '2px solid #2170bb';
+            }
+
+            if (tab === 'about') {
+                document.getElementById('versionAboutTab').style.display = 'block';
+                document.getElementById('versionFeedbackTab').style.display = 'none';
+            } else {
+                document.getElementById('versionAboutTab').style.display = 'none';
+                document.getElementById('versionFeedbackTab').style.display = 'block';
+            }
+        }
+
+        // 提交反馈
+        async function submitFeedback(event) {
+            event.preventDefault();
+
+            const feedbackType = document.getElementById('feedbackType').value;
+            const feedbackTitle = document.getElementById('feedbackTitle').value;
+            const feedbackDescription = document.getElementById('feedbackDescription').value;
+            const messageDiv = document.getElementById('feedbackMessage');
+
+            try {
+                const res = await fetch(`${API_BASE}/feedback`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        type: feedbackType,
+                        title: feedbackTitle,
+                        description: feedbackDescription
+                    })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    messageDiv.style.display = 'block';
+                    messageDiv.style.backgroundColor = '#d4edda';
+                    messageDiv.style.color = '#155724';
+                    messageDiv.textContent = '反馈提交成功！感谢您的反馈。';
+
+                    // 重置表单
+                    document.getElementById('feedbackForm').reset();
+
+                    // 3秒后隐藏消息
+                    setTimeout(() => {
+                        messageDiv.style.display = 'none';
+                    }, 3000);
+                } else {
+                    messageDiv.style.display = 'block';
+                    messageDiv.style.backgroundColor = '#f8d7da';
+                    messageDiv.style.color = '#721c24';
+                    messageDiv.textContent = data.message || '提交失败，请重试';
+                }
+            } catch (e) {
+                messageDiv.style.display = 'block';
+                messageDiv.style.backgroundColor = '#f8d7da';
+                messageDiv.style.color = '#721c24';
+                messageDiv.textContent = '网络错误，请重试';
+            }
+        }
         
         let importType = 'cp';
         
@@ -2020,12 +2160,12 @@
             if (!endDate) { alert('请输入结束日期'); return; }
             
             try {
-                const res = await fetch('/api/projects', {
+                const res = await fetch(API_ENDPOINTS.PROJECTS, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        name, 
-                        start_date: startDate, 
+                        name,
+                        start_date: startDate,
                         end_date: endDate,
                         create_test_user: createTestUser
                     })
@@ -2126,10 +2266,10 @@
                     selectProject(result.project.id);
                     setTimeout(() => { statusDiv.innerHTML = ''; }, 2000);
                 } else {
-                    statusDiv.innerHTML = `<span style="color: #ef4444;">${result.error || '恢复失败'}</span>`;
+                    statusDiv.innerHTML = `<span style="color: #ef4444;">${escapeHtml(result.error || '恢复失败')}</span>`;
                 }
             } catch (err) {
-                statusDiv.innerHTML = '<span style="color: #ef4444;">上传失败: ' + err + '</span>';
+                statusDiv.innerHTML = '<span style="color: #ef4444;">上传失败: ' + escapeHtml(err) + '</span>';
             }
         }
         

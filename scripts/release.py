@@ -97,6 +97,9 @@ def check_release_ready(version):
     
     flag_file = os.path.join(TRACKER_DIR, '.release_ready')
     
+    # 统一版本格式：去掉 v 前缀
+    version = version.lstrip('v')
+    
     # 1. 检查 flag 文件是否存在
     if not os.path.exists(flag_file):
         print(f"   ❌ Flag 文件不存在: {flag_file}")

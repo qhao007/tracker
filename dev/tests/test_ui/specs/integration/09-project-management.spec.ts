@@ -14,6 +14,24 @@ const BASE_URL = 'http://localhost:8081';
 
 test.describe('Integration - 项目管理', () => {
 
+  // 每个测试前清理登录状态，确保测试隔离
+  test.beforeEach(async ({ page }) => {
+    // 先尝试调用 logout API 清理服务器端 session
+    try {
+      await page.request.post(`${BASE_URL}/api/auth/logout`, {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } catch (e) {
+      // 忽略错误
+    }
+    // 清理 Cookie 和本地存储
+    await page.context().clearCookies();
+    await page.addInitScript(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+    });
+  });
+
   // ========== PROJ-001: 项目选择器可见 ==========
   test('PROJ-001: 项目选择器可见', async ({ page }) => {
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
@@ -26,23 +44,22 @@ test.describe('Integration - 项目管理', () => {
     await expect(page.locator('#projectSelector')).toBeVisible();
   });
 
-  // ==========Selector')).toBe PROJ-002: guest 可以访问项目 ==========
+  // ========== PROJ-002: guest 可以访问项目 ==========
   test('PROJ-002: guest 可以访问项目', async ({ page }) => {
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
-    await page.fill('#loginUsername', 'guest');
-    await page.fill('#loginPassword', 'guest123');
-    await page.click('button.login-btn');
-    await page.waitForTimeout(1500);
+    // 使用 guest 登录按钮（guest 没有密码）
+    await page.click('#guestLoginBtn');
+    // 等待登录成功并等待覆盖层消失
+    await page.waitForFunction(() => {
+      const overlay = document.getElementById('loginOverlay');
+      return !overlay || !overlay.classList.contains('show');
+    }, { timeout: 30000 });
 
     // 选择项目
     await page.click('#projectSelector');
-    await page.waitForTimeout(500);
+    await page.waitForSelector('#projectSelector option', { state: 'attached', timeout: 10000 });
     await page.selectOption('#projectSelector', { label: 'SOC_DV' });
-    await page.waitForTimeout(1000);
-
-    // 验证项目数据加载
-    const cpPanel = page.locator('#cpPanel');
-    await expect(cpPanel.first()).toBeVisible();
+    await page.waitForSelector('#cpPanel', { state: 'visible', timeout: 10000 });
   });
 
   // ========== PROJ-003: 点击删除弹出确认框 ==========

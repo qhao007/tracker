@@ -19,7 +19,7 @@ test.describe('导入导出功能测试', () => {
    * 登录辅助函数 - v0.7.1 需要登录
    */
   async function loginAsAdmin(page: any) {
-    await page.goto('http://localhost:8081');
+    await page.goto('http://localhost:8081', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
     // 填写登录表单
     await page.fill('#loginUsername', 'admin');
@@ -33,14 +33,24 @@ test.describe('导入导出功能测试', () => {
     await loginAsAdmin(page);
     // 登录后等待页面加载完成
     await page.waitForSelector('#projectSelector', { timeout: 10000 });
-    
+
     // 创建一个测试项目
     const projectName = TestDataFactory.generateProjectName();
     await page.click('button[onclick="showProjectModal()"]');
     await page.waitForSelector('#projectModal', { state: 'visible', timeout: 5000 });
     await page.fill('#newProjectName', projectName);
-    await page.click('#projectModal button.btn-primary');  // 创建按钮
-    await page.waitForTimeout(1000);
+    // 填写日期（必填字段）
+    const today = new Date();
+    const nextMonth = new Date(today);
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    const startDate = today.toISOString().split('T')[0];
+    const endDate = nextMonth.toISOString().split('T')[0];
+    await page.fill('#newProjectStartDate', startDate);
+    await page.fill('#newProjectEndDate', endDate);
+    await page.click('#projectModal button:has-text("创建")');  // 创建按钮
+    // 等待模态框关闭
+    await page.waitForSelector('#projectModal', { state: 'hidden', timeout: 10000 });
+    await page.waitForTimeout(500);
   });
 
   /**

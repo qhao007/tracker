@@ -151,12 +151,13 @@ def init_project_db(project_name):
         )
     """)
 
-    # 创建关联表
+    # 创建关联表 (兼容两种结构: 旧版自增ID / 新版复合主键)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS tc_cp_connections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             tc_id INTEGER,
             cp_id INTEGER,
-            PRIMARY KEY (tc_id, cp_id)
+            UNIQUE(tc_id, cp_id)
         )
     """)
 
@@ -2378,7 +2379,7 @@ def get_import_template():
         # CP 模板
         headers = ["Feature", "Sub-Feature", "Cover Point", "Cover Point Details", "Comments"]
         ws.append(headers)
-    else:
+    elif template_type == "tc":
         # TC 模板
         headers = [
             "TestBench",
@@ -2391,6 +2392,12 @@ def get_import_template():
             "Comments",
         ]
         ws.append(headers)
+    elif template_type == "connection":
+        # TC-CP 关联导入模板
+        headers = ["Test Case", "Cover Point"]
+        ws.append(headers)
+    else:
+        return jsonify({"error": "无效的模板类型"}), 400
 
     # 设置表头样式
     for cell in ws[1]:
@@ -2434,7 +2441,7 @@ def import_data():
     if not project_id or not import_type or not file_data:
         return jsonify({"error": "缺少必要参数"}), 400
 
-    if import_type not in ["cp", "tc"]:
+    if import_type not in ["cp", "tc", "connection"]:
         return jsonify({"error": "无效的导入类型"}), 400
 
     projects = load_projects()
@@ -2489,8 +2496,10 @@ def import_data():
 
         if import_type == "cp":
             return import_cp(project, ws if not is_csv else None, headers, is_csv, csv_data)
-        else:
+        elif import_type == "tc":
             return import_tc(project, ws if not is_csv else None, headers, is_csv, csv_data)
+        else:
+            return import_connections(project, ws if not is_csv else None, headers, is_csv, csv_data)
 
     except Exception as e:
         return jsonify({"error": f"导入失败: {str(e)}"}), 400
@@ -2810,6 +2819,118 @@ def import_tc(project, ws, headers, is_csv=False, csv_data=None):
         conn.commit()
 
     return jsonify({"success": True, "imported": imported, "failed": len(errors), "errors": errors})
+
+
+def import_connections(project, ws, headers, is_csv=False, csv_data=None):
+    """导入 TC-CP 关联 (v0.9.1 新增)
+    
+    CSV 格式:
+    Test Case,Cover Point
+    TC名称1,CP名称1
+    TC名称2,CP名称2
+    
+    支持多对多关联：一个 TC 可以关联多个 CP，一个 CP 可以被多个 TC 关联
+    """
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
+    
+    # 解析表头
+    header_map = {}
+    for idx, header in enumerate(headers):
+        if header:
+            header_map[header.strip()] = idx
+    
+    # 必填字段
+    required_fields = ["Test Case", "Cover Point"]
+    for field in required_fields:
+        if field not in header_map:
+            return jsonify({"error": f"缺少必填字段: {field}"}), 400
+    
+    imported = 0
+    skipped = 0
+    errors = []
+    
+    # 获取数据行
+    if is_csv and csv_data:
+        data_rows = csv_data[1:]  # 跳过 header
+    else:
+        # Excel 格式
+        data_rows = []
+        for row_idx in range(2, ws.max_row + 1):
+            row = [ws.cell(row_idx, col_idx + 1).value for col_idx in range(len(headers))]
+            data_rows.append(row)
+    
+    for row_idx, row in enumerate(data_rows, start=2):
+        try:
+            # 安全获取 TC 名称 (兼容空值和 None)
+            tc_idx = header_map.get("Test Case", 0)
+            tc_name = ""
+            if tc_idx < len(row):
+                tc_val = row[tc_idx]
+                if tc_val is not None:
+                    tc_name = str(tc_val).strip()
+            
+            # 安全获取 CP 名称 (兼容空值和 None)
+            cp_idx = header_map.get("Cover Point", 1)
+            cp_name = ""
+            if cp_idx < len(row):
+                cp_val = row[cp_idx]
+                if cp_val is not None:
+                    cp_name = str(cp_val).strip()
+            
+            if not tc_name or not cp_name:
+                errors.append(f"第{row_idx}行: TC 或 CP 名称为空")
+                continue
+            
+            # 查询 TC ID
+            cursor.execute(
+                "SELECT id FROM test_case WHERE test_name = ?", (tc_name,)
+            )
+            tc_result = cursor.fetchone()
+            if not tc_result:
+                errors.append(f"第{row_idx}行: TC '{tc_name}' 不存在")
+                continue
+            tc_id = tc_result["id"]
+            
+            # 查询 CP ID
+            cursor.execute(
+                "SELECT id FROM cover_point WHERE cover_point = ?", (cp_name,)
+            )
+            cp_result = cursor.fetchone()
+            if not cp_result:
+                errors.append(f"第{row_idx}行: CP '{cp_name}' 不存在")
+                continue
+            cp_id = cp_result["id"]
+            
+            # 检查关联是否已存在
+            cursor.execute(
+                "SELECT 1 FROM tc_cp_connections WHERE tc_id = ? AND cp_id = ?",
+                (tc_id, cp_id)
+            )
+            if cursor.fetchone():
+                skipped += 1
+                continue
+            
+            # 插入关联
+            cursor.execute(
+                "INSERT INTO tc_cp_connections (tc_id, cp_id) VALUES (?, ?)",
+                (tc_id, cp_id)
+            )
+            imported += 1
+            
+        except Exception as e:
+            errors.append(f"第{row_idx}行: {str(e)}")
+    
+    if imported > 0:
+        conn.commit()
+    
+    return jsonify({
+        "success": True,
+        "imported": imported,
+        "skipped": skipped,
+        "failed": len(errors),
+        "errors": errors
+    })
 
 
 @api.route("/api/export", methods=["GET"])
@@ -3230,6 +3351,66 @@ def reset_password(user_id):
     auth.update_user(user_id, password_hash=password_hash, must_change_password=0)
     
     return jsonify({"success": True, "message": "密码已重置"})
+
+
+# ============ 用户反馈 API ============
+
+@api.route("/api/feedback", methods=["POST"])
+@login_required
+def submit_feedback():
+    """提交用户反馈"""
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "Bad Request", "message": "无效的请求数据"}), 400
+
+    feedback_type = data.get("type", "").strip()
+    title = data.get("title", "").strip()
+    description = data.get("description", "").strip()
+
+    # 验证必填字段
+    if not feedback_type:
+        return jsonify({"error": "Bad Request", "message": "请选择反馈类型"}), 400
+    if feedback_type not in ["bug", "feature", "optimization"]:
+        return jsonify({"error": "Bad Request", "message": "无效的反馈类型"}), 400
+    if not title:
+        return jsonify({"error": "Bad Request", "message": "请输入反馈标题"}), 400
+    if not description:
+        return jsonify({"error": "Bad Request", "message": "请输入反馈描述"}), 400
+
+    # 获取当前用户
+    username = session.get(SESSION_USERNAME_KEY, "anonymous")
+
+    # 生成反馈 ID
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    feedback_id = f"FEEDBACK_{timestamp}"
+
+    # 创建反馈数据
+    feedback_data = {
+        "id": feedback_id,
+        "type": feedback_type,
+        "title": title,
+        "description": description,
+        "created_at": datetime.now().isoformat() + "Z",
+        "user": username
+    }
+
+    # 保存到文件
+    feedback_dir = os.path.join(current_app.config["DATA_DIR"], "feedbacks")
+    os.makedirs(feedback_dir, exist_ok=True)
+
+    feedback_file = os.path.join(feedback_dir, f"{feedback_id}.json")
+    try:
+        with open(feedback_file, "w", encoding="utf-8") as f:
+            json.dump(feedback_data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        return jsonify({"error": "Server Error", "message": f"保存反馈失败: {str(e)}"}), 500
+
+    return jsonify({
+        "success": True,
+        "message": "反馈提交成功",
+        "data": feedback_data
+    })
 
 
 # ============ 静态文件路由 - 必须放在所有 API 路由之后 ============
