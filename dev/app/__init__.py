@@ -53,6 +53,11 @@ def create_app(testing=False):
     def manual():
         return render_template('templates/manual.html')
 
+    # 提供 manual.md 文件访问
+    @app.route('/manual.md')
+    def serve_manual():
+        return send_from_directory(base_dir, 'manual.md')
+
     @app.route('/static/<path:filename>')
     def serve_static(filename):
         return send_from_directory(os.path.join(base_dir, 'static'), filename)

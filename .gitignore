@@ -63,3 +63,7 @@ dev/cookies.txt
 archives/
 smoke/archives/
 *.bak
+
+# ========== OpenClaw ==========
+.claude/
+logs/

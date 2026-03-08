@@ -21,7 +21,7 @@ test.describe('CP 集成测试', () => {
    * 登录辅助函数 - v0.7.1 需要登录
    */
   async function loginAsAdmin(page: any) {
-    await page.goto('http://localhost:8081');
+    await page.goto('http://localhost:8081', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
 
     // 检查是否需要登录
@@ -320,7 +320,7 @@ test.describe('CP 集成测试', () => {
 test.describe('CP 集成测试 - 数据一致性', () => {
   
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:8081');
+    await page.goto('http://localhost:8081', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
     await page.waitForSelector('#projectSelector', { timeout: 10000 });
   });
@@ -356,7 +356,7 @@ test.describe('CP 集成测试 - 数据一致性', () => {
     const currentProject = await cpPage.page.locator('#projectSelector').inputValue();
 
     // 刷新页面 - 需要处理session丢失
-    await cpPage.page.reload();
+    await cpPage.page.reload({ waitUntil: 'domcontentloaded' });
     await cpPage.page.waitForLoadState('domcontentloaded');
 
     // 确保登录状态正常

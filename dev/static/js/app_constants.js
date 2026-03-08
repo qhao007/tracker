@@ -13,7 +13,8 @@ const SESSION_KEYS = {
 };
 
 // ==================== API 端点常量 ====================
-const API_ENDPOINTS = {
+// 使用 window 对象，允许后续代码覆盖
+window.API_ENDPOINTS = {
     // 认证
     LOGIN: '/api/login',
     LOGOUT: '/api/logout',

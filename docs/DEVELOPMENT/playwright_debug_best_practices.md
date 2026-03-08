@@ -591,4 +591,217 @@ npx playwright test tests/xxx.spec.ts --list
 
 ---
 
-*最后更新: 2026-03-03*
+## 12. v0.9.0 测试调试经验 (2026-03-07)
+
+### 12.1 page.reload() 也需要 waitUntil
+
+**问题**: 测试使用 `page.reload()` 后超时
+
+**根因**: `page.reload()` 默认等待 `load` 事件，会等待 CDN 资源加载
+
+**解决方案**:
+```typescript
+// 错误
+await page.reload();
+
+// 正确
+await page.reload({ waitUntil: 'domcontentloaded' });
+```
+
+### 12.2 项目创建需要填写日期字段
+
+**问题**: 创建项目时模态框无法关闭
+
+**根因**: v0.8.3+ 版本中项目创建表单的日期字段是必填的
+
+**解决方案**:
+```typescript
+// 填写日期（必填字段）
+const today = new Date();
+const nextMonth = new Date(today);
+nextMonth.setMonth(nextMonth.getMonth() + 1);
+const startDate = today.toISOString().split('T')[0];
+const endDate = nextMonth.toISOString().split('T')[0];
+await page.fill('#newProjectStartDate', startDate);
+await page.fill('#newProjectEndDate', endDate);
+await page.click('#projectModal button:has-text("创建")');
+// 等待模态框关闭
+await page.waitForSelector('#projectModal', { state: 'hidden', timeout: 10000 });
+```
+
+### 12.3 loginOverlay 覆盖层导致交互失败
+
+**问题**: 点击操作被 loginOverlay 遮挡，导致 `element intercepts pointer events`
+
+**根因**: 登录后的覆盖层未正确关闭，或测试间状态未正确清理
+
+**解决方案**:
+```typescript
+// 登录后等待覆盖层消失
+await page.waitForFunction(() => {
+  const overlay = document.getElementById('loginOverlay');
+  return !overlay || !overlay.classList.contains('show');
+}, { timeout: 30000 });
+
+// 或者使用 waitForSelector 等待元素不可见
+await page.waitForSelector('#loginOverlay', { state: 'hidden', timeout: 30000 });
+```
+
+### 12.4 waitForURL 导致超时
+
+**问题**: `page.waitForURL('**/')` 超时
+
+**根因**: 登录后 URL 可能不变，或者页面有重定向
+
+**解决方案**:
+```typescript
+// 错误
+await page.click('button.login-btn');
+await page.waitForURL('**/');  // 可能超时
+
+// 正确 - 等待 DOM 元素
+await page.click('button.login-btn');
+await page.waitForSelector('#userInfo', { timeout: 30000 });
+```
+
+### 12.5 所有 page.goto() 都需要 waitUntil
+
+**问题**: 测试中只有部分 page.goto() 添加了 waitUntil，导致不一致的超时
+
+**根因**: Playwright 默认等待 `load` 事件
+
+**最佳实践**: 在所有导航相关的方法中都添加 waitUntil
+
+```typescript
+// page.goto()
+await page.goto('http://localhost:8081', { waitUntil: 'domcontentloaded' });
+
+// page.reload()
+await page.reload({ waitUntil: 'domcontentloaded' });
+
+// page.goBack()
+await page.goBack({ waitUntil: 'domcontentloaded' });
+
+// page.goForward()
+await page.goForward({ waitUntil: 'domcontentloaded' });
+```
+
+### 12.6 按钮选择器问题
+
+**问题**: 使用错误的按钮选择器
+
+**根因**: 按钮可能使用 `class="btn btn-primary"` 而不是 `btn-primary`
+
+**解决方案**:
+```typescript
+// 使用文本选择器更可靠
+await page.click('#projectModal button:has-text("创建")');
+
+// 而不是依赖 class
+await page.click('#projectModal button.btn-primary');  // 可能失败
+```
+
+### 12.7 测试跳过策略
+
+**问题**: 测试场景与应用行为不一致
+
+**原因**: 应用升级后，某些测试场景不再适用
+
+**解决方案**: 使用 `test.skip()` 标记不适用的测试
+
+```typescript
+// 跳过不再适用的测试
+test.skip('UI-PLAN-021: 无日期项目显示提示', async ({ page }) => {
+  // 测试逻辑
+});
+```
+
+### 12.8 测试间状态隔离问题
+
+**问题**: 测试之间共享登录状态，导致测试失败
+
+**根因**: Playwright 使用共享的浏览器 context，登录状态会保留到下一个测试
+
+**解决方案**:
+
+1. **使用 test.beforeEach 清理状态**:
+```typescript
+test.beforeEach(async ({ page }) => {
+  // 刷新页面确保干净状态
+  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+});
+```
+
+2. **清理 Cookie 和本地存储**:
+```typescript
+test.beforeEach(async ({ page }) => {
+  await page.context().clearCookies();
+  await page.addInitScript(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+});
+```
+
+3. **调用 logout API**:
+```typescript
+test.beforeEach(async ({ page }) => {
+  try {
+    await page.request.post(`${BASE_URL}/api/auth/logout`);
+  } catch (e) {}
+});
+```
+
+4. **注意**: `waitForSelector('#userInfo')` 可能失败，因为 guest 账户的 userInfo 可能不可见
+
+### 12.9 未登录测试的正确写法
+
+**问题**: 测试期望 `#projectSelector` 在未登录时不可见，但实际是可见的（被 loginOverlay 覆盖）
+
+**根因**: 元素本身可见，只是被覆盖层遮挡
+
+**解决方案**:
+```typescript
+// 检查 loginOverlay 是否覆盖了项目选择器
+const overlay = page.locator('#loginOverlay');
+const isOverlayVisible = await overlay.evaluate(el => {
+  return el && (el.classList.contains('show') || window.getComputedStyle(el).display !== 'none');
+});
+expect(isOverlayVisible).toBe(true);
+```
+
+---
+
+## 13. 调试经验总结
+
+### 13.1 guest 账户登录的正确方式
+
+**问题**: 使用密码表单登录 guest 失败
+
+**原因**: guest 用户没有密码（password_hash 是 None）
+
+**正确方式**: 使用 `#guestLoginBtn` 按钮登录
+
+```typescript
+// 错误
+await page.fill('#loginUsername', 'guest');
+await page.fill('#loginPassword', 'guest123');
+await page.click('button.login-btn');
+
+// 正确
+await page.click('#guestLoginBtn');
+```
+
+### 13.2 手册页面加载路径
+
+**问题**: 手册内容加载失败
+
+**原因**: 路径错误 - 尝试从 `/static/manual.md` 加载，但文件在项目根目录
+
+**修复**:
+1. 添加路由: `@app.route('/manual.md')`
+2. 修改 fetch: `fetch('/manual.md')`
+
+---
+
+*最后更新: 2026-03-07*

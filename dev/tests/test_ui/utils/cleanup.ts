@@ -96,8 +96,8 @@ async function cleanupProjects(page: Page): Promise<void> {
       }
     }
 
-    // 刷新页面以更新项目列表
-    await page.reload();
+    // 刷新页面以更新项目列表 (使用 domcontentloaded 避免等待 CDN 资源)
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#projectSelector', { timeout: 10000 });
 
     console.log(`✅ 项目清理完成，共删除 ${projectsToDelete.length} 个测试项目`);
