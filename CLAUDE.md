@@ -2,7 +2,7 @@
 
 > 本文件供 Claude Code / 小栗子 使用
 > 项目: Tracker (芯片验证管理系统)
-> 版本: v0.7.1 (开发中)
+> 版本: v0.x.x (下个版本)
 
 ---
 
@@ -208,8 +208,57 @@ main (生产)
 | 需求反馈 | `/projects/management/feedbacks/` |
 | 规格书 | `docs/PLANS/` |
 | Bug 记录 | `docs/BUGLOG/` |
-| 开发规范 | `docs/DEVELOPMENT/` |
+| 开发规范 | `docs/DEVELOPMENT/DEVELOPMENT_PROCESS.md` |
+| **编程标准** | `docs/DEVELOPMENT/coding_standard.md` |
 | 测试计划 | `docs/DEVELOPMENT/TEST_EXECUTION_PLAN.md` |
+
+---
+
+## 📖 编程标准
+
+> 后续版本开发请遵循 `docs/DEVELOPMENT/coding_standard.md` 中的编程标准
+
+包含以下内容：
+- Python 后端代码规范 (PEP 8)
+- 前端 JavaScript 规范
+- API 设计标准 (RESTful)
+- 数据库操作标准
+- 测试代码标准 (pytest + Playwright)
+- 错误处理规范
+- 安全规范
+
+---
+
+## 🚀 开发工作流
+
+> Tracker 项目专用开发工作流，使用方式：直接告诉我"请按工作流开发 xxx"
+
+**位置**: `custom_skills/tracker_code_development_workflow/SKILL.md`
+
+**流程**: 开发(Subagent A) → 审查(Subagent B，1-3轮优化) → 测试(Subagent C) → 确认(Subagent D)
+
+---
+
+## 📝 开发日志规则
+
+> 重要：每次完成开发相关工作后，必须记录到 `logs/` 目录
+
+### 规则
+- 使用 `logs/TEMPLATE.md` 模板创建日志
+- 文件命名格式: `YYYY-MM-DD.md`
+- 每日工作结束后更新或创建日志
+
+### 示例
+```bash
+# 创建新日志
+cp logs/TEMPLATE.md logs/2026-03-07.md
+```
+
+---
+
+## ✍️ 文档署名
+
+> 本项目所有文档的署名: **Claude Code**
 
 ---
 
@@ -217,9 +266,9 @@ main (生产)
 
 | 版本 | 状态 | 测试 |
 |------|------|------|
-| v0.7.0 | 生产 | 178/178 通过 |
-| v0.7.1 | 开发中 | 175/175 API, 12/12 登录 |
+| v0.9.0 | 生产 | - |
+| v0.x.x | 开发中 | (下个版本，版本号待定) |
 
 ---
 
-*最后更新: 2026-02-24*
+*最后更新: 2026-03-07 | 署名: Claude Code*

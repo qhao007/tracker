@@ -3353,6 +3353,66 @@ def reset_password(user_id):
     return jsonify({"success": True, "message": "密码已重置"})
 
 
+# ============ 用户反馈 API ============
+
+@api.route("/api/feedback", methods=["POST"])
+@login_required
+def submit_feedback():
+    """提交用户反馈"""
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "Bad Request", "message": "无效的请求数据"}), 400
+
+    feedback_type = data.get("type", "").strip()
+    title = data.get("title", "").strip()
+    description = data.get("description", "").strip()
+
+    # 验证必填字段
+    if not feedback_type:
+        return jsonify({"error": "Bad Request", "message": "请选择反馈类型"}), 400
+    if feedback_type not in ["bug", "feature", "optimization"]:
+        return jsonify({"error": "Bad Request", "message": "无效的反馈类型"}), 400
+    if not title:
+        return jsonify({"error": "Bad Request", "message": "请输入反馈标题"}), 400
+    if not description:
+        return jsonify({"error": "Bad Request", "message": "请输入反馈描述"}), 400
+
+    # 获取当前用户
+    username = session.get(SESSION_USERNAME_KEY, "anonymous")
+
+    # 生成反馈 ID
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    feedback_id = f"FEEDBACK_{timestamp}"
+
+    # 创建反馈数据
+    feedback_data = {
+        "id": feedback_id,
+        "type": feedback_type,
+        "title": title,
+        "description": description,
+        "created_at": datetime.now().isoformat() + "Z",
+        "user": username
+    }
+
+    # 保存到文件
+    feedback_dir = os.path.join(current_app.config["DATA_DIR"], "feedbacks")
+    os.makedirs(feedback_dir, exist_ok=True)
+
+    feedback_file = os.path.join(feedback_dir, f"{feedback_id}.json")
+    try:
+        with open(feedback_file, "w", encoding="utf-8") as f:
+            json.dump(feedback_data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        return jsonify({"error": "Server Error", "message": f"保存反馈失败: {str(e)}"}), 500
+
+    return jsonify({
+        "success": True,
+        "message": "反馈提交成功",
+        "data": feedback_data
+    })
+
+
 # ============ 静态文件路由 - 必须放在所有 API 路由之后 ============
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
