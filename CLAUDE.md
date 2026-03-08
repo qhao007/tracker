@@ -161,6 +161,7 @@ cd /projects/management/tracker/dev && bash check_frontent.sh
 |不动 user_data| 禁止操作 `shared/data/user_data/` 目录|
 |不动生产端口| 禁止在 8080 端口调试，8080 是生产环境|
 |不碰用户数据| 禁止通过文件操作修改用户数据|
+|不手工发布| 禁止用 `cp/ln/gunicorn` 等手工命令发布，必须用 release.py |
 
 ### 数据目录
 
