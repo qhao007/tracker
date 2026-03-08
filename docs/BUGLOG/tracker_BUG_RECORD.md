@@ -2273,3 +2273,36 @@ Object.assign(window.API_ENDPOINTS, {
 **影响**: 非阻塞性，代码使用本地 Chart.js fallback 正常
 
 **状态**: 已知问题，不影响功能
+
+---
+
+## BUG-085: release.py 版本格式检查不匹配
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-08 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-03-08 |
+| **修复人** | 小栗子 |
+| **影响版本** | v0.9.1 |
+
+**描述**: 执行 `release.py --version v0.9.1 --force` 时报错 "版本不匹配"，但 flag 文件内容正确。
+
+**根本原因**: 
+- `release_preparation.py` 使用 `version.lstrip('v')` 存储版本（去掉 v 前缀）
+- `release.py` 直接使用传入的 `version` 参数（未去掉 v 前缀）
+- 导致 `VERSION=0.9.1` 与 `VERSION=v0.9.1` 不匹配
+
+**影响范围**:
+- `scripts/release.py` 第 96 行 `check_release_ready()` 函数
+
+**修复方案**:
+```python
+# 在 check_release_ready() 函数开头添加
+version = version.lstrip('v')
+```
+
+**验证**:
+- ✅ 版本格式检查通过
