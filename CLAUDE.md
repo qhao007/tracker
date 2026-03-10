@@ -272,4 +272,42 @@ cp logs/TEMPLATE.md logs/2026-03-07.md
 
 ---
 
-*最后更新: 2026-03-07 | 署名: Claude Code*
+## 🔔 飞书通知
+
+> 项目已配置飞书 Webhook，完成任务后可发送通知
+
+**Webhook URL**:
+```
+https://open.feishu.cn/open-apis/bot/v2/hook/00f0719c-89c0-4595-9c68-1bfd3a5de3d3
+```
+
+**发送文本消息**:
+```bash
+curl -X POST "https://open.feishu.cn/open-apis/bot/v2/hook/00f0719c-89c0-4595-9c68-1bfd3a5de3d3" \
+  -H "Content-Type: application/json" \
+  -d '{"msg_type": "text", "content": {"text": "你的消息内容"}}'
+```
+
+**发送卡片消息**:
+```bash
+curl -X POST "https://open.feishu.cn/open-apis/bot/v2/hook/00f0719c-89c0-4595-9c68-1bfd3a5de3d3" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "msg_type": "interactive",
+    "card": {
+      "header": {
+        "title": {"tag": "plain_text", "content": "✅ 任务完成"},
+        "template": "green"
+      },
+      "elements": [
+        {"tag": "markdown", "content": "**内容**: 你的消息"}
+      ]
+    }
+  }'
+```
+
+> **权限**: 已在 `.claude/settings.local.json` 中预批准，无需手动确认
+
+---
+
+*最后更新: 2026-03-09 | 署名: Claude Code*

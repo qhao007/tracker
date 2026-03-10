@@ -2306,3 +2306,115 @@ version = version.lstrip('v')
 
 **验证**:
 - ✅ 版本格式检查通过
+
+---
+
+## BUG-086: release_preparation.py 引用不存在的 server_test.py
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-10 |
+| **报告人** | Claude Code |
+| **修复日期** | 2026-03-10 |
+| **修复人** | Claude Code |
+| **影响版本** | v0.9.1 |
+
+**描述**: `release_preparation.py` 中 `run_api_tests()` 和 `run_smoke_tests()` 函数尝试执行 `python3 server_test.py`，但该文件不存在。
+
+**根本原因**:
+- 项目已改用 `start_server_test.sh` 脚本启动测试服务器（gunicorn）
+- 发布脚本未同步更新
+
+**影响范围**:
+- `scripts/release_preparation.py` 第 371、409 行
+- 发布流程无法执行 API 测试和冒烟测试
+
+**修复方案**:
+1. 改用 `./start_server_test.sh` 启动测试服务器
+2. 完善 dry_run 模式，正确跳过测试执行
+
+**验证**:
+- ✅ `--dry-run --skip-tests` 模式验证通过
+
+---
+
+## BUG-087: release.py 版本文件路径错误
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-10 |
+| **报告人** | Claude Code |
+| **修复日期** | 2026-03-10 |
+| **修复人** | Claude Code |
+| **影响版本** | v0.9.1 |
+
+**描述**: `release.py` 的 `get_version()` 函数尝试从 `dev/app/version.py` 读取版本号，但该文件不存在。
+
+**根本原因**:
+- 版本信息已迁移到 `dev/VERSION` 文件
+- 发布脚本未同步更新路径
+
+**影响范围**:
+- `scripts/release.py` 第 46 行 `get_version()` 函数
+- 发布脚本无法正确获取版本号
+
+**修复方案**:
+```python
+# 修改前
+version_file = os.path.join(TRACKER_DIR, 'dev', 'app', 'version.py')
+
+# 修改后
+version_file = os.path.join(TRACKER_DIR, 'dev', 'VERSION')
+```
+
+**验证**:
+- ✅ 版本号正确读取
+
+---
+
+## BUG-088: 发布脚本 dry-run 模式安全漏洞
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-10 |
+| **报告人** | Claude Code |
+| **修复日期** | 2026-03-10 |
+| **修复人** | Claude Code |
+| **影响版本** | v0.9.1 |
+
+**描述**: 发布脚本的 dry-run 模式存在流程漏洞，可能导致使用演练模式的 flag 文件进行正式发布。
+
+**根本原因**:
+- `release_preparation.py --dry-run` 不创建 flag 文件
+- `release.py --dry-run` 因为没有 flag 文件而无法完整验证
+- 如果 dry-run 创建了 flag 文件，可能被用于正式发布
+
+**影响范围**:
+- 发布流程安全性
+
+**修复方案**:
+1. flag 文件新增 `DRY_RUN` 字段，标记是否为演练模式
+2. `release.py` 检测到 `DRY_RUN=true` 时拒绝正式发布
+3. `release.py --dry-run` 允许使用 `DRY_RUN=true` 的 flag
+
+**验证流程**:
+```bash
+# Step 1: 演练模式创建 flag (DRY_RUN=true)
+python3 scripts/release_preparation.py --dry-run --skip-tests --version v9.9.9
+
+# Step 2: 演练发布 - 应允许
+python3 scripts/release.py --dry-run --version v9.9.9  # ✅ 通过
+
+# Step 3: 正式发布 - 应拒绝
+python3 scripts/release.py --version v9.9.9  # ❌ 正确拒绝
+```
+
+**验证**:
+- ✅ dry-run 模式完整验证通过
+- ✅ 安全检查正确阻止误操作
