@@ -274,23 +274,30 @@ def notify_failure(version, failed_step, prev_tag):
         print(f"⚠️ 飞书通知发送异常: {e}")
 
 
-def create_release_ready_flag(version, repo_root):
-    """创建发布就绪 flag 文件"""
+def create_release_ready_flag(version, repo_root, dry_run=False):
+    """创建发布就绪 flag 文件
+
+    Args:
+        version: 版本号
+        repo_root: 仓库根目录
+        dry_run: 是否为演练模式
+    """
     flag_file = repo_root / ".release_ready"
-    
+
     # 获取当前 main 分支的提交 hash
     current_commit = subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=repo_root, capture_output=True, text=True
     ).stdout.strip()
-    
+
     content = f"""VERSION={version}
 PREPARED_AT={datetime.now().isoformat()}
 MAIN_COMMIT={current_commit}
+DRY_RUN={'true' if dry_run else 'false'}
 """
-    
+
     flag_file.write_text(content)
-    print(f"✅ Flag 文件已创建: {flag_file}")
+    print(f"✅ Flag 文件已创建: {flag_file}" + (" (演练模式)" if dry_run else ""))
     return True
 
 
@@ -304,13 +311,18 @@ def merge_and_tag(version, dry_run=False):
     4. 创建发布标签
     5. 创建 .release_ready flag
     6. 停留在 main 分支（不切换回 develop）
+
+    注意：dry_run 模式下会创建标记为 DRY_RUN=true 的 flag 文件，
+          用于测试流程，但 release.py 会拒绝用 dry-run flag 进行正式发布。
     """
     print_step(6, f"执行 Merge 和 Tag (v{version})")
 
     repo_root = Path(__file__).parent.parent
 
     if dry_run:
-        print("[演练] 跳过 Merge 和 Tag")
+        print("[演练] 跳过 Git 操作，但创建测试用 flag 文件...")
+        create_release_ready_flag(version, repo_root, dry_run=True)
+        print(f"\n✅ 演练模式 flag 已创建 (DRY_RUN=true)")
         return True
 
     # 1. 切换到 main 分支
@@ -347,7 +359,7 @@ def merge_and_tag(version, dry_run=False):
 
     # 5. 创建 .release_ready flag 并停留在 main 分支
     print("\n5. 创建 release_ready flag...")
-    create_release_ready_flag(version, repo_root)
+    create_release_ready_flag(version, repo_root, dry_run=dry_run)
     
     print(f"\n✅ Merge 和 Tag 完成: v{version}")
     print(f"📌 当前分支: main (准备好发布)")
@@ -362,27 +374,25 @@ def run_api_tests(dry_run=False):
     repo_root = Path(__file__).parent.parent
     dev_dir = repo_root / "dev"
 
-    # 确保 dev 服务器未运行
-    cmd = "pkill -f 'server_test.py' 2>/dev/null || true"
-    subprocess.run(cmd, shell=True, cwd=repo_root)
+    if dry_run:
+        print("[演练] 跳过 API 测试")
+        return True
 
-    # 启动 dev 服务器
+    # 启动 dev 服务器 (使用 start_server_test.sh)
     print("\n启动 dev 服务器...")
-    cmd = f"cd {dev_dir} && python3 server_test.py > /dev/null 2>&1 &"
-    if not dry_run:
-        os.system(cmd)
-        import time
-        time.sleep(3)
-        print("Dev 服务器已启动")
+    cmd = f"cd {dev_dir} && ./start_server_test.sh"
+    os.system(cmd)
+    import time
+    time.sleep(3)
+    print("Dev 服务器已启动")
 
     # 运行 API 测试 (tests/test_api/)
     cmd = f"PYTHONPATH={dev_dir} python3 -m pytest {dev_dir}/tests/test_api/ -v"
     success, output = run_command(cmd, "API 测试", cwd=repo_root)
 
     # 停止 dev 服务器
-    if not dry_run:
-        cmd = "pkill -f 'server_test.py' 2>/dev/null || true"
-        subprocess.run(cmd, shell=True)
+    cmd = "pkill -f 'gunicorn.*8081' 2>/dev/null || true"
+    subprocess.run(cmd, shell=True)
 
     if not success:
         return False
@@ -404,13 +414,16 @@ def run_smoke_tests(dry_run=False):
     repo_root = Path(__file__).parent.parent
     dev_dir = repo_root / "dev"
 
-    # 确保 dev 服务器运行
-    print("确保 dev 服务器运行...")
-    cmd = f"cd {dev_dir} && python3 server_test.py > /dev/null 2>&1 &"
-    if not dry_run:
-        os.system(cmd)
-        import time
-        time.sleep(3)
+    if dry_run:
+        print("[演练] 跳过冒烟测试")
+        return True
+
+    # 启动 dev 服务器 (使用 start_server_test.sh)
+    print("启动 dev 服务器...")
+    cmd = f"cd {dev_dir} && ./start_server_test.sh"
+    os.system(cmd)
+    import time
+    time.sleep(3)
 
     # 运行冒烟测试 (自动匹配所有 smoke 目录下的测试文件)
     cmd = f"cd {dev_dir} && npx playwright test tests/test_ui/specs/smoke/*.spec.ts --project=firefox --timeout=60000"
