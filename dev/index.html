@@ -17,6 +17,11 @@
         select option { background-color: white; color: #333; padding: 5px 10px; }
         select option:hover, select option:focus, select option:active { background-color: #e8f4fc; }
         .cp-table th:nth-child(1) { width: 13%; } .cp-table th:nth-child(2) { width: 10%; } .cp-table th:nth-child(3) { width: 15%; } .cp-table th:nth-child(4) { width: 30%; } .cp-table th:nth-child(5) { width: 12%; } .cp-table th:nth-child(6) { width: 10%; }
+        /* REQ-004: CP/TP滑动条支持 */
+        .cp-table-container { overflow-y: auto; max-height: none; }
+        .cp-table-container thead { position: sticky; top: 0; background: #f5f5f5; z-index: 1; }
+        .tc-table-container { overflow-y: auto; max-height: none; }
+        .tc-table-container thead { position: sticky; top: 0; background: #f5f5f5; z-index: 1; }
         .tc-table th:nth-child(1) { width: 4%; } .tc-table th:nth-child(2) { width: 7%; } .tc-table th:nth-child(3) { width: 6%; } .tc-table th:nth-child(4) { width: 6%; } .tc-table th:nth-child(5) { width: 6%; } .tc-table th:nth-child(6) { width: 15%; } .tc-table th:nth-child(7) { width: 8%; } .tc-table th:nth-child(8) { width: 6%; } .tc-table th:nth-child(9) { width: 8%; } .tc-table th:nth-child(10) { width: 6%; }
         .coverage-badge { padding: 3px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; min-width: 45px; text-align: center; display: inline-block; }
         .coverage-wrapper { display: flex; align-items: center; gap: 8px; }
@@ -48,7 +53,11 @@
         .cp-extra-field label { font-size: 10px; color: #999; margin-right: 8px; }
         .cp-connected-tcs { background: #fff; border-radius: 4px; border: 1px solid #e0e0e0; overflow: hidden; }
         .cp-connected-tcs th { background: #f5f5f5 !important; }
-        
+
+        /* 未关联状态样式 - REQ-002/003 */
+        .unlinked { color: red; font-weight: bold; }
+        .unlinked::before { content: "🔗 "; }
+
         .status-select { padding: 2px 5px; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; background: white; cursor: pointer; }
         .status-select option { background: white; color: #333; }
         .cp-select, .tc-select { width: 16px; height: 16px; cursor: pointer; }
@@ -311,14 +320,19 @@
                     <input type="text" class="search-input" placeholder="搜索..." onkeyup="filterCP(this.value)">
                     <select id="cpFeatureFilter" onchange="filterCPByFeature()"><option value="">全部 Feature</option></select>
                     <select id="cpPriorityFilter" onchange="filterCPByPriority()"><option value="">全部 Priority</option><option value="P0">P0</option><option value="P1">P1</option><option value="P2">P2</option></select>
+                    <!-- REQ-005: CP未关联过滤 -->
+                    <select id="cpLinkedFilter" onchange="filterCPByLinked()"><option value="">全部</option><option value="unlinked">未关联</option></select>
                     <button class="btn" onclick="resetCPFilter()" style="padding: 4px 8px; font-size: 12px;">重置</button>
                 </div>
                 <div class="toolbar-right"><span style="color: #666; font-size: 12px;">共 <span id="cpCount">0</span> 条</span> <button class="btn" id="toggleAllCPDetails" onclick="toggleAllCPDetails()" style="padding: 4px 8px; font-size: 12px;">详情 ▼</button></div>
             </div>
-            <table class="data-table cp-table" id="cpTable">
-                <thead><tr><th style="width: 30px;"><input type="checkbox" onchange="document.querySelectorAll('.cp-select').forEach(cb => cb.checked = this.checked); getSelectedCPs()"></th><th>Feature</th><th>Sub-Feature</th><th>Cover Point</th><th>Priority</th><th>覆盖率</th><th>操作</th></tr></thead>
-                <tbody id="cpList"></tbody>
-            </table>
+            <!-- REQ-004: CP滑动条支持 -->
+            <div class="cp-table-container">
+                <table class="data-table cp-table" id="cpTable">
+                    <thead><tr><th style="width: 30px;"><input type="checkbox" onchange="document.querySelectorAll('.cp-select').forEach(cb => cb.checked = this.checked); getSelectedCPs()"></th><th>Feature</th><th>Sub-Feature</th><th>Cover Point</th><th>Priority</th><th>覆盖率</th><th>操作</th></tr></thead>
+                    <tbody id="cpList"></tbody>
+                </table>
+            </div>
         </div>
         <div id="tcPanel" style="display: none;">
             <!-- TC 过滤面板 (v0.6.2) -->
@@ -373,12 +387,15 @@
                 </div>
                 <div class="toolbar-right"><span style="color: #666; font-size: 12px;">共 <span id="tcCount">0</span> 条</span></div>
             </div>
-            <table class="data-table tc-table" id="tcTable">
-                <thead><tr><th style="width: 30px;"><input type="checkbox" onchange="document.querySelectorAll('.tc-select').forEach(cb => cb.checked = this.checked); getSelectedTCs()"></th><th>ID</th><th>DV Milestone</th><th>TestBench</th><th>Category</th><th style="width: 50px;">Owner</th><th style="width: 30%;">Test Name</th><th>Target Date</th><th>Status</th><th style="width: 70px;">Status Date</th><th style="width: 35px;">操作</th></tr></thead>
-                <tbody id="tcList"></tbody>
-            </table>
+            <!-- REQ-004: TP/TC滑动条支持 -->
+            <div class="tc-table-container">
+                <table class="data-table tc-table" id="tcTable">
+                    <thead><tr><th style="width: 30px;"><input type="checkbox" onchange="document.querySelectorAll('.tc-select').forEach(cb => cb.checked = this.checked); getSelectedTCs()"></th><th>ID</th><th>DV Milestone</th><th>TestBench</th><th>Category</th><th style="width: 50px;">Owner</th><th style="width: 30%;">Test Name</th><th>Target Date</th><th>Status</th><th style="width: 70px;">Status Date</th><th style="width: 35px;">操作</th></tr></thead>
+                    <tbody id="tcList"></tbody>
+                </table>
+            </div>
         </div>
-        
+
         <!-- Progress Charts Panel -->
         <div id="progressPanel" style="display: none;">
             <div class="toolbar">
@@ -405,7 +422,29 @@
             </div>
         </div>
     </div>
-    
+
+    <!-- ISSUE-017: 强制修改密码弹窗 -->
+    <div class="modal" id="changePasswordModal" style="display: none; z-index: 10000;">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header"><span>修改密码</span><button class="modal-close" onclick="closeChangePasswordModal()" disabled>&times;</button></div>
+            <div class="modal-body">
+                <p style="margin-bottom: 15px; color: #f44336;">首次登录必须修改密码</p>
+                <div class="form-group">
+                    <label>新密码 (长度≥6)</label>
+                    <input type="password" id="newPassword" class="form-control" minlength="6" placeholder="请输入新密码">
+                </div>
+                <div class="form-group">
+                    <label>确认密码</label>
+                    <input type="password" id="confirmPassword" class="form-control" minlength="6" placeholder="请再次输入新密码">
+                </div>
+                <p id="changePasswordError" style="color: #f44336; font-size: 12px; display: none;"></p>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-primary" onclick="submitChangePassword()">确认修改</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- CP Modal -->
     <div class="modal" id="cpModal">
         <div class="modal-content">
@@ -904,6 +943,10 @@
                     currentUser = data.user;
                     updateUIForLoggedIn();
                     await loadProjects();
+                    // ISSUE-017: 检查是否需要强制修改密码
+                    if (currentUser.must_change_password === true) {
+                        showChangePasswordModal();
+                    }
                 } else {
                     const data = await res.json();
                     errorEl.textContent = data.message || '登录失败';
@@ -914,7 +957,64 @@
                 errorEl.classList.add('show');
             }
         }
-        
+
+        // ISSUE-017: 强制修改密码相关函数
+        function showChangePasswordModal() {
+            const modal = document.getElementById('changePasswordModal');
+            const closeBtn = modal.querySelector('.modal-close');
+            closeBtn.disabled = true; // 禁用关闭按钮
+            modal.style.display = 'block';
+            // 禁用其他页面操作
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeChangePasswordModal() {
+            // 不允许关闭，除非密码修改成功
+        }
+
+        async function submitChangePassword() {
+            const newPwd = document.getElementById('newPassword').value;
+            const confirmPwd = document.getElementById('confirmPassword').value;
+            const errorEl = document.getElementById('changePasswordError');
+
+            if (newPwd.length < 6) {
+                errorEl.textContent = '密码长度至少6位';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            if (newPwd !== confirmPwd) {
+                errorEl.textContent = '两次密码输入不一致';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/auth/password`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: newPwd })
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    // 修改密码成功，关闭弹窗，恢复页面操作
+                    document.getElementById('changePasswordModal').style.display = 'none';
+                    document.body.style.overflow = 'auto';
+                    // 更新当前用户状态
+                    currentUser.must_change_password = false;
+                    alert('密码修改成功');
+                } else {
+                    const data = await res.json();
+                    errorEl.textContent = data.message || '密码修改失败';
+                    errorEl.style.display = 'block';
+                }
+            } catch (e) {
+                errorEl.textContent = '网络错误';
+                errorEl.style.display = 'block';
+            }
+        }
+
         async function handleGuestLogin() {
             const errorEl = document.getElementById('loginError');
             
@@ -1376,27 +1476,47 @@
         
         function renderCP(filter = '') {
             let filtered = coverPoints;
-            
+
+            // REQ-002: 计算每个CP的关联状态
+            const linkedCPIds = new Set();
+            if (testCases && testCases.length > 0) {
+                testCases.forEach(tc => {
+                    if (tc.connected_cps && Array.isArray(tc.connected_cps)) {
+                        tc.connected_cps.forEach(cpId => linkedCPIds.add(cpId));
+                    }
+                });
+            }
+
             // 文本搜索过滤
             if (filter) { filter = filter.toLowerCase(); filtered = filtered.filter(cp => cp.feature.toLowerCase().includes(filter) || (cp.sub_feature && cp.sub_feature.toLowerCase().includes(filter)) || cp.cover_point.toLowerCase().includes(filter)); }
-            
+
             // Feature 下拉过滤
             const featureFilter = document.getElementById('cpFeatureFilter')?.value;
             if (featureFilter) { filtered = filtered.filter(cp => cp.feature === featureFilter); }
-            
+
             // Priority 下拉过滤
             const priorityFilter = document.getElementById('cpPriorityFilter')?.value;
             if (priorityFilter) { filtered = filtered.filter(cp => cp.priority === priorityFilter); }
-            
+
+            // REQ-005: 未关联过滤
+            const linkedFilter = document.getElementById('cpLinkedFilter')?.value;
+            if (linkedFilter === 'unlinked') {
+                filtered = filtered.filter(cp => !linkedCPIds.has(cp.id));
+            }
+
             document.getElementById('cpCount').textContent = filtered.length;
             const tbody = document.getElementById('cpList');
             if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #999; padding: 30px;">暂无数据</td></tr>'; return; }
-            tbody.innerHTML = filtered.map(cp => `
+            tbody.innerHTML = filtered.map(cp => {
+                // REQ-002: 判断CP是否未关联
+                const isUnlinked = !linkedCPIds.has(cp.id);
+                const cpNameHtml = isUnlinked ? `<span class="unlinked">${escapeHtml(cp.cover_point)}</span>` : escapeHtml(cp.cover_point);
+                return `
                 <tr data-cp-id="${cp.id}">
                     <td><input type="checkbox" class="cp-select" value="${cp.id}" onchange="getSelectedCPs()"></td>
                     <td>${escapeHtml(cp.feature)}</td>
                     <td>${escapeHtml(cp.sub_feature || '')}</td>
-                    <td><strong>${escapeHtml(cp.cover_point)}</strong></td>
+                    <td><strong>${cpNameHtml}</strong></td>
                     <td><span class="priority-badge">${cp.priority || 'P0'}</span></td>
                     <td><div class="coverage-wrapper"><span class="coverage-badge ${cp.coverage === 100 ? 'bg-green' : cp.coverage > 0 ? 'bg-yellow' : 'bg-red'}">${cp.coverage}%</span><small class="coverage-detail">${cp.coverage_detail}</small></div></td>
                     <td><div class="action-btns"><button class="action-btn" onclick="toggleCPDetail(${cp.id})">详情</button><button class="action-btn edit" onclick="editCP(${cp.id})">编辑</button><button class="action-btn delete" onclick="deleteCP(${cp.id})">删除</button></div></td>
@@ -1412,12 +1532,13 @@
                         </div>
                     </td>
                 </tr>
-            `).join('');
+            `}).join('');
         }
-        
+
         function filterCP(value) { renderCP(value); }
         function filterCPByFeature() { renderCP(); }
         function filterCPByPriority() { renderCP(); }
+        function filterCPByLinked() { renderCP(); }
         
         // CP 详情展开/收起
         async function toggleCPDetail(cpId) {
@@ -1602,7 +1723,10 @@
                 const statusDate = statusDateMap[tc.status] || '';
                 // 状态日期显示逻辑
                 const statusDateDisplay = statusDate ? statusDate : '-';
-                return `<tr><td><input type="checkbox" class="tc-select" value="${tc.id}" onchange="getSelectedTCs()"></td><td>${tc.id}</td><td>${tc.dv_milestone || '-'}</td><td>${escapeHtml(tc.testbench)}</td><td>${escapeHtml(tc.category || '')}</td><td>${escapeHtml(tc.owner || '')}</td><td><strong>${escapeHtml(tc.test_name)}</strong></td><td>${tc.target_date || '-'}</td><td><select class="status-select status-${tc.status}" onchange="updateTCStatus(${tc.id}, this.value)"><option value="OPEN" ${tc.status === 'OPEN' ? 'selected' : ''}>OPEN</option><option value="CODED" ${tc.status === 'CODED' ? 'selected' : ''}>CODED</option><option value="FAIL" ${tc.status === 'FAIL' ? 'selected' : ''}>FAIL</option><option value="PASS" ${tc.status === 'PASS' ? 'selected' : ''}>PASS</option><option value="REMOVED" ${tc.status === 'REMOVED' ? 'selected' : ''}>REMOVED</option></select></td><td>${statusDateDisplay}</td><td><div class="action-btns"><button class="action-btn" onclick="toggleTCDetails(${tc.id})">详情</button><button class="action-btn edit" onclick="editTC(${tc.id})">编辑</button><button class="action-btn delete" onclick="deleteTC(${tc.id})">删除</button></div></td></tr>${hasDetails ? `<tr class="tc-detail-row" id="${detailsId}"><td colspan="11" style="padding: 0;"><div class="details-content">${tc.scenario_details ? `<div class="detail-row"><span class="detail-label">Scenario:</span><span class="detail-value">${escapeHtml(tc.scenario_details)}</span></div>` : ''}${tc.checker_details ? `<div class="detail-row"><span class="detail-label">Checker:</span><span class="detail-value">${escapeHtml(tc.checker_details)}</span></div>` : ''}${tc.coverage_details ? `<div class="detail-row"><span class="detail-label">Coverage:</span><span class="detail-value">${escapeHtml(tc.coverage_details)}</span></div>` : ''}${tc.comments ? `<div class="detail-row"><span class="detail-label">Comments:</span><span class="detail-value">${escapeHtml(tc.comments)}</span></div>` : ''}</div></td></tr>` : ''}`;
+                // REQ-003: 判断TC是否未关联CP
+                const isUnlinked = !tc.connected_cps || tc.connected_cps.length === 0;
+                const testNameHtml = isUnlinked ? `<span class="unlinked">${escapeHtml(tc.test_name)}</span>` : escapeHtml(tc.test_name);
+                return `<tr><td><input type="checkbox" class="tc-select" value="${tc.id}" onchange="getSelectedTCs()"></td><td>${tc.id}</td><td>${tc.dv_milestone || '-'}</td><td>${escapeHtml(tc.testbench)}</td><td>${escapeHtml(tc.category || '')}</td><td>${escapeHtml(tc.owner || '')}</td><td><strong>${testNameHtml}</strong></td><td>${tc.target_date || '-'}</td><td><select class="status-select status-${tc.status}" onchange="updateTCStatus(${tc.id}, this.value)"><option value="OPEN" ${tc.status === 'OPEN' ? 'selected' : ''}>OPEN</option><option value="CODED" ${tc.status === 'CODED' ? 'selected' : ''}>CODED</option><option value="FAIL" ${tc.status === 'FAIL' ? 'selected' : ''}>FAIL</option><option value="PASS" ${tc.status === 'PASS' ? 'selected' : ''}>PASS</option><option value="REMOVED" ${tc.status === 'REMOVED' ? 'selected' : ''}>REMOVED</option></select></td><td>${statusDateDisplay}</td><td><div class="action-btns"><button class="action-btn" onclick="toggleTCDetails(${tc.id})">详情</button><button class="action-btn edit" onclick="editTC(${tc.id})">编辑</button><button class="action-btn delete" onclick="deleteTC(${tc.id})">删除</button></div></td></tr>${hasDetails ? `<tr class="tc-detail-row" id="${detailsId}"><td colspan="11" style="padding: 0;"><div class="details-content">${tc.scenario_details ? `<div class="detail-row"><span class="detail-label">Scenario:</span><span class="detail-value">${escapeHtml(tc.scenario_details)}</span></div>` : ''}${tc.checker_details ? `<div class="detail-row"><span class="detail-label">Checker:</span><span class="detail-value">${escapeHtml(tc.checker_details)}</span></div>` : ''}${tc.coverage_details ? `<div class="detail-row"><span class="detail-label">Coverage:</span><span class="detail-value">${escapeHtml(tc.coverage_details)}</span></div>` : ''}${tc.comments ? `<div class="detail-row"><span class="detail-label">Comments:</span><span class="detail-value">${escapeHtml(tc.comments)}</span></div>` : ''}</div></td></tr>` : ''}`;
             }).join('');
         }
         

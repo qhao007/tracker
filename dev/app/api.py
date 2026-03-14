@@ -1296,6 +1296,8 @@ def get_coverpoints():
     project_id = request.args.get("project_id", type=int)
     feature_filter = request.args.get("feature")
     priority_filter = request.args.get("priority")
+    # REQ-005: 支持 filter 参数 (all/unlinked)
+    link_filter = request.args.get("filter")
 
     if not project_id:
         return jsonify([])
@@ -1328,6 +1330,14 @@ def get_coverpoints():
     query += " ORDER BY id"
     cursor.execute(query, params)
 
+    # REQ-005: 如果需要过滤未关联的CP，先获取所有已关联的CP ID
+    linked_cp_ids = set()
+    if link_filter == "unlinked":
+        cursor.execute("SELECT DISTINCT cp_id FROM tc_cp_connections")
+        linked_cp_ids = {row["cp_id"] for row in cursor.fetchall()}
+        # 重新执行原始查询
+        cursor.execute(query, params)
+
     cps = []
     for row in cursor.fetchall():
         cp_id = row["id"]
@@ -1349,6 +1359,11 @@ def get_coverpoints():
         # 计算覆盖率
         coverage = round(passed / total * 100, 1) if total > 0 else 0.0
 
+        # REQ-005: 判断是否关联
+        is_linked = cp_id in linked_cp_ids or (total > 0)
+        if link_filter == "unlinked" and is_linked:
+            continue  # 跳过已关联的CP
+
         cps.append(
             {
                 "id": row["id"],
@@ -1363,6 +1378,7 @@ def get_coverpoints():
                 "created_by": dict(row).get("created_by", ""),
                 "coverage": coverage,
                 "coverage_detail": f"{passed}/{total}",
+                "linked": is_linked,
             }
         )
 
