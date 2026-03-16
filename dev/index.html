@@ -18,9 +18,9 @@
         select option:hover, select option:focus, select option:active { background-color: #e8f4fc; }
         .cp-table th:nth-child(1) { width: 13%; } .cp-table th:nth-child(2) { width: 10%; } .cp-table th:nth-child(3) { width: 15%; } .cp-table th:nth-child(4) { width: 30%; } .cp-table th:nth-child(5) { width: 12%; } .cp-table th:nth-child(6) { width: 10%; }
         /* REQ-004: CP/TP滑动条支持 */
-        .cp-table-container { overflow-y: auto; max-height: none; }
+        .cp-table-container { overflow-y: auto; max-height: 400px; }
         .cp-table-container thead { position: sticky; top: 0; background: #f5f5f5; z-index: 1; }
-        .tc-table-container { overflow-y: auto; max-height: none; }
+        .tc-table-container { overflow-y: auto; max-height: 400px; }
         .tc-table-container thead { position: sticky; top: 0; background: #f5f5f5; z-index: 1; }
         .tc-table th:nth-child(1) { width: 4%; } .tc-table th:nth-child(2) { width: 7%; } .tc-table th:nth-child(3) { width: 6%; } .tc-table th:nth-child(4) { width: 6%; } .tc-table th:nth-child(5) { width: 6%; } .tc-table th:nth-child(6) { width: 15%; } .tc-table th:nth-child(7) { width: 8%; } .tc-table th:nth-child(8) { width: 6%; } .tc-table th:nth-child(9) { width: 8%; } .tc-table th:nth-child(10) { width: 6%; }
         .coverage-badge { padding: 3px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; min-width: 45px; text-align: center; display: inline-block; }
@@ -1109,14 +1109,18 @@
         
         async function loadData() {
             if (!currentProject) return;
+            // 先并行加载 CP 和 TC
             await Promise.all([loadCP(), loadTC(), loadStats()]);
+            // 加载完成后统一渲染（确保 testCases 已加载）
+            renderCP();
+            renderTC();
         }
-        
+
         async function loadCP() {
             try {
                 const res = await fetch(`${API_ENDPOINTS.COVER_POINTS}?project_id=${currentProject.id}`);
                 coverPoints = await res.json();
-                renderCP();
+                // 不再在此处调用 renderCP，由 loadData 统一调用
                 // 填充 Feature 过滤下拉框
                 const features = [...new Set(coverPoints.map(cp => cp.feature).filter(f => f))];
                 const featureSelect = document.getElementById('cpFeatureFilter');
@@ -1131,7 +1135,7 @@
             try {
                 const res = await fetch(`${API_ENDPOINTS.TEST_CASES}?project_id=${currentProject.id}`);
                 testCases = await res.json();
-                renderTC();
+                // 不再在此处调用 renderTC，由 loadData 统一调用
             } catch (e) { console.error('加载 TC 失败:', e); }
         }
         
@@ -1749,8 +1753,10 @@
         function resetCPFilter() {
             const featureSelect = document.getElementById('cpFeatureFilter');
             const prioritySelect = document.getElementById('cpPriorityFilter');
+            const linkedSelect = document.getElementById('cpLinkedFilter');
             if (featureSelect) featureSelect.value = '';
             if (prioritySelect) prioritySelect.value = '';
+            if (linkedSelect) linkedSelect.value = '';
             // 重置搜索框
             const searchInput = document.querySelector('#cpPanel .search-input');
             if (searchInput) searchInput.value = '';
