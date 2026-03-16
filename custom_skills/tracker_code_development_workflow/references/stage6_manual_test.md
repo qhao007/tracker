@@ -19,30 +19,41 @@
 1. `/projects/management/tracker/CLAUDE.md` - 测试命令
 2. `/root/.claude/skills/agent-browser/SKILL.md` - agent-browser使用文档
 
-### agent-browser 命令
+### ⚠️ agent-browser 命令（强制使用无头模式）
+
+> ⚠️ **必须使用无头模式 (headless)** - 这是强制要求，否则会导致测试环境问题
+
 ```bash
-# 打开页面
-agent-browser --args "--no-sandbox" open http://localhost:8081
+# agent-browser 安装位置
+/root/.nvm/versions/node/v22.22.0/bin/agent-browser
 
-# 截图
-agent-browser --args "--no-sandbox" screenshot /tmp/page.png
+# ⚠️ 无头模式命令（必须添加 --headless 参数）
+/root/.nvm/versions/node/v22.22.0/bin/agent-browser --args "--no-sandbox --headless" open http://localhost:8081
 
-# 检查控制台错误
-agent-browser --args "--no-sandbox" errors
+# 截图（无头模式）
+/root/.nvm/versions/node/v22.22.0/bin/agent-browser --args "--no-sandbox --headless" screenshot /tmp/page.png
 
-# 查看控制台消息
-agent-browser --args "--no-sandbox" console
+# 检查控制台错误（无头模式）
+/root/.nvm/versions/node/v22.22.0/bin/agent-browser --args "--no-sandbox --headless" errors
 
-# 交互操作
-agent-browser --args "--no-sandbox" click @e1
-agent-browser --args "--no-sandbox" fill "#username" "admin"
+# 查看控制台消息（无头模式）
+/root/.nvm/versions/node/v22.22.0/bin/agent-browser --args "--no-sandbox --headless" console
 
-# 执行JS
-agent-browser --args "--no-sandbox" eval "document.title"
+# 交互操作（无头模式）
+/root/.nvm/versions/node/v22.22.0/bin/agent-browser --args "--no-sandbox --headless" click @e1
+/root/.nvm/versions/node/v22.22.0/bin/agent-browser --args "--no-sandbox --headless" fill "#username" "admin"
+
+# 执行JS（无头模式）
+/root/.nvm/versions/node/v22.22.0/bin/agent-browser --args "--no-sandbox --headless" eval "document.title"
 
 # 关闭浏览器
-agent-browser --args "--no-sandbox" close
+/root/.nvm/versions/node/v22.22.0/bin/agent-browser --args "--no-sandbox --headless" close
 ```
+
+**关键点**:
+- ⚠️ 必须添加 `--headless` 参数使用无头模式
+- ⚠️ 必须添加 `--no-sandbox` 参数避免沙箱问题
+- 完整参数格式: `--args "--no-sandbox --headless"`
 
 ### 适用场景
 - Playwright无法稳定运行的复杂UI测试

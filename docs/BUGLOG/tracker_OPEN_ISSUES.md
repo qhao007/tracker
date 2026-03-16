@@ -189,9 +189,10 @@
 |------|------|
 | **发现日期** | 2026-03-01 |
 | **优先级** | P3 |
-| **状态** | 待处理 |
+| **状态** | ✅ 已修复 (v0.9.0) |
 | **问题描述** | 前端 switchTab 函数依赖全局 event 对象，在某些边缘情况下可能失效 |
-| **建议方案** | 修改为传递 event 参数：`switchTab(tab, event)` 并使用 `event.currentTarget` 替代 `event.target` |
+| **修复内容** | 修改函数签名 `switchTab(tab, event)` 并优先使用 `event.currentTarget`，兼容无 event 场景 |
+| **修复文件** | `dev/index.html:1661` |
 
 ## v0.8.3 代码审查发现的问题 (2026-03-04)
 
@@ -201,11 +202,11 @@
 |------|------|
 | **发现日期** | 2026-03-04 |
 | **优先级** | P2 |
-| **状态** | 待处理 |
+| **状态** | ⚠️ 部分完成 (v0.9.0) |
 | **问题描述** | app_constants.js 已创建但未实际使用，代码中仍使用硬编码值 |
-| **详细说明** | v0.8.3 创建了 `dev/static/js/app_constants.js` 文件，定义了 SESSION_KEYS、API_ENDPOINTS、UI_CONSTANTS、MESSAGES、COLORS 等常量，并已在 index.html 中引入。但 index.html 代码中仍使用硬编码字符串常量，未替换为常量引用。 |
+| **详细说明** | v0.8.3 创建了 `dev/static/js/app_constants.js` 文件，定义了 SESSION_KEYS、API_ENDPOINTS、UI_CONSTANTS、MESSAGES、COLORS 等常量。v0.9.0 已完成以下替换：<br>- ✅ API_ENDPOINTS: 代码中已使用 `API_ENDPOINTS.PROJECTS` 等<br>- ✅ COVERAGE: 覆盖率颜色已使用 CSS 变量 + JS 兜底方案<br>- ⏳ SESSION_KEYS: 待后续版本<br>- ⏳ UI_CONSTANTS: 待后续版本<br>- ⏳ MESSAGES: 待后续版本 |
 | **影响范围** | 不影响功能运行，属于代码质量改进 |
-| **建议方案** | 后续版本迭代中逐步将硬编码值替换为常量引用：<br>- 将 `'currentUser'` 替换为 `SESSION_KEYS.USER`<br>- 将 `'/api/projects'` 替换为 `API_ENDPOINTS.PROJECTS`<br>- 将状态颜色替换为 `COLORS.STATUS_PASS` 等 |
+| **剩余工作** | 后续版本中逐步替换：<br>- 将 `'currentUser'` 替换为 `SESSION_KEYS.USER`<br>- 将 UI 常量替换为 `UI_CONSTANTS.*`<br>- 将消息替换为 `MESSAGES.*` |
 
 ### ISSUE-016
 
@@ -282,20 +283,77 @@ def serve_manual():
 | ID | FEATURE-016 |
 | 类型 | 功能需求 |
 | 发现版本 | v0.9.0 |
-| 发现阶段 | 回归测试 |
-| 发现日期 | 2026-03-07 |
+| 发现阶段 | 深度检查 |
+| 发现日期 | 2026-03-13 |
 | 优先级 | P3 |
-| 状态 | 待评估 |
+| 状态 | ✅ 已实现 (v0.9.1) |
 
-### 需求描述
+### 实现说明
 
-TC 管理支持批量更新 Priority，但 CP 管理目前不支持批量更新 Priority 功能。
+- 后端: `POST /api/cp/batch/priority` (api.py:2212)
+- 前端: `executeBatchPriority()` + `batchPriorityModal` (index.html)
+- 测试用例: CP-006 (tests/test_ui/specs/integration/cp.spec.ts)
 
-### 相关功能
+---
 
-- TC 批量更新 Priority: ✅ 已实现
-- CP 批量更新 Priority: ❌ 未实现
+## v0.9.x 深度检查发现的问题 (2026-03-13)
 
-### 测试用例
+### ISSUE-017: admin 首次登录强制改密码 - 前端未实现
 
-- CP-006: 批量更新 Priority (当前为跳过状态)
+| 属性 | 内容 |
+|------|------|
+| **发现日期** | 2026-03-13 |
+| **优先级** | P2 |
+| **状态** | 待处理 |
+| **问题描述** | 后端已实现 must_change_password 标志，但前端登录成功后未检查和处理该标志 |
+| **详细说明** | 后端功能：users 表 must_change_password 字段、登录接口返回标志、修改密码接口 (api.py:3351) 均已实现。但前端 handleLogin 成功后未检查 `data.user.must_change_password === true`，未强制跳转改密码页面。 |
+| **建议方案** | 在 handleLogin 成功回调中检查 must_change_password 标志，如为 true 则显示修改密码弹窗并禁用其他操作 |
+
+### ISSUE-018: 缺少批量设置项目日期功能
+
+| 属性 | 内容 |
+|------|------|
+| **发现日期** | 2026-03-13 |
+| **优先级** | P3 |
+| **状态** | 待处理 |
+| **问题描述** | review_feedback#2 建议添加批量设置项目日期功能，但当前仅有单个项目编辑功能 |
+| **需求来源** | review_feedback#2_现有项目兼容性.md |
+| **详细说明** | 当前实现：单个项目日期编辑 (editProjectDateModal)。缺失功能：批量设置多个项目的起止日期。 |
+| **建议方案** | 1. 后端：新增批量更新项目日期 API (PATCH /api/projects/batch/dates)<br>2. 前端：在项目列表页面添加批量设置日期功能 |
+
+### ISSUE-019: 快照数据不支持编辑更新
+
+| 属性 | 内容 |
+|------|------|
+| **发现日期** | 2026-03-13 |
+| **优先级** | P3 |
+| **状态** | 待处理 |
+| **问题描述** | review_feedback#3 建议支持编辑更新快照数据，但当前仅有查看和删除功能 |
+| **需求来源** | review_feedback#3_快照数据管理.md |
+| **详细说明** | 当前实现：GET /api/progress/{id}/snapshots (查看)、DELETE /api/progress/snapshots/{id} (删除)。缺失功能：PUT /api/progress/snapshots/{id} (更新)。 |
+| **建议方案** | 添加 PUT /api/progress/snapshots/<id> 接口，支持更新快照数据（覆盖率、TC/CP 数量等） |
+
+### ISSUE-020: 长周期项目图表优化未实现
+
+| 属性 | 内容 |
+|------|------|
+| **发现日期** | 2026-03-13 |
+| **优先级** | P3 |
+| **状态** | 待处理 |
+| **问题描述** | review_feedback#6 建议对长周期项目图表进行优化（自动采样或粒度切换），但当前未实现 |
+| **需求来源** | review_feedback#6_图表扩展需求.md |
+| **详细说明** | 当项目跨度超过 26 周时，图表 X 轴数据点密集，难以阅读。建议方案：自动数据点采样或提供粒度切换（周/双周/月）。 |
+| **建议方案** | 方案 A（自动采样）：根据项目周期自动调整显示粒度，确保最多显示 52 个数据点。<br>方案 B（粒度切换）：在图表页面添加粒度切换下拉框（周/双周/月）。
+
+---
+
+### ISSUE-021: 缺少用户自助忘记密码功能
+
+| 属性 | 内容 |
+|------|------|
+| **发现日期** | 2026-03-14 |
+| **优先级** | P3 |
+| **状态** | 待处理 |
+| **问题描述** | 当前仅支持管理员重置密码，用户无法自助找回/重置密码 |
+| **详细说明** | 当前实现：管理员可通过 `POST /api/users/<user_id>/reset-password` 重置用户密码。用户自助找回功能缺失。Tracker 无邮箱系统，需考虑替代验证方案。 |
+| **建议方案** | 方案 A（管理员重置）：保持现状，用户联系管理员重置<br>方案 B（预设重置码）：预设一个紧急重置码，忘记时使用<br>方案 C（安全问题）：注册时设置安全问题，忘记时验证 |

@@ -4,6 +4,9 @@ export default defineConfig({
   // 测试目录
   testDir: './tests',
 
+  // 排除旧测试文件（模块导入路径已失效）
+  testIgnore: '**/smoke/archives/**',
+
   // 测试输出目录
   outputDir: './test-results/playwright-output',
 

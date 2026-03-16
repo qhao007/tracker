@@ -3242,6 +3242,38 @@ def get_current_user():
     })
 
 
+@api.route("/api/auth/password", methods=["PATCH"])
+@login_required
+def change_password():
+    """修改当前用户密码"""
+    data = request.get_json()
+    new_password = data.get("password", "") if data else ""
+
+    # 验证密码长度
+    if not new_password:
+        return jsonify({"error": "Bad Request", "message": "密码不能为空"}), 400
+
+    if len(new_password) < 6:
+        return jsonify({"error": "Bad Request", "message": "密码长度至少6位"}), 400
+
+    # 获取当前用户ID
+    user_id = session.get(SESSION_USER_KEY)
+    user = auth.get_user_by_id(user_id)
+
+    if not user:
+        return jsonify({"error": "Not Found", "message": "用户不存在"}), 404
+
+    # guest 账户不能修改密码
+    if user["role"] == "guest":
+        return jsonify({"error": "Forbidden", "message": "访客账户无密码"}), 403
+
+    # 更新密码
+    password_hash = auth.hash_password(new_password)
+    auth.update_user(user_id, password_hash=password_hash, must_change_password=0)
+
+    return jsonify({"success": True, "message": "密码修改成功"})
+
+
 # ============ 用户管理 API ============
 
 @api.route("/api/users", methods=["GET"])

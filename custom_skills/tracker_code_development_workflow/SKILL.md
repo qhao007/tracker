@@ -360,7 +360,7 @@ cd /projects/management/tracker/dev && PYTHONPATH=. pytest tests/test_api/test_a
 ## 测试命令
 ```bash
 # UI 测试
-# (仅运行冒烟测试 + 版本测试计划指定的新测试文件)
+# ⚠️ 必须使用 --project=firefox - 这是强制要求，不使用将导致测试失败
 cd /projects/management/tracker/dev && npx playwright test tests/test_ui/specs/smoke/ --project=firefox
 
 # 特定测试文件
@@ -504,6 +504,36 @@ cd /projects/management/tracker/dev && npx playwright test tests/test_ui/specs/i
 - **项目类型**: Flask + SQLite Web 应用
 - **测试环境**: 8081 端口
 - **工具**: agent-browser
+
+## ⚠️ agent-browser 必读命令（强制要求）
+
+> ⚠️ **必须使用无头模式 (headless)** - 这是强制要求，否则会导致测试环境问题
+
+```bash
+# agent-browser 安装位置
+/root/.nvm/versions/node/v22.22.0/bin/agent-browser
+
+# 无头模式命令（推荐）
+/root/.nvm/versions/node/v22.22.0/bin/agent-browser --args "--no-sandbox --headless" open http://localhost:8081
+
+# 检查控制台错误（无头模式）
+/root/.nvm/versions/node/v22.22.0/bin/agent-browser --args "--no-sandbox --headless" errors
+
+# 截图（无头模式）
+/root/.nvm/versions/node/v22.22.0/bin/agent-browser --args "--no-sandbox --headless" screenshot /tmp/page.png
+
+# 交互操作（无头模式）
+/root/.nvm/versions/node/v22.22.0/bin/agent-browser --args "--no-sandbox --headless" click @e1
+/root/.nvm/versions/node/v22.22.0/bin/agent-browser --args "--no-sandbox --headless" fill "#username" "admin"
+
+# 关闭浏览器
+/root/.nvm/versions/node/v22.22.0/bin/agent-browser --args "--no-sandbox --headless" close
+```
+
+**关键点**:
+- ⚠️ 必须添加 `--headless` 参数使用无头模式
+- ⚠️ 必须添加 `--no-sandbox` 参数避免沙箱问题
+- 完整参数格式: `--args "--no-sandbox --headless"`
 
 ## 推理要求
 - 推理深度：中

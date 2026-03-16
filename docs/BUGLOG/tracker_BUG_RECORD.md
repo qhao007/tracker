@@ -2418,3 +2418,90 @@ python3 scripts/release.py --version v9.9.9  # ❌ 正确拒绝
 **验证**:
 - ✅ dry-run 模式完整验证通过
 - ✅ 安全检查正确阻止误操作
+
+---
+
+## BUG-089: CP未关联过滤不生效
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-14 |
+| **报告人** | Claude Code |
+| **影响版本** | v0.9.2 |
+
+**描述**: 在CP页面Filter下拉中选择"未关联"选项后，列表仍然显示所有CP（包括已关联的CP），过滤功能未生效。
+
+**根本原因**: 数据加载时序问题。`loadCP()` 函数内部调用 `renderCP()` 时，`testCases` 数据可能还未加载完成（`loadCP()` 和 `loadTC()` 并行执行），导致 `renderCP()` 中的 `linkedCPIds` 为空，使得过滤逻辑失效。
+
+**影响范围**:
+- REQ-005: CP未关联过滤功能
+
+**修复方案**:
+修改 `loadData()` 函数，将 `renderCP()` 和 `renderTC()` 的调用移至 `Promise.all` 之后，确保数据加载完成后再渲染页面。
+
+修复文件: `/projects/management/tracker/dev/index.html`
+
+```javascript
+// 修改前
+async function loadData() {
+    if (!currentProject) return;
+    await Promise.all([loadCP(), loadTC(), loadStats()]);
+}
+
+async function loadCP() {
+    // ...
+    renderCP();  // 问题：此处 testCases 可能还未加载
+}
+
+async function loadTC() {
+    // ...
+    renderTC();
+}
+
+// 修改后
+async function loadData() {
+    if (!currentProject) return;
+    // 先并行加载 CP 和 TC
+    await Promise.all([loadCP(), loadTC(), loadStats()]);
+    // 加载完成后统一渲染（确保 testCases 已加载）
+    renderCP();
+    renderTC();
+}
+
+async function loadCP() {
+    // ...
+    // 不再在此处调用 renderCP
+}
+
+async function loadTC() {
+    // ...
+    // 不再在此处调用 renderTC
+}
+```
+
+**修复日期**: 2026-03-14
+
+---
+
+## BUG-090: 修改密码API网络错误
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ⏳ 待修复 |
+| **发现日期** | 2026-03-14 |
+| **报告人** | Claude Code |
+| **影响版本** | v0.9.2 |
+
+**描述**: admin用户首次登录后，强制改密码弹窗中的"确认修改"按钮点击后返回"网络错误"，无法修改密码。
+
+**根本原因**: 前端调用修改密码API时路径或参数不正确。
+
+**影响范围**:
+- ISSUE-017: admin强制改密码前端
+
+**修复建议**:
+1. 检查 `PATCH /api/auth/password` API是否正确实现
+2. 检查前端调用时的URL和请求参数是否正确
