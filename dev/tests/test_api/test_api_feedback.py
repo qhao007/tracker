@@ -147,25 +147,25 @@ class TestFeedbackAPI:
             assert data['data']['type'] == feedback_type
 
     def test_feedback_file_created(self, admin_client):
-        """API-COV-002: 验证反馈提交后文件正确生成"""
-        import glob
+        """API-COV-001: 验证反馈提交后文件正确生成"""
         from pathlib import Path
 
-        # 测试模式下 DATA_DIR 是 dev/data
+        # 测试模式下 DATA_DIR 是 dev/data (符号链接 -> shared/data/test_data)
+        # 使用 os.path.realpath 解析符号链接
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         base_dir = os.path.dirname(base_dir)  # 回到 dev 目录
-        feedback_dir = Path(base_dir) / 'data' / 'feedbacks'
+        data_dir = os.path.realpath(os.path.join(base_dir, 'data'))  # 解析符号链接
+        feedback_dir = Path(data_dir) / 'feedbacks'
 
-        if feedback_dir.exists():
-            files_before = set(glob.glob(str(feedback_dir / 'FEEDBACK_*.json')))
-        else:
-            files_before = set()
+        # 使用带微秒的时间戳确保唯一性
+        from datetime import datetime
+        unique_title = f"文件生成测试_{datetime.now().strftime('%H%M%S%f')}"
 
         # 提交反馈
         response = admin_client.post('/api/feedback',
             data=json.dumps({
                 'type': 'bug',
-                'title': '文件生成测试',
+                'title': unique_title,
                 'description': '验证文件是否实际生成'
             }),
             content_type='application/json')
@@ -174,17 +174,17 @@ class TestFeedbackAPI:
         data = response.get_json()
         assert data['success'] is True
 
-        # 验证文件已生成
-        files_after = set(glob.glob(str(feedback_dir / 'FEEDBACK_*.json')))
-        new_files = files_after - files_before
+        # 获取生成的反馈ID
+        feedback_id = data['data']['id']
 
-        assert len(new_files) > 0, "反馈文件未生成"
+        # 验证特定文件存在 - 使用API返回的feedback_id直接检查
+        expected_file = feedback_dir / f'{feedback_id}.json'
+        assert expected_file.exists(), f"反馈文件 {feedback_id}.json 未生成，路径: {expected_file}"
 
-        # 验证最新文件内容
-        latest_file = max(new_files, key=lambda p: Path(p).stat().st_mtime)
-        with open(latest_file) as f:
+        # 验证文件内容
+        with open(expected_file) as f:
             file_data = json.load(f)
 
         assert file_data['type'] == 'bug'
-        assert file_data['title'] == '文件生成测试'
+        assert file_data['title'] == unique_title
         assert 'created_at' in file_data

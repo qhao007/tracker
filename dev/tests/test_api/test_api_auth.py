@@ -581,6 +581,100 @@ class TestUserManagement:
 
         assert response.status_code == 403
 
+    def test_change_password(self, client):
+        """用户应能修改自己的密码"""
+        import time
+
+        # 先用admin登录创建测试用户
+        client.post('/api/auth/login',
+            data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+            content_type='application/json')
+
+        # 创建测试用户
+        unique_name = f"testuser_changepwd_{int(time.time())}"
+        client.post('/api/users',
+            data=json.dumps({'username': unique_name, 'password': 'test123', 'role': 'user'}),
+            content_type='application/json')
+
+        # 用测试用户登录
+        client.post('/api/auth/logout')
+        client.post('/api/auth/login',
+            data=json.dumps({'username': unique_name, 'password': 'test123'}),
+            content_type='application/json')
+
+        # 修改密码
+        response = client.patch('/api/auth/password',
+            data=json.dumps({'password': 'newpass123'}),
+            content_type='application/json')
+
+        assert response.status_code == 200
+        assert response.json['success'] is True
+
+    def test_change_password_too_short(self, client):
+        """密码长度应至少6位"""
+        import time
+
+        # 先用admin登录创建测试用户
+        client.post('/api/auth/login',
+            data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+            content_type='application/json')
+
+        # 创建测试用户
+        unique_name = f"testuser_short_{int(time.time())}"
+        client.post('/api/users',
+            data=json.dumps({'username': unique_name, 'password': 'test123', 'role': 'user'}),
+            content_type='application/json')
+
+        # 用测试用户登录
+        client.post('/api/auth/logout')
+        client.post('/api/auth/login',
+            data=json.dumps({'username': unique_name, 'password': 'test123'}),
+            content_type='application/json')
+
+        # 尝试使用短密码
+        response = client.patch('/api/auth/password',
+            data=json.dumps({'password': '12345'}),
+            content_type='application/json')
+
+        assert response.status_code == 400
+        assert '密码长度至少6位' in response.json['message']
+
+    def test_change_password_empty(self, client):
+        """密码不能为空"""
+        import time
+
+        # 先用admin登录创建测试用户
+        client.post('/api/auth/login',
+            data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+            content_type='application/json')
+
+        # 创建测试用户
+        unique_name = f"testuser_empty_{int(time.time())}"
+        client.post('/api/users',
+            data=json.dumps({'username': unique_name, 'password': 'test123', 'role': 'user'}),
+            content_type='application/json')
+
+        # 用测试用户登录
+        client.post('/api/auth/logout')
+        client.post('/api/auth/login',
+            data=json.dumps({'username': unique_name, 'password': 'test123'}),
+            content_type='application/json')
+
+        # 尝试使用空密码
+        response = client.patch('/api/auth/password',
+            data=json.dumps({'password': ''}),
+            content_type='application/json')
+
+        assert response.status_code == 400
+
+    def test_change_password_requires_login(self, client):
+        """未登录用户不能修改密码"""
+        response = client.patch('/api/auth/password',
+            data=json.dumps({'password': 'newpass123'}),
+            content_type='application/json')
+
+        assert response.status_code == 401
+
 
 class TestProjectPermission:
     """项目权限控制测试"""
