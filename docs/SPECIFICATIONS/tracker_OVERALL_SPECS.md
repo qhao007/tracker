@@ -1,6 +1,6 @@
-# 芯片验证 Tracker v0.9.1 总体规格书
+# 芯片验证 Tracker v0.9.2 总体规格书
 
-> **版本**: v0.9.1 | **更新日期**: 2026-03-08 | **状态**: ✅ 已完成
+> **版本**: v0.9.2 | **更新日期**: 2026-03-17 | **状态**: ✅ 已完成
 
 ---
 
@@ -50,6 +50,7 @@
 | systemd 正式版部署 | |
 | **v0.9.0 前端界面优化** | |
 | **v0.9.1 用户反馈功能** | |
+| **v0.9.2 关联状态与滚动优化** | |
 
 ### 1.4 v0.9.0 重大变更
 
@@ -423,6 +424,13 @@ python3 scripts/data_manager.py clean
 | **F039** | **自动创建测试用户** | 创建项目时自动创建测试用户 | P1 |
 | **F040** | **项目日期必填验证** | 创建/编辑项目时日期必填校验 | P1 |
 | **F041** | **前端常量管理** | 统一管理 Session keys 和 API 端点常量 | P2 |
+| **F042** | **CP关联状态可视化** | 未关联CP显示红色加粗+🔗图标 | P1 |
+| **F043** | **TC关联状态可视化** | 未关联TC显示红色加粗+🔗图标 | P1 |
+| **F044** | **CP/TC独立滚动条** | 表头sticky固定，内容独立滚动，高度自适应 | P0 |
+| **F045** | **TC过滤布局优化** | TC过滤选项单行显示，与CP布局一致 | P1 |
+| **F046** | **CP未关联过滤** | 后端支持filter=unlinked参数过滤未关联CP | P1 |
+| **F047** | **admin强制改密码** | admin首次登录强制弹窗修改密码 | P1 |
+| **F048** | **用户反馈功能** | 反馈API+UI，收集用户建议和问题 | P1 |
 
 ### 3.2 Cover Point 字段
 
@@ -611,6 +619,34 @@ coverage = round(passed / total * 100, 1) if total > 0 else 0.0
 }
 ```
 
+### 4.3.1 用户反馈 API (v0.9.1 新增)
+
+| 方法 | 路径 | 功能 | 权限 |
+|------|------|------|------|
+| GET | `/api/feedbacks` | 获取反馈列表 | 管理员 |
+| POST | `/api/feedbacks` | 提交反馈 | 公开 |
+| PATCH | `/api/feedbacks/{id}` | 更新反馈状态 | 管理员 |
+| DELETE | `/api/feedbacks/{id}` | 删除反馈 | 管理员 |
+
+**POST /api/feedbacks 请求体**:
+```json
+{
+    "title": "功能建议",
+    "content": "希望增加导出功能",
+    "category": "feature_request",
+    "contact": "user@example.com"
+}
+```
+
+**响应**:
+```json
+{
+    "success": true,
+    "feedback_id": 1,
+    "message": "反馈已提交"
+}
+```
+
 ### 4.4 项目管理
 
 | 方法 | 路径 | 功能 |
@@ -711,13 +747,14 @@ Body: file=@backup.json
 - **PUT /api/cp/{id}**: 在请求体中必须包含 `project_id`
 - **DELETE /api/cp/{id}**: 通过查询参数传递 `project_id`，例如: `/api/cp/1?project_id=1`
 
-**GET /api/cp 过滤参数**（v0.6.1 新增）:
+**GET /api/cp 过滤参数**（v0.6.1 新增，v0.9.2 扩展）:
 
 | 参数 | 类型 | 说明 | 示例 |
 |------|------|------|------|
 | `project_id` | int | 项目 ID（必填） | `?project_id=1` |
 | `feature` | string | Feature 过滤（支持多值，逗号分隔） | `?feature=FeatureA,FeatureB` |
 | `priority` | string | Priority 过滤（支持多值，逗号分隔） | `?priority=P0,P1` |
+| `filter` | string | **关联状态过滤（v0.9.2 新增）**：`all`(默认), `unlinked` | `?filter=unlinked` |
 
 **GET /api/cp 请求示例**:
 
@@ -733,6 +770,9 @@ GET /api/cp?project_id=1&priority=P0
 
 # 组合过滤
 GET /api/cp?project_id=1&feature=FeatureA,FeatureB&priority=P0,P1
+
+# 过滤未关联的 CP（v0.9.2 新增）
+GET /api/cp?project_id=1&filter=unlinked
 ```
 
 **PUT /api/cp/{id} 请求体**:
@@ -1757,6 +1797,7 @@ journalctl -u tracker -f
 | **v0.8.3** | **2026-03-04** | **测试便利性**：创建项目自动创建测试用户、项目日期必填验证、前端常量管理 |
 | **v0.9.0** | **2026-03-05** | **前端界面优化**：设计系统 CSS 变量（紫色主题 Vercel/Linear 风格）、组件样式重构（Header/Tabs/Table/Modal）、微交互动画、兼容映射 |
 | **v0.9.1** | **2026-03-08** | **用户反馈功能**：反馈 API + UI、switchTab 函数改进、常量管理优化 |
+| **v0.9.2** | **2026-03-17** | **关联状态与滚动优化**：CP/TC关联状态可视化（红色+🔗图标）、独立滚动条+表头sticky+高度自适应、TC过滤单行布局、CP未关联过滤、admin强制改密码前端、Manual更新 |
 
 ### v0.8.3 详细变更
 
@@ -1955,6 +1996,39 @@ journalctl -u tracker -f
 
 - BUG-082: switchTab 函数参数缺失导致登录模态框无法关闭
 - BUG-083: API_ENDPOINTS 重复声明错误
+
+### v0.9.2 详细变更
+
+1. **CP/TC 关联状态可视化**（REQ-002/003）：
+   - 未关联的 CP/TC 显示为红色加粗 + 🔗图标
+   - 前端实时计算关联状态（无需后端改动）
+   - 辅助色盲用户区分已关联/未关联状态
+
+2. **CP/TC 独立滚动条 + 高度自适应**（REQ-004）：
+   - 使用 `overflow-y: auto` 实现独立垂直滚动
+   - 表头使用 `position: sticky; top: 0` 固定
+   - 高度自适应：`calc(100vh - 280px)` + min(300px)/max(600px) 保护
+   - 兼容现代浏览器（Chrome/Firefox/Edge/Safari）
+
+3. **TC 过滤布局优化**（REQ-004B）：
+   - TC 过滤选项改为单行显示，与 CP 布局一致
+   - 移除 `<label>` 标签和独立容器 `.tc-filter-panel`
+   - 过滤下拉框移至 `.toolbar-left`
+
+4. **CP 未关联过滤**（REQ-005）：
+   - CP Filter 下拉增加"未关联"选项
+   - 后端 API 支持 `filter=unlinked` 参数
+   - 返回 `linked: true/false` 字段
+
+5. **admin 强制改密码前端**（ISSUE-017）：
+   - admin 首次登录成功检测 `must_change_password === true`
+   - 强制弹窗要求修改密码，禁用其他操作
+   - 修改成功后刷新用户信息
+
+6. **用户反馈功能**（REQ-001）：
+   - 新增反馈 API (`GET/POST /api/feedbacks`)
+   - 前端反馈入口和提交表单
+   - Manual 补充用户反馈章节
 
 ### v0.5.x 详细变更
 
