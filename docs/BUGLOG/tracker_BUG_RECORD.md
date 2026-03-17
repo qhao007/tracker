@@ -2418,3 +2418,139 @@ python3 scripts/release.py --version v9.9.9  # ❌ 正确拒绝
 **验证**:
 - ✅ dry-run 模式完整验证通过
 - ✅ 安全检查正确阻止误操作
+
+---
+
+## BUG-089: CP未关联过滤不生效
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-14 |
+| **报告人** | Claude Code |
+| **影响版本** | v0.9.2 |
+
+**描述**: 在CP页面Filter下拉中选择"未关联"选项后，列表仍然显示所有CP（包括已关联的CP），过滤功能未生效。
+
+**根本原因**: 数据加载时序问题。`loadCP()` 函数内部调用 `renderCP()` 时，`testCases` 数据可能还未加载完成（`loadCP()` 和 `loadTC()` 并行执行），导致 `renderCP()` 中的 `linkedCPIds` 为空，使得过滤逻辑失效。
+
+**影响范围**:
+- REQ-005: CP未关联过滤功能
+
+**修复方案**:
+修改 `loadData()` 函数，将 `renderCP()` 和 `renderTC()` 的调用移至 `Promise.all` 之后，确保数据加载完成后再渲染页面。
+
+修复文件: `/projects/management/tracker/dev/index.html`
+
+```javascript
+// 修改前
+async function loadData() {
+    if (!currentProject) return;
+    await Promise.all([loadCP(), loadTC(), loadStats()]);
+}
+
+async function loadCP() {
+    // ...
+    renderCP();  // 问题：此处 testCases 可能还未加载
+}
+
+async function loadTC() {
+    // ...
+    renderTC();
+}
+
+// 修改后
+async function loadData() {
+    if (!currentProject) return;
+    // 先并行加载 CP 和 TC
+    await Promise.all([loadCP(), loadTC(), loadStats()]);
+    // 加载完成后统一渲染（确保 testCases 已加载）
+    renderCP();
+    renderTC();
+}
+
+async function loadCP() {
+    // ...
+    // 不再在此处调用 renderCP
+}
+
+async function loadTC() {
+    // ...
+    // 不再在此处调用 renderTC
+}
+```
+
+**修复日期**: 2026-03-14
+
+---
+
+## BUG-090: 修改密码API网络错误
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ⏳ 待修复 |
+| **发现日期** | 2026-03-14 |
+| **报告人** | Claude Code |
+| **影响版本** | v0.9.2 |
+
+**描述**: admin用户首次登录后，强制改密码弹窗中的"确认修改"按钮点击后返回"网络错误"，无法修改密码。
+
+**根本原因**: 前端调用修改密码API时路径或参数不正确。
+
+**影响范围**:
+- ISSUE-017: admin强制改密码前端
+
+**修复建议**:
+1. 检查 `PATCH /api/auth/password` API是否正确实现
+2. 检查前端调用时的URL和请求参数是否正确
+
+---
+
+## BUG-091: TC过滤框选项文字不直观
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Low |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-16 |
+| **报告人** | 用户反馈 |
+| **影响版本** | v0.9.2 |
+
+**描述**: TC过滤框中，只有Status显示"全部Status"，其他的过滤框(DV Milestone/Owner/Category)只显示"全部"，不够直观。CP的未关联过滤框也有同样问题。
+
+**根本原因**: JavaScript动态生成下拉选项时使用了简化的文字。
+
+- 第1611行: `ownerSelect.innerHTML = '<option value="">全部</option>'` 应该是 `'全部 Owner'`
+- 第1620行: `categorySelect.innerHTML = '<option value="">全部</option>'` 应该是 `'全部 Category'`
+- 第1629行: `dvSelect.innerHTML = '<option value="">全部</option>'` 应该是 `'全部 DV Milestone'`
+- 第324行: `cpLinkedFilter` HTML中只有 `全部`，应该是 `全部 关联状态`
+
+**修复方案**: 修改JavaScript代码，为每个过滤选项添加更直观的文字。
+
+**验证**: 修复后各过滤框显示"全部 XXX"，直观易懂。
+
+---
+
+## BUG-092: CP "未关联"过滤测试失败（测试问题，非应用Bug）
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Low (测试问题) |
+| **状态** | ✅ 已关闭 - 误报 |
+| **发现日期** | 2026-03-16 |
+| **报告人** | UI 测试 (UI-FILTER-002) |
+| **影响版本** | v0.9.2 |
+
+**描述**: UI 测试 UI-FILTER-002 报告"CP 未关联过滤选择后，关联的CP仍然显示"。
+
+**调查结论**: 经代码审查和用户手工验证，**应用代码功能正常**，过滤逻辑正确实现（index.html 第 1472-1476 行）。
+
+**测试失败原因**: 测试用例中的关联操作（TC 与 CP 关联）可能未成功执行，导致 CP 仍被识别为"未关联"。这是测试用例问题，非应用代码 bug。
+
+**验证结果**:
+- 代码逻辑: ✅ 正确 - `filtered = filtered.filter(cp => !linkedCPIds.has(cp.id))`
+- 手工测试: ✅ 功能正常
+
+**处理**: 关闭此 bug 记录，测试用例需要修复关联操作逻辑。

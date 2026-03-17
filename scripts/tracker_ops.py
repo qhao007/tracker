@@ -127,52 +127,54 @@ def reinit_users_db():
 
 
 def clean():
-    """删除 test_data 中的测试数据（保留预置的原始数据）"""
+    """删除 test_data 中的测试数据（只保留预置的原始数据）"""
     print_step("步骤 1: 清理测试数据")
-    
+
     if not TEST_DATA_DIR.exists():
         print_warn("测试数据目录不存在")
         return True
-    
+
     test_dbs = get_all_db_files(TEST_DATA_DIR)
     if not test_dbs:
         print_warn("未找到测试数据库文件")
         return True
-    
+
     # 预置的原始测试数据（这些是项目自带的，需要保留）
     # 注意：这些项目的 is_archived 必须是 false，否则前端无法显示
     PRESERVED_NAMES = ["EX5", "TestProject"]
-    
-    # 系统数据库文件（不删除，但也不作为项目处理）
+
+    # 系统数据库文件（删除后重新创建）
     SYSTEM_DB = "users.db"
-    
+
     # 记录将被删除的项目名称
     deleted_names = []
-    
+
     deleted = 0
+    skipped = 0
     for db_file in test_dbs:
         # 保留预置的原始测试数据
         if any(preserved in db_file.name for preserved in PRESERVED_NAMES):
             print_warn(f"保留预置原始数据: {db_file.name}")
+            skipped += 1
             continue
-        
-        # users.db 由 reinit_users_db() 重新创建
+
+        # users.db 删除后由 reinit_users_db() 重新创建
         if db_file.name == SYSTEM_DB:
             print_ok(f"删除 (将重新创建): {db_file.name}")
             os.remove(db_file)
             deleted += 1
             continue
-        
-        # 删除其他所有数据（sync 来的 + 测试创建的）
+
+        # 删除其他所有数据（包括 sync 来的 + 测试创建的）
         os.remove(db_file)
         print_ok(f"删除: {db_file.name}")
-        
+
         # 提取项目名称（去掉 .db 后缀）
         project_name = db_file.stem
         deleted_names.append(project_name)
         deleted += 1
-    
-    print_ok(f"完成! 删除了 {deleted} 个文件")
+
+    print_ok(f"完成! 保留了 {skipped} 个文件，删除了 {deleted} 个文件")
     
     # v0.7.1+: 重新初始化用户数据库
     if not reinit_users_db():
