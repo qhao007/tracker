@@ -152,6 +152,45 @@ cd /projects/management/tracker/dev && bash check_frontent.sh
 
 ---
 
+## 🌳 项目目录结构
+
+```
+/projects/management/tracker/
+├── CLAUDE.md                    # 项目指南
+├── dev/                        # 开发目录
+│   ├── app/                    # Flask 应用
+│   │   ├── api.py              # API 路由
+│   │   ├── models.py           # 数据模型
+│   │   └── __init__.py
+│   ├── static/                 # 静态资源
+│   │   ├── js/
+│   │   └── css/
+│   ├── index.html              # SPA 入口
+│   ├── server.py               # 生产服务器
+│   ├── start_server_test.sh    # 测试服务器启动脚本
+│   ├── check_frontent.sh       # 前端检查脚本
+│   └── tests/                  # 测试目录
+│       ├── test_api/            # pytest API 测试
+│       └── test_ui/             # Playwright UI 测试
+│           ├── specs/
+│           │   ├── smoke/      # 冒烟测试
+│           │   ├── integration/# 集成测试
+│           │   └── e2e/        # 端到端测试
+│           ├── pages/          # 页面对象
+│           ├── fixtures/       # 测试fixtures
+│           └── utils/          # 工具函数
+├── shared/                     # 共享数据
+│   └── data/
+│       ├── test_data/          # 测试数据 (可操作)
+│       └── user_data/          # 用户数据 (禁止操作)
+├── docs/                       # 文档
+├── scripts/                    # 脚本
+├── custom_skills/              # 自定义技能
+└── logs/                       # 开发日志
+```
+
+---
+
 ## ⚠️ 安全规则
 
 ### 🔴 绝对禁止
@@ -272,4 +311,42 @@ cp logs/TEMPLATE.md logs/2026-03-07.md
 
 ---
 
-*最后更新: 2026-03-07 | 署名: Claude Code*
+## 🔔 飞书通知
+
+> 项目已配置飞书 Webhook，完成任务后可发送通知
+
+**Webhook URL**:
+```
+https://open.feishu.cn/open-apis/bot/v2/hook/00f0719c-89c0-4595-9c68-1bfd3a5de3d3
+```
+
+**发送文本消息**:
+```bash
+curl -X POST "https://open.feishu.cn/open-apis/bot/v2/hook/00f0719c-89c0-4595-9c68-1bfd3a5de3d3" \
+  -H "Content-Type: application/json" \
+  -d '{"msg_type": "text", "content": {"text": "你的消息内容"}}'
+```
+
+**发送卡片消息**:
+```bash
+curl -X POST "https://open.feishu.cn/open-apis/bot/v2/hook/00f0719c-89c0-4595-9c68-1bfd3a5de3d3" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "msg_type": "interactive",
+    "card": {
+      "header": {
+        "title": {"tag": "plain_text", "content": "✅ 任务完成"},
+        "template": "green"
+      },
+      "elements": [
+        {"tag": "markdown", "content": "**内容**: 你的消息"}
+      ]
+    }
+  }'
+```
+
+> **权限**: 已在 `.claude/settings.local.json` 中预批准，无需手动确认
+
+---
+
+*最后更新: 2026-03-13 | 署名: Claude Code*

@@ -20,6 +20,7 @@
 
 ### 测试命令
 ```bash
+# ⚠️ 必须使用 --project=firefox - 这是强制要求，不使用将导致测试失败
 # UI 冒烟测试
 cd /projects/management/tracker/dev && npx playwright test tests/test_ui/specs/smoke/ --project=firefox
 

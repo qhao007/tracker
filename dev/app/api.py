@@ -1296,6 +1296,8 @@ def get_coverpoints():
     project_id = request.args.get("project_id", type=int)
     feature_filter = request.args.get("feature")
     priority_filter = request.args.get("priority")
+    # REQ-005: 支持 filter 参数 (all/unlinked)
+    link_filter = request.args.get("filter")
 
     if not project_id:
         return jsonify([])
@@ -1328,6 +1330,14 @@ def get_coverpoints():
     query += " ORDER BY id"
     cursor.execute(query, params)
 
+    # REQ-005: 如果需要过滤未关联的CP，先获取所有已关联的CP ID
+    linked_cp_ids = set()
+    if link_filter == "unlinked":
+        cursor.execute("SELECT DISTINCT cp_id FROM tc_cp_connections")
+        linked_cp_ids = {row["cp_id"] for row in cursor.fetchall()}
+        # 重新执行原始查询
+        cursor.execute(query, params)
+
     cps = []
     for row in cursor.fetchall():
         cp_id = row["id"]
@@ -1349,6 +1359,11 @@ def get_coverpoints():
         # 计算覆盖率
         coverage = round(passed / total * 100, 1) if total > 0 else 0.0
 
+        # REQ-005: 判断是否关联
+        is_linked = cp_id in linked_cp_ids or (total > 0)
+        if link_filter == "unlinked" and is_linked:
+            continue  # 跳过已关联的CP
+
         cps.append(
             {
                 "id": row["id"],
@@ -1363,6 +1378,7 @@ def get_coverpoints():
                 "created_by": dict(row).get("created_by", ""),
                 "coverage": coverage,
                 "coverage_detail": f"{passed}/{total}",
+                "linked": is_linked,
             }
         )
 
@@ -3224,6 +3240,38 @@ def get_current_user():
         "role": user["role"],
         "must_change_password": user.get("must_change_password", 0) == 1
     })
+
+
+@api.route("/api/auth/password", methods=["PATCH"])
+@login_required
+def change_password():
+    """修改当前用户密码"""
+    data = request.get_json()
+    new_password = data.get("password", "") if data else ""
+
+    # 验证密码长度
+    if not new_password:
+        return jsonify({"error": "Bad Request", "message": "密码不能为空"}), 400
+
+    if len(new_password) < 6:
+        return jsonify({"error": "Bad Request", "message": "密码长度至少6位"}), 400
+
+    # 获取当前用户ID
+    user_id = session.get(SESSION_USER_KEY)
+    user = auth.get_user_by_id(user_id)
+
+    if not user:
+        return jsonify({"error": "Not Found", "message": "用户不存在"}), 404
+
+    # guest 账户不能修改密码
+    if user["role"] == "guest":
+        return jsonify({"error": "Forbidden", "message": "访客账户无密码"}), 403
+
+    # 更新密码
+    password_hash = auth.hash_password(new_password)
+    auth.update_user(user_id, password_hash=password_hash, must_change_password=0)
+
+    return jsonify({"success": True, "message": "密码修改成功"})
 
 
 # ============ 用户管理 API ============

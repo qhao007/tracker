@@ -42,8 +42,8 @@ def parse_args():
 
 def get_version():
     """获取版本号"""
-    # 读取当前版本
-    version_file = os.path.join(TRACKER_DIR, 'dev', 'app', 'version.py')
+    # 读取当前版本 (从 dev/VERSION 文件)
+    version_file = os.path.join(TRACKER_DIR, 'dev', 'VERSION')
     if os.path.exists(version_file):
         with open(version_file) as f:
             content = f.read()
@@ -91,51 +91,73 @@ def notify_success(version, release_dir):
         print(f"⚠️ 飞书通知发送异常: {e}")
 
 
-def check_release_ready(version):
-    """检查是否满足发布条件（flag 文件）"""
+def check_release_ready(version, dry_run=False):
+    """检查是否满足发布条件（flag 文件）
+
+    Args:
+        version: 版本号
+        dry_run: 当前是否为演练模式
+
+    Returns:
+        bool: 是否满足发布条件
+    """
     print("\n🔍 检查发布准备状态...")
-    
+
     flag_file = os.path.join(TRACKER_DIR, '.release_ready')
-    
+
     # 统一版本格式：去掉 v 前缀
     version = version.lstrip('v')
-    
+
     # 1. 检查 flag 文件是否存在
     if not os.path.exists(flag_file):
         print(f"   ❌ Flag 文件不存在: {flag_file}")
         print(f"   提示: 请先执行 release_preparation.py")
         return False
-    
+
     # 2. 检查版本是否匹配
     with open(flag_file, 'r') as f:
         content = f.read()
-    
+
     expected_version_line = f"VERSION={version}"
     if expected_version_line not in content:
         print(f"   ❌ 版本不匹配")
         print(f"   Flag 内容: {content}")
         return False
-    
-    # 3. 检查 main 分支是否是预期提交
+
+    # 3. 检查 DRY_RUN 状态（防止演练 flag 用于正式发布）
+    is_flag_dry_run = False
+    if "DRY_RUN=" in content:
+        try:
+            dry_run_value = content.split("DRY_RUN=")[1].split("\n")[0].lower()
+            is_flag_dry_run = dry_run_value == 'true'
+        except IndexError:
+            pass
+
+    if is_flag_dry_run and not dry_run:
+        print(f"   ❌ Flag 文件标记为演练模式，不能用于正式发布")
+        print(f"   提示: 请重新执行 release_preparation.py（不带 --dry-run）")
+        return False
+
+    # 4. 检查 main 分支是否是预期提交
     current_commit = subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=TRACKER_DIR, capture_output=True, text=True
     ).stdout.strip()
-    
+
     if "MAIN_COMMIT=" in content:
         try:
             expected_commit = content.split("MAIN_COMMIT=")[1].split("\n")[0]
         except IndexError:
             print(f"   ❌ Flag 文件格式错误: MAIN_COMMIT 解析失败")
             return False
-        
+
         if current_commit != expected_commit:
             print(f"   ❌ main 分支提交不匹配")
             print(f"   预期: {expected_commit}")
             print(f"   实际: {current_commit}")
             return False
-    
-    print(f"   ✅ Flag 检查通过")
+
+    print(f"   ✅ Flag 检查通过" + (" (演练模式)" if is_flag_dry_run else ""))
     return True
 
 
@@ -522,9 +544,9 @@ def main():
     
     # 获取版本号
     version = args.version or get_version()
-    
+
     # 检查 flag 文件
-    if not check_release_ready(version):
+    if not check_release_ready(version, dry_run=args.dry_run):
         print("\n❌ 未满足发布条件，请先执行 release_preparation.py")
         return
     
