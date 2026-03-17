@@ -67,7 +67,8 @@ async function cleanupProjects(page: Page): Promise<void> {
       const option = projectSelector.nth(i);
       const text = await option.textContent();
 
-      if (text && (text.startsWith(prefix) || text.includes('TestUI_'))) {
+      // 精确匹配：只删除以 TEST_DATA_PREFIX ("TestUI_") 开头的项目
+      if (text && text.startsWith(prefix)) {
         const value = await option.getAttribute('value');
         if (value) {
           projectsToDelete.push({ id: parseInt(value), name: text });
@@ -80,14 +81,20 @@ async function cleanupProjects(page: Page): Promise<void> {
       console.log(`🗑️ 删除测试项目: ${project.name}`);
 
       try {
-        // 直接调用 API 删除项目
-        await page.evaluate(async (projectId) => {
+        // 直接调用 API 删除项目，并验证结果
+        const deleteResult = await page.evaluate(async (projectId) => {
           const response = await fetch(`/api/projects/${projectId}`, {
             method: 'DELETE',
             credentials: 'include'
           });
-          return response.json();
+          return { ok: response.ok, data: await response.json() };
         }, project.id);
+
+        // 验证删除是否成功
+        if (!deleteResult.ok) {
+          console.warn(`⚠️ 删除项目 ${project.name} 失败:`, deleteResult.data);
+          continue;
+        }
 
         // 等待删除完成
         await page.waitForTimeout(500);

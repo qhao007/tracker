@@ -47,7 +47,7 @@ test.describe('过滤功能测试', () => {
   }
 
   /**
-   * 创建测试项目
+   * 创建测试项目并返回项目ID
    */
   async function createTestProject(page: any) {
     const projectName = `TestUI_Filter_${Date.now()}`;
@@ -67,19 +67,35 @@ test.describe('过滤功能测试', () => {
     await page.waitForTimeout(1000);
 
     await page.waitForSelector('#projectSelector option', { state: 'attached', timeout: 10000 });
+    // 获取所有项目选项，找到新创建的项目
     const options = await page.locator('#projectSelector option').count();
-    if (options > 0) {
+    let projectId = null;
+
+    // 倒序查找新创建的项目（最新的在后面）
+    for (let i = options - 1; i >= 0; i--) {
+      const optionText = await page.locator('#projectSelector option').nth(i).textContent();
+      if (optionText.includes(projectName)) {
+        projectId = await page.locator('#projectSelector option').nth(i).getAttribute('value');
+        break;
+      }
+    }
+
+    if (projectId) {
+      await page.selectOption('#projectSelector', projectId);
+    } else {
+      // 如果没找到，使用最后一个选项
       const lastOptionValue = await page.locator('#projectSelector option').nth(options - 1).getAttribute('value');
       await page.selectOption('#projectSelector', lastOptionValue);
+      projectId = lastOptionValue;
     }
     await page.waitForTimeout(500);
-    return projectName;
+    return { projectName, projectId };
   }
 
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
     await page.waitForSelector('#projectSelector', { timeout: 10000 });
-    await createTestProject(page);
+    // 不需要创建新项目，使用已有的测试项目
   });
 
   test.afterEach(async ({ page }, testInfo) => {
@@ -96,6 +112,9 @@ test.describe('过滤功能测试', () => {
    * 测试目标: 验证 CP 过滤下拉框包含"未关联"选项
    */
   test('UI-FILTER-001: CP过滤"未关联"选项', async ({ page }) => {
+    // 先创建测试项目
+    await createTestProject(page);
+
     // 切换到 CP 标签页
     await page.click('button.tab:has-text("Cover Points")');
     await page.waitForSelector('#cpPanel', { state: 'visible', timeout: 10000 });
@@ -105,20 +124,27 @@ test.describe('过滤功能测试', () => {
     const linkedFilter = page.locator('#cpLinkedFilter');
     await expect(linkedFilter).toBeVisible({ timeout: 5000 });
 
-    // 验证包含"未关联"选项
+    // 验证包含"未关联"选项（使用 count 验证选项存在，而非 toBeVisible）
     const unlinkedOption = linkedFilter.locator('option:has-text("未关联")');
-    await expect(unlinkedOption).toBeVisible({ timeout: 5000 });
+    const unlinkedCount = await unlinkedOption.count();
+    expect(unlinkedCount).toBeGreaterThan(0);
 
     // 验证"全部"选项也存在
     const allOption = linkedFilter.locator('option:has-text("全部")');
-    await expect(allOption).toBeVisible({ timeout: 5000 });
+    const allCount = await allOption.count();
+    expect(allCount).toBeGreaterThan(0);
   });
 
   /**
    * UI-FILTER-002: 过滤显示未关联CP
    * 测试目标: 选择"未关联"过滤后，只显示未关联的 CP
+   *
+   * 注意: TC-CP 关联功能无 UI 操作界面，使用 API 创建关联
    */
   test('UI-FILTER-002: 过滤显示未关联CP', async ({ page }) => {
+    // 先创建测试项目并获取项目ID
+    const { projectId } = await createTestProject(page);
+
     const unlinkedCPName = TestDataFactory.generateCPName('Unlinked');
     const linkedCPName = TestDataFactory.generateCPName('Linked');
     const tcName = TestDataFactory.generateTCName('ForFilter');
@@ -143,7 +169,7 @@ test.describe('过滤功能测试', () => {
     await page.click('#cpModal button[type="submit"]');
     await page.waitForTimeout(2000);
 
-    // 创建 TC 用于关联
+    // 创建 TC
     await page.click('button.tab:has-text("Test Cases")');
     await page.waitForSelector('#tcPanel', { state: 'visible', timeout: 10000 });
     await page.click('text=+ 添加 TC');
@@ -166,33 +192,59 @@ test.describe('过滤功能测试', () => {
     }
     await page.waitForTimeout(500);
 
-    // 关联 TC 和 CP
-    await page.click('button.tab:has-text("Test Cases")');
-    await page.waitForSelector('#tcPanel', { state: 'visible', timeout: 10000 });
-    await page.waitForTimeout(1000);
+    // 获取 CP 和 TC 的 ID（通过 API）
+    // 使用之前创建项目时捕获的 projectId
+    console.log('Using project ID:', projectId);
 
-    const tcRow = page.locator(`#tcList tr:has-text("${tcName}")`).first();
-    await expect(tcRow).toBeVisible({ timeout: 10000 });
+    // 使用 API 获取 CP ID（添加 credentials）
+    const cpListResponse = await page.evaluate(async (pId) => {
+      const res = await fetch(`/api/cp?project_id=${pId}`, { credentials: 'include' });
+      return await res.json();
+    }, projectId);
+    console.log('CP list response:', Array.isArray(cpListResponse) ? `${cpListResponse.length} CPs` : cpListResponse);
 
-    const linkBtn = tcRow.locator('button:has-text("关联")');
-    if (await linkBtn.count() > 0) {
-      await linkBtn.click();
-      await page.waitForTimeout(1000);
+    const unlinkedCP = Array.isArray(cpListResponse) ? cpListResponse.find((cp: any) => cp.cover_point === unlinkedCPName) : null;
+    const linkedCP = Array.isArray(cpListResponse) ? cpListResponse.find((cp: any) => cp.cover_point === linkedCPName) : null;
 
-      const cpCheckbox = page.locator(`.cp-select-list input[type="checkbox"]:has-text("${linkedCPName}")`);
-      if (await cpCheckbox.count() > 0) {
-        await cpCheckbox.check();
-        await page.waitForTimeout(500);
+    // 使用 API 获取 TC ID
+    const tcListResponse = await page.evaluate(async (pId) => {
+      const res = await fetch(`/api/tc?project_id=${pId}`, { credentials: 'include' });
+      return await res.json();
+    }, projectId);
+    console.log('TC list response:', Array.isArray(tcListResponse) ? `${tcListResponse.length} TCs` : tcListResponse);
 
-        const confirmBtn = page.locator('button:has-text("确认关联")');
-        if (await confirmBtn.count() > 0) {
-          await confirmBtn.click();
-          await page.waitForTimeout(2000);
-        }
-      }
+    const tc = Array.isArray(tcListResponse) ? tcListResponse.find((t: any) => t.test_name === tcName) : null;
+
+    if (!unlinkedCP || !linkedCP || !tc) {
+      throw new Error(`数据创建失败: unlinkedCP=${!!unlinkedCP}, linkedCP=${!!linkedCP}, tc=${!!tc}`);
     }
 
-    // 刷新页面
+    console.log('Found IDs - unlinkedCP:', unlinkedCP?.id, 'linkedCP:', linkedCP?.id, 'tc:', tc?.id);
+
+    // 使用 API 关联 TC 和 CP（需要 credentials: include 携带认证信息）
+    const apiResult = await page.evaluate(async ({ tcId, cpId, pId }) => {
+      // 转换 project_id 为整数
+      const projectIdInt = parseInt(pId, 10);
+      const res = await fetch(`/api/tc/${tcId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          project_id: projectIdInt,
+          connections: [cpId]
+        })
+      });
+      const data = await res.json();
+      return { ok: res.ok, status: res.status, data };
+    }, { tcId: tc.id, cpId: linkedCP.id, pId: projectId });
+
+    console.log('API Result:', JSON.stringify(apiResult));
+
+    if (!apiResult.ok) {
+      throw new Error(`API关联失败: ${JSON.stringify(apiResult)}`);
+    }
+
+    // 刷新页面验证关联
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#projectSelector', { timeout: 10000 });
     await page.waitForTimeout(500);
@@ -215,6 +267,14 @@ test.describe('过滤功能测试', () => {
     await expect(unlinkedRow).toBeVisible({ timeout: 5000 });
     await expect(linkedRow).toBeVisible({ timeout: 5000 });
 
+    // 验证关联: linkedCP 应该没有 unlinked 样式（表示已关联）
+    const linkedRowUnlinkedClass = linkedRow.locator('.unlinked');
+    await expect(linkedRowUnlinkedClass).not.toBeVisible({ timeout: 5000 });
+
+    // 验证未关联: unlinkedCP 应该有 unlinked 样式（表示未关联）
+    const unlinkedRowUnlinkedClass = unlinkedRow.locator('.unlinked');
+    await expect(unlinkedRowUnlinkedClass).toBeVisible({ timeout: 5000 });
+
     // 选择"未关联"过滤
     await page.selectOption('#cpLinkedFilter', 'unlinked');
     await page.waitForTimeout(1000);
@@ -236,6 +296,9 @@ test.describe('过滤功能测试', () => {
    * 测试目标: 清除"未关联"过滤后，恢复显示所有 CP
    */
   test('UI-FILTER-003: 清除过滤恢复正常', async ({ page }) => {
+    // 先创建测试项目
+    await createTestProject(page);
+
     const cpName1 = TestDataFactory.generateCPName('Filter1');
     const cpName2 = TestDataFactory.generateCPName('Filter2');
 
