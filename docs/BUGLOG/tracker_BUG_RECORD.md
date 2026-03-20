@@ -2554,3 +2554,45 @@ async function loadTC() {
 - 手工测试: ✅ 功能正常
 
 **处理**: 关闭此 bug 记录，测试用例需要修复关联操作逻辑。
+
+---
+
+## BUG-093: Priority 多值过滤时实际曲线覆盖率计算错误
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-20 |
+| **报告人** | 用户反馈 |
+| **修复日期** | 2026-03-20 |
+| **修复人** | Claude Code |
+| **影响版本** | v0.10.0 |
+
+**描述**: 选择 P0+P1+P2 过滤时，实际曲线覆盖率应该与无过滤时相同（因为 P0+P1+P2 覆盖了全部 CP），但当前返回的是第一个 Priority (P0) 的覆盖率。
+
+**复现步骤**:
+1. 打开 SOC_DV 项目图表
+2. 无过滤：actual = 72%
+3. P0+P1+P2 过滤：actual = 97%（错误）
+
+**根本原因**: `api.py` 中 `get_progress` 函数只取 `priority_list[0]`，没有考虑多值 Priority 的加权计算。
+
+**期望行为**:
+- P0+P1+P2 = 72%（与无过滤相同，因为覆盖了全部 30 个 CP）
+- 或计算加权平均：(97%×10 + 80%×12 + 60%×8) / 30 ≈ 79.7%
+
+**修复方案**:
+当 priority 参数覆盖了所有 CP（即 P0+P1+P2+P3 = 全部）时，使用 `actual_coverage`；否则计算加权平均覆盖率。
+
+**验证**:
+```bash
+# 无过滤
+curl -s -b cookies.txt "http://localhost:8081/api/progress/3"
+# 期望: actual_coverage = 72%
+
+# P0+P1+P2
+curl -s -b cookies.txt "http://localhost:8081/api/progress/3?priority=P0,P1,P2"
+# 期望: actual = 72%（与无过滤相同）
+# 当前: actual = 97%（错误）
+```
