@@ -1,16 +1,71 @@
 """
 Tracker Flask 应用 - v0.7.1 用户认证版本
 """
-from flask import Flask, g
+from flask import Flask, g, request, session
 from .api import api
 import os
 import secrets
+import time
+import json
+import logging
 
 
 def create_app(testing=False):
     app = Flask(__name__, static_folder=None)  # 禁用默认静态路由，使用自定义路由
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     data_dir = os.path.join(base_dir, 'data')
+
+    # 配置日志
+    log_dir = os.path.join(data_dir, 'logs')
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, 'api.log')
+
+    # 配置日志格式
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(message)s',
+        handlers=[
+            logging.FileHandler(log_file, encoding='utf-8'),
+            logging.StreamHandler()
+        ]
+    )
+    logger = logging.getLogger(__name__)
+
+    # 请求计时开始
+    @app.before_request
+    def before_request():
+        request.start_time = time.time()
+
+    # 统一记录 API 请求日志
+    @app.after_request
+    def after_request(response):
+        if hasattr(request, 'start_time'):
+            duration = time.time() - request.start_time
+            duration_ms = int(duration * 1000)
+
+            # 获取用户信息
+            user_id = session.get('user_id', 'anonymous')
+            username = session.get('username', '')
+
+            log_data = {
+                "event": "api_call",
+                "endpoint": request.path,
+                "method": request.method,
+                "status_code": response.status_code,
+                "duration_ms": duration_ms,
+                "user": username or user_id,
+                "ip": request.remote_addr
+            }
+
+            # 根据状态码选择日志级别
+            if response.status_code >= 500:
+                logger.error(json.dumps(log_data))
+            elif response.status_code >= 400:
+                logger.warning(json.dumps(log_data))
+            else:
+                logger.info(json.dumps(log_data))
+
+        return response
 
     # 配置
     app.config['TESTING'] = testing

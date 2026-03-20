@@ -374,7 +374,26 @@
                     <input type="date" id="progressStartDate" style="width: 130px; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
                     <span style="color: #999;">-</span>
                     <input type="date" id="progressEndDate" style="width: 130px; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                    <!-- v0.10.0: Priority 过滤 -->
+                    <label style="font-size: 13px; color: #666; margin-left: 12px;">Priority:</label>
+                    <div id="priorityFilterContainer" style="display: inline-block; position: relative; vertical-align: middle;">
+                        <div id="priorityFilterBtn" onclick="togglePriorityFilter()" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; cursor: pointer; background: white; min-width: 80px;">
+                            <span id="priorityFilterLabel">全部</span> <span style="color: #666;">▼</span>
+                        </div>
+                        <div id="priorityFilterDropdown" style="display: none; position: absolute; top: 100%; left: 0; background: white; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 100; min-width: 120px;">
+                            <label style="display: block; padding: 8px 12px; cursor: pointer; font-size: 13px;">
+                                <input type="checkbox" value="P0" onchange="updatePriorityFilter()"> P0
+                            </label>
+                            <label style="display: block; padding: 8px 12px; cursor: pointer; font-size: 13px;">
+                                <input type="checkbox" value="P1" onchange="updatePriorityFilter()"> P1
+                            </label>
+                            <label style="display: block; padding: 8px 12px; cursor: pointer; font-size: 13px;">
+                                <input type="checkbox" value="P2" onchange="updatePriorityFilter()"> P2
+                            </label>
+                        </div>
+                    </div>
                     <button type="button" onclick="refreshProgressChart()" style="padding: 4px 12px; margin-left: 8px; background: #2170bb; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;">应用</button>
+                    <button type="button" onclick="resetPriorityFilter()" id="resetPriorityBtn" style="padding: 4px 12px; margin-left: 4px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; display: none;">重置</button>
                     <!-- v0.8.2: 快照管理按钮 -->
                     <button type="button" id="snapshotManageBtn" onclick="openSnapshotManage()" style="padding: 4px 12px; margin-left: 8px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; display: none;">快照管理</button>
                     <button type="button" id="snapshotCreateBtn" onclick="createSnapshot()" style="padding: 4px 12px; margin-left: 8px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; display: none;">刷新快照</button>
@@ -466,7 +485,16 @@
                     <div class="form-group"><label>Checker Details</label><textarea class="form-control" id="tcChecker"></textarea></div>
                     <div class="form-group"><label>Coverage Details</label><textarea class="form-control" id="tcCoverage"></textarea></div>
                     <div class="form-group"><label>Comments</label><textarea class="form-control" id="tcComments"></textarea></div>
-                    <div class="form-group"><label>关联 Cover Points</label><div class="checkbox-group" id="cpCheckboxes"></div></div>
+                    <!-- v0.10.0: 优化的关联选择列表 -->
+                    <div class="form-group">
+                        <label>关联 Cover Points</label>
+                        <div style="margin-bottom: 8px;">
+                            <input type="text" id="cpSearchInput" placeholder="搜索覆盖点... (Ctrl+K)" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; box-sizing: border-box;" oninput="filterCPCheckboxes()">
+                        </div>
+                        <div class="checkbox-group" id="cpCheckboxes" style="max-height: 150px; overflow-y: auto; border: 1px solid #eee; padding: 8px; border-radius: 4px;"></div>
+                        <div id="cpEmptyState" style="display: none; padding: 12px; color: #999; font-size: 12px; text-align: center;">未找到匹配的覆盖点，尝试调整搜索关键词</div>
+                        <div id="linkedCPsDisplay" style="margin-top: 8px; padding: 8px; background: #f5f5f5; border-radius: 4px; font-size: 12px; color: #666;"></div>
+                    </div>
                     <div class="form-actions"><button type="submit" class="btn btn-primary">保存</button><button type="button" class="btn" onclick="closeModal('tcModal')">取消</button></div>
                 </form>
             </div>
@@ -1035,6 +1063,11 @@
             } catch (e) { console.error('加载版本信息失败:', e); }
         }
         
+        /**
+         * 加载项目列表
+         * @returns {Promise<Array>} 项目数组
+         * @throws {Error} 网络错误时抛出
+         */
         async function loadProjects() {
             try {
                 const res = await fetch(`${API_ENDPOINTS.PROJECTS}`, { credentials: 'include' });
@@ -1083,6 +1116,11 @@
             renderTC();
         }
 
+        /**
+         * 加载 Cover Points 列表
+         * @returns {Promise<Array>} CP 数组
+         * @throws {Error} 网络错误时抛出
+         */
         async function loadCP() {
             try {
                 const res = await fetch(`${API_ENDPOINTS.COVER_POINTS}?project_id=${currentProject.id}`);
@@ -1098,6 +1136,11 @@
             } catch (e) { console.error('加载 CP 失败:', e); }
         }
 
+        /**
+         * 加载 Test Cases 列表
+         * @returns {Promise<Array>} TC 数组
+         * @throws {Error} 网络错误时抛出
+         */
         async function loadTC() {
             try {
                 const res = await fetch(`${API_ENDPOINTS.TEST_CASES}?project_id=${currentProject.id}`);
@@ -1176,30 +1219,77 @@
         
         async function refreshProgressChart() {
             if (!currentProject) return;
-            
+
             const startDate = document.getElementById('progressStartDate').value;
             const endDate = document.getElementById('progressEndDate').value;
-            
+
+            // v0.10.0: 获取 priority 过滤参数
+            const selectedPriorities = getSelectedPriorities();
+
             // 构建查询参数
             let url = `/api/progress/${currentProject.id}`;
             const params = new URLSearchParams();
             if (startDate) params.append('start_date', startDate);
             if (endDate) params.append('end_date', endDate);
+            if (selectedPriorities) params.append('priority', selectedPriorities);
             if (params.toString()) url += '?' + params.toString();
-            
+
             try {
                 const progressRes = await fetch(url);
                 const progressData = await progressRes.json();
-                
+
                 currentProgressData = progressData;
                 renderProgressChart(progressData);
-                
+
                 // v0.8.2: 根据角色显示/隐藏快照按钮
                 updateSnapshotButtons();
             } catch (e) {
                 console.error('刷新进度图表失败:', e);
             }
         }
+
+        // v0.10.0: Priority 过滤相关函数
+        function togglePriorityFilter() {
+            const dropdown = document.getElementById('priorityFilterDropdown');
+            dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function getSelectedPriorities() {
+            const checkboxes = document.querySelectorAll('#priorityFilterDropdown input[type="checkbox"]:checked');
+            return Array.from(checkboxes).map(cb => cb.value).join(',');
+        }
+
+        function updatePriorityFilter() {
+            const selected = getSelectedPriorities();
+            const label = document.getElementById('priorityFilterLabel');
+            const resetBtn = document.getElementById('resetPriorityBtn');
+
+            if (selected) {
+                label.textContent = selected.replace(/,/g, '+');
+                resetBtn.style.display = 'inline-block';
+            } else {
+                label.textContent = '全部';
+                resetBtn.style.display = 'none';
+            }
+
+            // 关闭下拉框
+            document.getElementById('priorityFilterDropdown').style.display = 'none';
+        }
+
+        function resetPriorityFilter() {
+            document.querySelectorAll('#priorityFilterDropdown input[type="checkbox"]').forEach(cb => cb.checked = false);
+            document.getElementById('priorityFilterLabel').textContent = '全部';
+            document.getElementById('resetPriorityBtn').style.display = 'none';
+            refreshProgressChart();
+        }
+
+        // 点击其他地方关闭 priority 下拉框
+        document.addEventListener('click', function(e) {
+            const container = document.getElementById('priorityFilterContainer');
+            if (!container.contains(e.target)) {
+                document.getElementById('priorityFilterDropdown').style.display = 'none';
+            }
+        });
         
         // v0.8.2: 快照管理
         function updateSnapshotButtons() {
@@ -1408,6 +1498,13 @@
                 });
             }
             
+            // v0.10.0: 获取 priority 过滤条件用于显示
+            const priorityFilter = data.priority_filter || '';
+            let titleText = 'CP 覆盖率进度';
+            if (priorityFilter) {
+                titleText += ` (${priorityFilter.replace(/,/g, '+')})`;
+            }
+
             // 创建图表
             progressChart = new Chart(ctx, {
                 type: 'line',
@@ -1431,7 +1528,7 @@
                     plugins: {
                         title: {
                             display: true,
-                            text: 'CP 覆盖率进度'
+                            text: titleText
                         },
                         tooltip: {
                             callbacks: {
@@ -1768,8 +1865,6 @@
             document.getElementById('progressPanel').style.display = tab === 'progress' ? 'block' : 'none';
             if (tab === 'progress') loadProgressChart();
         }
-        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
-
         // 切换版本对话框中的标签页
         function switchVersionTab(tab, event) {
             document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -1922,6 +2017,11 @@
             closeModal('exportModal');
         }
         
+        /**
+         * 打开 CP Modal（创建或编辑）
+         * @param {number|null} id - CP ID，null 表示创建新 CP
+         * @returns {void}
+         */
         function openCPModal(id = null) {
             document.getElementById('cpModalTitle').textContent = id ? '编辑 Cover Point' : '添加 Cover Point';
             document.getElementById('cpId').value = id || '';
@@ -1929,23 +2029,140 @@
             else { document.getElementById('cpForm').reset(); }
             document.getElementById('cpModal').classList.add('active');
         }
-        
+
+        /**
+         * 打开 TC Modal（创建或编辑）
+         * @param {number|null} id - TC ID，null 表示创建新 TC
+         * @returns {void}
+         */
         function openTCModal(id = null) {
             document.getElementById('tcModalTitle').textContent = id ? '编辑 Test Case' : '添加 Test Case';
             document.getElementById('tcId').value = id || '';
-            document.getElementById('cpCheckboxes').innerHTML = coverPoints.map(cp => `<div class="checkbox-item"><input type="checkbox" id="cp_${cp.id}" value="${cp.id}"><label for="cp_${cp.id}">${escapeHtml(cp.cover_point)}</label></div>`).join('') || '<p style="color: #999;">请先添加 Cover Points</p>';
-            if (id) { const tc = testCases.find(t => t.id === id); if (tc) { document.getElementById('tcDvMilestone').value = tc.dv_milestone || 'DV1.0'; document.getElementById('tcTargetDate').value = tc.target_date || ''; document.getElementById('tcTestbench').value = tc.testbench; document.getElementById('tcCategory').value = tc.category || ''; document.getElementById('tcOwner').value = tc.owner || ''; document.getElementById('tcTestName').value = tc.test_name; document.getElementById('tcScenario').value = tc.scenario_details || ''; document.getElementById('tcChecker').value = tc.checker_details || ''; document.getElementById('tcCoverage').value = tc.coverage_details || ''; document.getElementById('tcComments').value = tc.comments || ''; tc.connected_cps && tc.connected_cps.forEach(cpId => { const cb = document.getElementById(`cp_${cpId}`); if (cb) cb.checked = true; }); } }
+            document.getElementById('cpSearchInput').value = ''; // 重置搜索框
+
+            // v0.10.0: 渲染 CP 复选框
+            renderCPCheckboxes(id);
+
+            if (id) { const tc = testCases.find(t => t.id === id); if (tc) { document.getElementById('tcDvMilestone').value = tc.dv_milestone || 'DV1.0'; document.getElementById('tcTargetDate').value = tc.target_date || ''; document.getElementById('tcTestbench').value = tc.testbench; document.getElementById('tcCategory').value = tc.category || ''; document.getElementById('tcOwner').value = tc.owner || ''; document.getElementById('tcTestName').value = tc.test_name; document.getElementById('tcScenario').value = tc.scenario_details || ''; document.getElementById('tcChecker').value = tc.checker_details || ''; document.getElementById('tcCoverage').value = tc.coverage_details || ''; document.getElementById('tcComments').value = tc.comments || ''; tc.connected_cps && tc.connected_cps.forEach(cpId => { const cb = document.getElementById(`cp_${cpId}`); if (cb) cb.checked = true; }); updateLinkedCPsDisplay(); } }
             else { document.getElementById('tcForm').reset(); }
             document.getElementById('tcModal').classList.add('active');
+
+            // v0.10.0: Ctrl+K 聚焦搜索框
+            document.addEventListener('keydown', handleCPSearchKeydown);
         }
-        
+
+        // v0.10.0: 渲染 CP 复选框
+        function renderCPCheckboxes(tcId = null) {
+            const container = document.getElementById('cpCheckboxes');
+            const emptyState = document.getElementById('cpEmptyState');
+            const searchTerm = document.getElementById('cpSearchInput').value.toLowerCase();
+
+            // 过滤 CP 列表
+            let filteredCPs = coverPoints;
+            if (searchTerm) {
+                filteredCPs = coverPoints.filter(cp =>
+                    (cp.cover_point && cp.cover_point.toLowerCase().includes(searchTerm)) ||
+                    (cp.feature && cp.feature.toLowerCase().includes(searchTerm)) ||
+                    (cp.sub_feature && cp.sub_feature.toLowerCase().includes(searchTerm))
+                );
+            }
+
+            if (coverPoints.length === 0) {
+                container.innerHTML = '<p style="color: #999;">请先添加 Cover Points</p>';
+                emptyState.style.display = 'none';
+                return;
+            }
+
+            if (filteredCPs.length === 0) {
+                container.innerHTML = '';
+                emptyState.style.display = 'block';
+                return;
+            }
+
+            emptyState.style.display = 'none';
+            container.innerHTML = filteredCPs.map(cp => {
+                const isChecked = tcId && testCases.find(t => t.id === tcId) &&
+                    testCases.find(t => t.id === tcId).connected_cps &&
+                    testCases.find(t => t.id === tcId).connected_cps.includes(cp.id);
+                return `<div class="checkbox-item"><input type="checkbox" id="cp_${cp.id}" value="${cp.id}" ${isChecked ? 'checked' : ''} onchange="updateLinkedCPsDisplay()"><label for="cp_${cp.id}">${escapeHtml(cp.cover_point)}</label></div>`;
+            }).join('');
+        }
+
+        // v0.10.0: CP 搜索防抖计时器
+        let cpSearchDebounce = null;
+
+        // v0.10.0: 过滤 CP 复选框 (带 200ms 防抖)
+        function filterCPCheckboxes() {
+            clearTimeout(cpSearchDebounce);
+            cpSearchDebounce = setTimeout(() => {
+                const tcId = document.getElementById('tcId').value;
+                renderCPCheckboxes(tcId ? parseInt(tcId) : null);
+            }, 200);
+        }
+
+        // v0.10.0: 更新已关联 CP 显示
+        function updateLinkedCPsDisplay() {
+            const container = document.getElementById('linkedCPsDisplay');
+            const checkedCPs = document.querySelectorAll('#cpCheckboxes input:checked');
+
+            if (checkedCPs.length === 0) {
+                container.innerHTML = '<span style="color: #999;">未关联任何覆盖点</span>';
+                return;
+            }
+
+            const linkedCPNames = Array.from(checkedCPs).map(cb => {
+                const cpId = parseInt(cb.value);
+                const cp = coverPoints.find(c => c.id === cpId);
+                return cp ? escapeHtml(cp.cover_point) : '';
+            }).filter(name => name);
+
+            container.innerHTML = '<strong>已关联:</strong> ' + linkedCPNames.join(', ');
+        }
+
+        // v0.10.0: Ctrl+K 快捷键处理
+        function handleCPSearchKeydown(e) {
+            if (e.ctrlKey && e.key === 'k') {
+                e.preventDefault();
+                document.getElementById('cpSearchInput').focus();
+            }
+            // 按 Escape 关闭 Modal 时移除监听器
+            if (e.key === 'Escape') {
+                document.removeEventListener('keydown', handleCPSearchKeydown);
+            }
+        }
+
+        // v0.10.0: Modal 关闭时清理事件监听器
+        /**
+         * 关闭 Modal
+         * @param {string} id - Modal 元素 ID
+         * @returns {void}
+         */
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+            if (id === 'tcModal') {
+                document.removeEventListener('keydown', handleCPSearchKeydown);
+            }
+        }
+
+        /**
+         * 保存 Cover Point（创建或更新）
+         * @param {Event} e - 表单提交事件
+         * @returns {Promise<void>}
+         * @throws {Error} 网络错误时弹出提示
+         */
         async function saveCP(e) {
             e.preventDefault();
             const id = document.getElementById('cpId').value;
             const data = { project_id: currentProject.id, priority: document.getElementById('cpPriority').value, feature: document.getElementById('cpFeature').value, sub_feature: document.getElementById('cpSubFeature').value, cover_point: document.getElementById('cpCoverPoint').value, cover_point_details: document.getElementById('cpDetails').value, comments: document.getElementById('cpComments').value };
             try { const res = await fetch(`/api/cp${id ? '/'+id : ''}`, { method: id ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data), credentials: 'include' }); const result = await res.json(); if (result.success) { closeModal('cpModal'); await Promise.all([loadCP(), loadStats()]); } else { alert(result.error || result.message || '保存失败'); } } catch (err) { alert('保存失败: ' + err); }
         }
-        
+
+        /**
+         * 保存 Test Case（创建或更新）
+         * @param {Event} e - 表单提交事件
+         * @returns {Promise<void>}
+         * @throws {Error} 网络错误时弹出提示
+         */
         async function saveTC(e) {
             e.preventDefault();
             const id = document.getElementById('tcId').value;
@@ -1953,34 +2170,54 @@
             const data = { project_id: currentProject.id, dv_milestone: document.getElementById('tcDvMilestone').value, target_date: document.getElementById('tcTargetDate').value, testbench: document.getElementById('tcTestbench').value, category: document.getElementById('tcCategory').value, owner: document.getElementById('tcOwner').value, test_name: document.getElementById('tcTestName').value, scenario_details: document.getElementById('tcScenario').value, checker_details: document.getElementById('tcChecker').value, coverage_details: document.getElementById('tcCoverage').value, comments: document.getElementById('tcComments').value, connections };
             try { const res = await fetch(`/api/tc${id ? '/'+id : ''}`, { method: id ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data), credentials: 'include' }); const result = await res.json(); if (result.success) { closeModal('tcModal'); await Promise.all([loadTC(), loadStats()]); } else { alert(result.error || result.message || '保存失败'); } } catch (err) { alert('保存失败: ' + err); }
         }
-        
-        async function deleteCP(id) { 
-            if (!currentProject) return; 
-            if (!confirm('确定删除?')) return; 
-            try { 
+
+        /**
+         * 删除 Cover Point
+         * @param {number} id - CP ID
+         * @returns {Promise<void>}
+         * @throws {Error} 网络错误时弹出提示
+         */
+        async function deleteCP(id) {
+            if (!currentProject) return;
+            if (!confirm('确定删除?')) return;
+            try {
                 const res = await fetch(`/api/cp/${id}?project_id=${currentProject.id}`, { method: 'DELETE' });
                 if (!res.ok) {
                     const data = await res.json();
                     alert(data.message || '删除失败');
                     return;
                 }
-                await loadCP(); 
-            } catch (e) { alert('删除失败'); } 
+                await loadCP();
+            } catch (e) { alert('删除失败'); }
         }
-        
-        async function deleteTC(id) { 
-            if (!currentProject) return; 
-            if (!confirm('确定删除?')) return; 
-            try { 
+
+        /**
+         * 删除 Test Case
+         * @param {number} id - TC ID
+         * @returns {Promise<void>}
+         * @throws {Error} 网络错误时弹出提示
+         */
+        async function deleteTC(id) {
+            if (!currentProject) return;
+            if (!confirm('确定删除?')) return;
+            try {
                 const res = await fetch(`/api/tc/${id}?project_id=${currentProject.id}`, { method: 'DELETE' });
                 if (!res.ok) {
                     const data = await res.json();
                     alert(data.message || '删除失败');
                     return;
                 }
-                await Promise.all([loadTC(), loadStats()]); 
-            } catch (e) { alert('删除失败'); } 
+                await Promise.all([loadTC(), loadStats()]);
+            } catch (e) { alert('删除失败'); }
         }
+
+        /**
+         * 更新 Test Case 状态
+         * @param {number} id - TC ID
+         * @param {string} newStatus - 新状态
+         * @returns {Promise<void>}
+         * @throws {Error} 网络错误时弹出提示
+         */
         async function updateTCStatus(id, newStatus) {
             if (!currentProject) return;
             
@@ -2217,6 +2454,11 @@
             document.getElementById('deleteProjectModal').classList.add('active');
         }
         
+        /**
+         * 确认删除项目
+         * @returns {Promise<void>}
+         * @throws {Error} 网络错误时弹出提示
+         */
         async function confirmDeleteProject() {
             if (!pendingDeleteProjectId) return;
             try {
