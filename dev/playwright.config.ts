@@ -53,6 +53,14 @@ export default defineConfig({
 
     // 视窗大小
     viewport: { width: 1280, height: 720 },
+
+    // 沙箱环境：设置 HOME 环境变量
+    launchOptions: {
+      env: {
+        HOME: '/root',
+        XDG_RUNTIME_DIR: '/tmp',
+      },
+    },
   },
 
   // 项目配置

@@ -48,12 +48,32 @@ cd /projects/management/tracker/dev && ./start_server_test.sh
 # API 测试
 cd /projects/management/tracker/dev && PYTHONPATH=. pytest tests/test_api/ -v
 
-# UI 冒烟测试
-cd /projects/management/tracker/dev && npx playwright test tests/test_ui/specs/smoke/ --project=firefox
+# UI 冒烟测试 (需先设置环境变量)
+cd /projects/management/tracker/dev && HOME=/root XDG_RUNTIME_DIR=/tmp npx playwright test tests/test_ui/specs/smoke/ --project=firefox
 
 # UI 集成测试
-cd /projects/management/tracker/dev && npx playwright test tests/test_ui/specs/integration/ --project=firefox
+cd /projects/management/tracker/dev && HOME=/root XDG_RUNTIME_DIR=/tmp npx playwright test tests/test_ui/specs/integration/ --project=firefox
 ```
+
+### UI 测试调试
+
+**清理测试数据**: 大量测试项目会导致超时，运行以下命令清理:
+```bash
+python3 scripts/tracker_ops.py clean
+```
+
+**Playwright 沙箱环境**: 如遇 Firefox 启动失败，添加环境变量:
+```bash
+HOME=/root XDG_RUNTIME_DIR=/tmp npx playwright test ...
+```
+或在 `playwright.config.ts` 中配置:
+```typescript
+launchOptions: {
+  env: { HOME: '/root', XDG_RUNTIME_DIR: '/tmp' }
+}
+```
+
+**测试数据原则**: 使用现有 SOC_DV 项目数据 (30 CP)，避免在每个测试中创建新数据
 
 ### 代码检查
 
@@ -276,6 +296,24 @@ main (生产)
 **位置**: `custom_skills/tracker_code_development_workflow/SKILL.md`
 
 **流程**: 开发(Subagent A) → 审查(Subagent B，1-3轮优化) → 测试(Subagent C) → 确认(Subagent D)
+
+---
+
+## 🛠️ 已安装技能
+
+> 项目本地技能放在 `.claude/skills/<skill-name>/SKILL.md`
+
+| 技能 | 位置 | 说明 |
+|------|------|------|
+| `tracker_code_development_workflow` | `.claude/skills/` | Tracker 代码开发工作流 |
+| `tracker-coverage-enhancement-workflow` | `.claude/skills/` | 测试覆盖增强工作流 |
+| `playwright-debug` | `.claude/skills/` | Playwright 调试最佳实践 |
+
+### Skill 使用与创建
+
+- **创建新技能**: 使用 `skill-creator` skill 引导工作流
+- **Skill 描述**: 包含具体触发关键词，而非泛泛描述
+- **项目本地技能**: 放在 `.claude/skills/<skill-name>/SKILL.md`
 
 ---
 

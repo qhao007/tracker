@@ -743,49 +743,63 @@ def delete_project(project_id):
 # ============ Progress Charts (v0.8.0) ============
 
 
-def calculate_planned_coverage(project_name, start_date, end_date):
+def calculate_planned_coverage(project_name, start_date, end_date, priority_filter=""):
     """
     计算计划覆盖率曲线
-    
+
     算法：对于项目周期内的每一周，计算该周之前已target且状态为Pass的TC
     所关联的CP覆盖率
-    
+
     Args:
         project_name: 项目名称
         start_date: 项目开始日期
         end_date: 项目结束日期
-    
+        priority_filter: CP priority 过滤参数，多值用逗号分隔，如 "P0,P1"
+
     Returns:
         list: 每周数据点列表 [{week: 'YYYY-MM-DD', coverage: float}, ...]
     """
     if not start_date or not end_date:
         return []
-    
+
     try:
         start = datetime.strptime(start_date, '%Y-%m-%d').date()
         end = datetime.strptime(end_date, '%Y-%m-%d').date()
     except (ValueError, TypeError):
         return []
-    
+
     # 获取项目 ID
     projects = load_projects()
     project = next((p for p in projects if p["name"] == project_name), None)
     if not project:
         return []
     project_id = project["id"]
-    
+
     conn = get_db(project_name)
     cursor = conn.cursor()
-    
-    # 获取项目总 CP 数
-    cursor.execute("SELECT COUNT(*) FROM cover_point")
+
+    # 构建 priority 过滤条件 (v0.10.0)
+    priority_condition = ""
+    priority_params = []
+    if priority_filter:
+        priority_list = [p.strip() for p in priority_filter.split(',') if p.strip()]
+        if priority_list:
+            placeholders = ','.join(['?' for _ in priority_list])
+            priority_condition = f"AND cp.priority IN ({placeholders})"
+            priority_params = priority_list
+
+    # 获取项目总 CP 数（根据过滤条件）
+    if priority_condition:
+        cursor.execute(f"SELECT COUNT(*) FROM cover_point cp WHERE cp.project_id = ? {priority_condition}", [project_id] + priority_params)
+    else:
+        cursor.execute("SELECT COUNT(*) FROM cover_point WHERE project_id = ?", (project_id,))
     total_cp = cursor.fetchone()[0]
-    
+
     if total_cp == 0:
         return []
-    
+
     planned = []
-    
+
     # 从项目开始日期到结束日期，每周计算一次
     current = start
     while current <= end:
@@ -801,41 +815,62 @@ def calculate_planned_coverage(project_name, start_date, end_date):
             if days_until_sunday == 0:
                 days_until_sunday = 7
             week_end = current + timedelta(days=days_until_sunday)
-        
+
         # 只处理不超过结束日期的周
         if week_end > end:
             week_end = end
-        
+
         # 计算覆盖率：target_date <= week_end 且 status = 'Pass' 的 TC 关联的 CP 覆盖率
-        cursor.execute("""
-            WITH pass_tcs AS (
-                SELECT DISTINCT tc.id
-                FROM test_case tc
-                WHERE tc.project_id = ?
-                AND tc.target_date IS NOT NULL
-                AND tc.target_date <= ?
-                AND tc.status != 'REMOVED'
-            ),
-            covered_cps AS (
-                SELECT DISTINCT cp.id
-                FROM tc_cp_connections tcc
-                INNER JOIN pass_tcs pt ON tcc.tc_id = pt.id
-                INNER JOIN cover_point cp ON tcc.cp_id = cp.id
-            )
-            SELECT COUNT(*) FROM covered_cps
-        """, (project_id, week_end.isoformat()))
-        
+        # 支持 priority 过滤 (v0.10.0)
+        if priority_condition:
+            cursor.execute(f"""
+                WITH pass_tcs AS (
+                    SELECT DISTINCT tc.id
+                    FROM test_case tc
+                    WHERE tc.project_id = ?
+                    AND tc.target_date IS NOT NULL
+                    AND tc.target_date <= ?
+                    AND tc.status != 'REMOVED'
+                ),
+                covered_cps AS (
+                    SELECT DISTINCT cp.id
+                    FROM tc_cp_connections tcc
+                    INNER JOIN pass_tcs pt ON tcc.tc_id = pt.id
+                    INNER JOIN cover_point cp ON tcc.cp_id = cp.id
+                    WHERE 1=1 {priority_condition}
+                )
+                SELECT COUNT(*) FROM covered_cps
+            """, [project_id, week_end.isoformat()] + priority_params)
+        else:
+            cursor.execute("""
+                WITH pass_tcs AS (
+                    SELECT DISTINCT tc.id
+                    FROM test_case tc
+                    WHERE tc.project_id = ?
+                    AND tc.target_date IS NOT NULL
+                    AND tc.target_date <= ?
+                    AND tc.status != 'REMOVED'
+                ),
+                covered_cps AS (
+                    SELECT DISTINCT cp.id
+                    FROM tc_cp_connections tcc
+                    INNER JOIN pass_tcs pt ON tcc.tc_id = pt.id
+                    INNER JOIN cover_point cp ON tcc.cp_id = cp.id
+                )
+                SELECT COUNT(*) FROM covered_cps
+            """, (project_id, week_end.isoformat()))
+
         covered_cp = cursor.fetchone()[0]
         coverage = round((covered_cp / total_cp) * 100, 1)
-        
+
         planned.append({
             'week': current.isoformat(),  # 使用周一的日期作为标识
             'coverage': coverage
         })
-        
+
         # 移到下一周
         current = week_end + timedelta(days=1)
-    
+
     return planned
 
 
@@ -852,49 +887,139 @@ def get_progress(project_id):
     # 获取项目日期
     start_date = project.get("start_date", "")
     end_date = project.get("end_date", "")
-    
+
     # 获取日期过滤参数
     filter_start = request.args.get("start_date", "")
     filter_end = request.args.get("end_date", "")
-    
+
     # 如果有过滤参数，使用过滤参数
     if filter_start:
         start_date = filter_start
     if filter_end:
         end_date = filter_end
 
+    # 获取 priority 过滤参数 (v0.10.0)
+    priority_filter = request.args.get("priority", "")
+
     # 计算计划曲线
-    planned = calculate_planned_coverage(project["name"], start_date, end_date)
+    planned = calculate_planned_coverage(project["name"], start_date, end_date, priority_filter)
 
     # v0.8.1: 返回计划曲线
     # v0.8.2: 添加实际曲线
+    # v0.10.0: 支持 Priority 过滤
     actual = []
     # 确保表存在并获取快照
     try:
         ensure_progress_table_exists(project["name"])
         conn = get_db(project["name"])
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT snapshot_date, actual_coverage 
-            FROM project_progress 
-            WHERE project_id = ? 
-            ORDER BY snapshot_date
-        """, (project_id,))
-        for row in cursor.fetchall():
-            actual.append({
-                'week': row[0],
-                'coverage': row[1]
-            })
+
+        # v0.10.0: 根据 priority 参数选择覆盖率字段
+        # v0.10.0: 修复多值 Priority 处理 - 计算加权平均覆盖率
+        ALLOWED_COVERAGE_COLUMNS = {'actual_coverage', 'p0_coverage', 'p1_coverage', 'p2_coverage', 'p3_coverage'}
+        coverage_column = 'actual_coverage'
+        use_weighted_average = False
+
+        if priority_filter:
+            # 解析 priority 参数
+            priority_list = [p.strip().upper() for p in priority_filter.split(',') if p.strip()]
+            # 过滤掉无效值
+            priority_list = [p for p in priority_list if p in ('P0', 'P1', 'P2', 'P3')]
+
+            if len(priority_list) == 1:
+                # 单个 Priority：直接使用该 Priority 的覆盖率
+                first_priority = priority_list[0].lower()
+                candidate_column = f'{first_priority}_coverage'
+                if candidate_column in ALLOWED_COVERAGE_COLUMNS:
+                    coverage_column = candidate_column
+            elif len(priority_list) > 1:
+                # 多个 Priority：检查是否覆盖了全部 CP
+                total_project_cp = cursor.execute(
+                    "SELECT COUNT(*) FROM cover_point WHERE project_id = ?",
+                    (project_id,)
+                ).fetchone()[0]
+
+                priority_cp_counts = {}
+                total_filtered_cp = 0
+                for p in ('P0', 'P1', 'P2', 'P3'):
+                    cursor.execute(
+                        "SELECT COUNT(*) FROM cover_point WHERE project_id = ? AND priority = ?",
+                        (project_id, p)
+                    )
+                    count = cursor.fetchone()[0]
+                    priority_cp_counts[p] = count
+                    if p in priority_list:
+                        total_filtered_cp += count
+
+                # v0.10.0: 如果覆盖了全部 CP，使用 actual_coverage
+                if total_filtered_cp >= total_project_cp:
+                    coverage_column = 'actual_coverage'
+                    use_weighted_average = False
+                else:
+                    # 部分覆盖，使用加权平均
+                    use_weighted_average = True
+
+        if use_weighted_average:
+            # 从数据库获取每个 Priority 的 CP 数量
+            priority_cp_counts = {}
+            total_filtered_cp = 0
+            for p in ('P0', 'P1', 'P2', 'P3'):
+                if f'{p.lower()}_coverage' in ALLOWED_COVERAGE_COLUMNS:
+                    cursor.execute(
+                        "SELECT COUNT(*) FROM cover_point WHERE project_id = ? AND priority = ?",
+                        (project_id, p)
+                    )
+                    count = cursor.fetchone()[0]
+                    priority_cp_counts[p] = count
+                    total_filtered_cp += count
+
+            # 获取快照数据并计算加权平均
+            cursor.execute("""
+                SELECT snapshot_date, actual_coverage, p0_coverage, p1_coverage, p2_coverage, p3_coverage
+                FROM project_progress
+                WHERE project_id = ?
+                ORDER BY snapshot_date
+            """, (project_id,))
+            for row in cursor.fetchall():
+                week = row[0]
+                # 计算加权平均
+                weighted_sum = 0
+                if total_filtered_cp > 0:
+                    coverage_cols = [row[2], row[3], row[4], row[5]]  # p0, p1, p2, p3
+                    priorities = ['P0', 'P1', 'P2', 'P3']
+                    for i, p in enumerate(priorities):
+                        if priority_cp_counts[p] > 0 and coverage_cols[i] is not None:
+                            weighted_sum += coverage_cols[i] * priority_cp_counts[p]
+                    coverage = round(weighted_sum / total_filtered_cp, 1)
+                else:
+                    coverage = row[1] if row[1] is not None else 0
+                actual.append({
+                    'week': week,
+                    'coverage': coverage
+                })
+        else:
+            cursor.execute(f"""
+                SELECT snapshot_date, {coverage_column}
+                FROM project_progress
+                WHERE project_id = ?
+                ORDER BY snapshot_date
+            """, (project_id,))
+            for row in cursor.fetchall():
+                actual.append({
+                    'week': row[0],
+                    'coverage': row[1] if row[1] is not None else 0
+                })
     except Exception as e:
         print(f"Warning: Could not load actual curve: {e}")
-    
+
     return jsonify({
         "project_id": project_id,
         "project_name": project["name"],
         "start_date": project.get("start_date", ""),
         "end_date": project.get("end_date", ""),
         "planned": planned,
-        "actual": actual
+        "actual": actual,
+        "priority_filter": priority_filter
     })
 
 
@@ -904,29 +1029,47 @@ def get_progress(project_id):
 def ensure_progress_table_exists(project_name):
     """
     确保 project_progress 表存在，如不存在则创建
-    
+    v0.10.0: 扩展支持 p0_coverage~p3_coverage 字段
+
     Returns:
         bool: 表是否存在或创建成功
     """
     conn = get_db(project_name)
     cursor = conn.cursor()
-    
+
     # 检查表是否存在
     cursor.execute("""
-        SELECT name FROM sqlite_master 
+        SELECT name FROM sqlite_master
         WHERE type='table' AND name='project_progress'
     """)
-    
+
     if cursor.fetchone():
-        return True  # 表已存在
-    
-    # 创建表
+        # 表已存在，检查是否需要添加 Priority 覆盖率字段 (v0.10.0)
+        cursor.execute("PRAGMA table_info(project_progress)")
+        columns = [row[1] for row in cursor.fetchall()]
+
+        # 如果缺少 Priority 覆盖率字段，则添加
+        for priority in ['p0', 'p1', 'p2', 'p3']:
+            col_name = f'{priority}_coverage'
+            if col_name not in columns:
+                try:
+                    cursor.execute(f"ALTER TABLE project_progress ADD COLUMN {col_name} REAL")
+                    conn.commit()
+                except Exception as e:
+                    print(f"Warning: Could not add column {col_name}: {e}")
+        return True
+
+    # 创建表 (包含 Priority 覆盖率字段)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS project_progress (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             project_id INTEGER NOT NULL,
             snapshot_date TEXT NOT NULL,
             actual_coverage REAL,
+            p0_coverage REAL,
+            p1_coverage REAL,
+            p2_coverage REAL,
+            p3_coverage REAL,
             tc_pass_count INTEGER,
             tc_total INTEGER,
             cp_covered INTEGER,
@@ -944,46 +1087,52 @@ def ensure_progress_table_exists(project_name):
 def calculate_current_coverage(project_name):
     """
     计算当前覆盖率（用于快照）
-    
+    v0.10.0: 扩展支持各 Priority 覆盖率计算
+
     Returns:
-        dict: {actual_coverage, tc_pass_count, tc_total, cp_covered, cp_total}
+        dict: {actual_coverage, p0_coverage, p1_coverage, p2_coverage, p3_coverage,
+               tc_pass_count, tc_total, cp_covered, cp_total}
     """
     # 确保 project_progress 表存在
     try:
         ensure_progress_table_exists(project_name)
     except Exception:
         return None
-    
+
     # 获取项目 ID
     projects = load_projects()
     project = next((p for p in projects if p["name"] == project_name), None)
     if not project:
         return None
-    
+
     conn = get_db(project_name)
     cursor = conn.cursor()
-    
+
     # 获取总 CP 数
     cursor.execute("SELECT COUNT(*) FROM cover_point")
     total_cp = cursor.fetchone()[0]
-    
+
     if total_cp == 0:
         return {
             'actual_coverage': 0,
+            'p0_coverage': 0,
+            'p1_coverage': 0,
+            'p2_coverage': 0,
+            'p3_coverage': 0,
             'tc_pass_count': 0,
             'tc_total': 0,
             'cp_covered': 0,
             'cp_total': total_cp
         }
-    
+
     # 获取 Pass 状态的 TC
     cursor.execute("SELECT COUNT(*) FROM test_case WHERE status = 'PASS'")
     tc_pass = cursor.fetchone()[0]
-    
+
     # 获取总 TC 数
     cursor.execute("SELECT COUNT(*) FROM test_case")
     tc_total = cursor.fetchone()[0]
-    
+
     # 获取 Pass TC 关联的 CP（去重）
     cursor.execute("""
         SELECT DISTINCT cp.id
@@ -992,17 +1141,46 @@ def calculate_current_coverage(project_name):
         INNER JOIN cover_point cp ON tcc.cp_id = cp.id
         WHERE tc.status != 'REMOVED'
     """)
-    result = cursor.fetchone()
-    covered_cps = result[0] if result else 0
-    
+    results = cursor.fetchall()
+    covered_cps = len(results) if results else 0
+
     coverage = round((covered_cps / total_cp) * 100, 1) if total_cp > 0 else 0
-    
+
+    # v0.10.0: 计算各 Priority 的覆盖率
+    priority_coverages = {}
+    for priority in ['P0', 'P1', 'P2', 'P3']:
+        # 获取该 Priority 的总 CP 数
+        cursor.execute(
+            "SELECT COUNT(*) FROM cover_point WHERE priority = ?",
+            (priority,)
+        )
+        priority_total = cursor.fetchone()[0]
+
+        if priority_total == 0:
+            priority_coverages[f'{priority.lower()}_coverage'] = 0
+            continue
+
+        # 获取该 Priority 下被 Pass TC 覆盖的 CP 数
+        cursor.execute("""
+            SELECT DISTINCT cp.id
+            FROM test_case tc
+            INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+            INNER JOIN cover_point cp ON tcc.cp_id = cp.id
+            WHERE tc.status != 'REMOVED' AND cp.priority = ?
+        """, (priority,))
+        results = cursor.fetchall()
+        priority_covered = len(results) if results else 0
+
+        priority_coverage = round((priority_covered / priority_total) * 100, 1) if priority_total > 0 else 0
+        priority_coverages[f'{priority.lower()}_coverage'] = priority_coverage
+
     return {
         'actual_coverage': coverage,
         'tc_pass_count': tc_pass,
         'tc_total': tc_total,
         'cp_covered': covered_cps,
-        'cp_total': total_cp
+        'cp_total': total_cp,
+        **priority_coverages
     }
 
 
@@ -1038,10 +1216,14 @@ def create_snapshot(project_id):
     existing = cursor.fetchone()
     
     if existing:
-        # 更新现有快照
+        # 更新现有快照 (v0.10.0: 包含 Priority 覆盖率)
         cursor.execute("""
-            UPDATE project_progress SET 
+            UPDATE project_progress SET
                 actual_coverage = ?,
+                p0_coverage = ?,
+                p1_coverage = ?,
+                p2_coverage = ?,
+                p3_coverage = ?,
                 tc_pass_count = ?,
                 tc_total = ?,
                 cp_covered = ?,
@@ -1051,6 +1233,10 @@ def create_snapshot(project_id):
             WHERE project_id = ? AND snapshot_date = ?
         """, (
             coverage_data['actual_coverage'],
+            coverage_data.get('p0_coverage', 0),
+            coverage_data.get('p1_coverage', 0),
+            coverage_data.get('p2_coverage', 0),
+            coverage_data.get('p3_coverage', 0),
             coverage_data['tc_pass_count'],
             coverage_data['tc_total'],
             coverage_data['cp_covered'],
@@ -1063,16 +1249,21 @@ def create_snapshot(project_id):
         conn.commit()
         snapshot_id = existing[0]
     else:
-        # 创建新快照
+        # 创建新快照 (v0.10.0: 包含 Priority 覆盖率)
         cursor.execute("""
             INSERT INTO project_progress (
                 project_id, snapshot_date, actual_coverage,
+                p0_coverage, p1_coverage, p2_coverage, p3_coverage,
                 tc_pass_count, tc_total, cp_covered, cp_total
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             project_id,
             today,
             coverage_data['actual_coverage'],
+            coverage_data.get('p0_coverage', 0),
+            coverage_data.get('p1_coverage', 0),
+            coverage_data.get('p2_coverage', 0),
+            coverage_data.get('p3_coverage', 0),
             coverage_data['tc_pass_count'],
             coverage_data['tc_total'],
             coverage_data['cp_covered'],
@@ -3317,6 +3508,64 @@ def create_user():
         return jsonify({"success": True, "id": user_id, "username": username, "role": role}), 201
     except Exception as e:
         return jsonify({"error": "Internal Error", "message": str(e)}), 500
+
+
+@api.route("/api/users/batch", methods=["POST"])
+@admin_required
+def batch_create_users():
+    """批量创建用户（仅管理员）- 仅支持创建普通用户"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({"error": "Bad Request", "message": "无效的请求数据"}), 400
+    
+    users = data.get("users", [])
+    
+    if not users or not isinstance(users, list):
+        return jsonify({"error": "Bad Request", "message": "请提供用户列表"}), 400
+    
+    # 限制单次批量创建数量
+    if len(users) > 50:
+        return jsonify({"error": "Bad Request", "message": "单次最多创建 50 个用户"}), 400
+    
+    default_password = "123456"
+    results = []
+    created_count = 0
+    failed_count = 0
+    
+    for user_data in users:
+        username = user_data.get("username", "").strip() if isinstance(user_data, dict) else str(user_data).strip()
+        
+        if not username:
+            results.append({"username": username or "(空)", "status": "failed", "error": "用户名不能为空"})
+            failed_count += 1
+            continue
+        
+        # 安全限制：仅支持创建普通用户 role=user
+        role = "user"
+        
+        # 检查用户名是否已存在
+        existing = auth.get_user_by_username(username)
+        if existing:
+            results.append({"username": username, "status": "failed", "error": "用户名已存在"})
+            failed_count += 1
+            continue
+        
+        try:
+            user_id = auth.create_user(username, default_password, role)
+            results.append({"username": username, "status": "created", "id": user_id})
+            created_count += 1
+        except Exception as e:
+            results.append({"username": username, "status": "failed", "error": str(e)})
+            failed_count += 1
+    
+    return jsonify({
+        "success": failed_count == 0,
+        "created": created_count,
+        "failed": failed_count,
+        "password": default_password,
+        "results": results
+    }), 200
 
 
 @api.route("/api/users/<int:user_id>", methods=["PATCH"])

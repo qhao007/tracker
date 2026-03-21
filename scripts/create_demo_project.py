@@ -482,8 +482,66 @@ def calculate_planned_coverage_from_db(conn, project_start, project_end):
     return planned
 
 
+def calculate_priority_coverage(week_date):
+    """
+    计算指定周各 Priority 的覆盖率
+    
+    对于 Demo 项目，使用模拟策略生成符合真实场景的数据：
+    - P0 优先级最高，进度最快
+    - P1 次之
+    - P2 进度较慢
+    - P3 通常为 0
+    
+    策略：每周生成时，按照时间推进逐步增加各 Priority 的覆盖率
+    
+    Args:
+        week_date: 周的起始日期 (ISO 格式字符串，如 '2026-01-06')
+    """
+    # 获取周索引 (0-11)
+    weekly_dates = calculate_weekly_dates("2026-01-06", "2026-04-18")
+    week_idx = 0
+    for i, d in enumerate(weekly_dates[:12]):
+        if d == week_date:
+            week_idx = i
+            break
+    
+    # Demo 策略：各 Priority 的覆盖率演变
+    # 初期 P0 领先，P1/P2 跟进
+    if week_idx < 4:
+        # Week 1-4: 只有少量 CP 覆盖
+        p0 = min(week_idx * 5 + 10, 40)   # 10%, 15%, 20%, 25%
+        p1 = min(week_idx * 3, 12)         # 0%, 3%, 6%, 9%
+        p2 = min(week_idx * 2, 8)         # 0%, 0%, 4%, 6%
+        p3 = 0
+    elif week_idx < 7:
+        # Week 5-7: P0 快速提升
+        offset = week_idx - 4
+        p0 = min(40 + offset * 15, 85)    # 55%, 70%, 85%
+        p1 = min(12 + offset * 10, 42)    # 22%, 32%, 42%
+        p2 = min(8 + offset * 8, 32)       # 16%, 24%, 32%
+        p3 = 0
+    else:
+        # Week 8-12: 全面追赶
+        offset = week_idx - 7
+        p0 = min(85 + offset * 3, 100)    # 接近完成
+        p1 = min(42 + offset * 10, 80)
+        p2 = min(32 + offset * 8, 60)
+        p3 = 0
+    
+    result = {}
+    result['p0_coverage'] = p0
+    result['p1_coverage'] = p1
+    result['p2_coverage'] = p2
+    result['p3_coverage'] = p3
+    
+    return result
+
+
 def generate_snapshots(conn, project_id):
-    """生成 Demo 快照 - 根据实际计划曲线动态生成匹配的快照数据"""
+    """生成 Demo 快照 - 根据实际计划曲线动态生成匹配的快照数据
+    
+    v0.10.0: 扩展支持各 Priority 覆盖率计算
+    """
     
     # 项目周期
     project_start = "2026-01-06"
@@ -505,6 +563,14 @@ def generate_snapshots(conn, project_id):
         prev_coverage = coverage
     
     print(f"   计划曲线关键点: {jumps}")
+    
+    # 获取每种 Priority 的 CP 总数
+    cursor = conn.cursor()
+    priority_totals = {}
+    for priority in ['P0', 'P1', 'P2', 'P3']:
+        cursor.execute("SELECT COUNT(*) FROM cover_point WHERE priority = ?", (priority,))
+        priority_totals[priority] = cursor.fetchone()[0]
+    print(f"   CP 分布: {priority_totals}")
     
     # 生成匹配的快照数据
     # 策略：初期落后于计划，后期在计划线附近波动
@@ -538,19 +604,35 @@ def generate_snapshots(conn, project_id):
         tc_pass = int(actual_cov * 52 / 100)  # 估算
         cp_covered = int(actual_cov * 30 / 100)  # 估算
         
-        snapshots.append((week_date, actual_cov, tc_pass, 52, cp_covered, 30))
+        # 计算各 Priority 覆盖率
+        priority_cov = calculate_priority_coverage(week_date)
+        
+        snapshots.append({
+            'date': week_date,
+            'actual_coverage': actual_cov,
+            'tc_pass': tc_pass,
+            'tc_total': 52,
+            'cp_covered': cp_covered,
+            'cp_total': 30,
+            'p0_coverage': priority_cov.get('p0_coverage', 0),
+            'p1_coverage': priority_cov.get('p1_coverage', 0),
+            'p2_coverage': priority_cov.get('p2_coverage', 0),
+            'p3_coverage': priority_cov.get('p3_coverage', 0),
+        })
         prev_actual = actual_cov
     
     # 插入快照数据
-    cursor = conn.cursor()
-    
-    # 确保 project_progress 表存在
+    # 确保 project_progress 表存在（包含 Priority 覆盖率字段）
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS project_progress (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             project_id INTEGER NOT NULL,
             snapshot_date TEXT NOT NULL,
             actual_coverage REAL,
+            p0_coverage REAL,
+            p1_coverage REAL,
+            p2_coverage REAL,
+            p3_coverage REAL,
             tc_pass_count INTEGER,
             tc_total INTEGER,
             cp_covered INTEGER,
@@ -562,17 +644,21 @@ def generate_snapshots(conn, project_id):
         )
     """)
     
-    for date, coverage, tc_pass, tc_total, cp_covered, cp_total in snapshots:
+    for snap in snapshots:
         cursor.execute("""
             INSERT OR REPLACE INTO project_progress 
             (project_id, snapshot_date, actual_coverage, 
+             p0_coverage, p1_coverage, p2_coverage, p3_coverage,
              tc_pass_count, tc_total, cp_covered, cp_total)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (project_id, date, coverage, tc_pass, tc_total, cp_covered, cp_total))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (project_id, snap['date'], snap['actual_coverage'],
+              snap['p0_coverage'], snap['p1_coverage'], snap['p2_coverage'], snap['p3_coverage'],
+              snap['tc_pass'], snap['tc_total'], snap['cp_covered'], snap['cp_total']))
     
     conn.commit()
     print(f"   ✅ 已生成 {len(snapshots)} 个历史快照")
     print(f"   📈 初期偏离计划，后期加速追赶")
+    print(f"   📊 Priority 覆盖率已计算并保存")
 
 
 def main():
