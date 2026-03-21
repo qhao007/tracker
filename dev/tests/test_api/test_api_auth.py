@@ -1076,3 +1076,114 @@ class TestCreatedBy:
 
         assert cp_data is not None
         assert cp_data['created_by'] == unique_name
+
+
+class TestBatchCreateUsers:
+    """批量创建用户测试 - v0.10.1"""
+
+    def test_batch_create_users_admin(self, client):
+        """管理员应能批量创建用户"""
+        # 先用 admin 登录
+        client.post('/api/auth/login',
+            data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+            content_type='application/json')
+
+        # 批量创建用户
+        users = [
+            {"username": f"batchuser1_{int(time.time())}"},
+            {"username": f"batchuser2_{int(time.time())}"},
+            {"username": f"batchuser3_{int(time.time())}"}
+        ]
+        response = client.post('/api/users/batch',
+            data=json.dumps({'users': users}),
+            content_type='application/json')
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['success'] is True
+        assert data['created'] == 3
+        assert data['failed'] == 0
+        assert data['password'] == '123456'
+
+    def test_batch_create_users_with_existing_username(self, client):
+        """批量创建时遇到重复用户名应跳过并继续"""
+        # 先用 admin 登录
+        client.post('/api/auth/login',
+            data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+            content_type='application/json')
+
+        # 先创建一个用户
+        existing_user = f"existing_{int(time.time())}"
+        client.post('/api/users',
+            data=json.dumps({'username': existing_user, 'password': 'test123', 'role': 'user'}),
+            content_type='application/json')
+
+        # 批量创建，包含已存在的用户名
+        users = [
+            {"username": existing_user},  # 已存在
+            {"username": f"newuser_{int(time.time())}"}  # 新用户
+        ]
+        response = client.post('/api/users/batch',
+            data=json.dumps({'users': users}),
+            content_type='application/json')
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['created'] == 1
+        assert data['failed'] == 1
+
+    def test_batch_create_users_unauthenticated(self, client):
+        """未登录用户应无法批量创建"""
+        users = [{"username": "testuser"}]
+        response = client.post('/api/users/batch',
+            data=json.dumps({'users': users}),
+            content_type='application/json')
+
+        assert response.status_code == 401
+
+    def test_batch_create_users_as_normal_user(self, client):
+        """普通用户应无法批量创建用户"""
+        # 创建并登录普通用户
+        unique_name = f"normaluser_{int(time.time())}"
+        client.post('/api/users',
+            data=json.dumps({'username': unique_name, 'password': 'test123', 'role': 'user'}),
+            content_type='application/json')
+
+        client.post('/api/auth/logout')
+        client.post('/api/auth/login',
+            data=json.dumps({'username': unique_name, 'password': 'test123'}),
+            content_type='application/json')
+
+        # 尝试批量创建
+        users = [{"username": "should_fail"}]
+        response = client.post('/api/users/batch',
+            data=json.dumps({'users': users}),
+            content_type='application/json')
+
+        assert response.status_code in [401, 403]  # 未登录 401，无权限 403
+
+    def test_batch_create_empty_list(self, client):
+        """空列表应返回错误"""
+        client.post('/api/auth/login',
+            data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+            content_type='application/json')
+
+        response = client.post('/api/users/batch',
+            data=json.dumps({'users': []}),
+            content_type='application/json')
+
+        assert response.status_code == 400
+
+    def test_batch_create_exceed_limit(self, client):
+        """超过50个用户应返回错误"""
+        client.post('/api/auth/login',
+            data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+            content_type='application/json')
+
+        # 创建51个用户
+        users = [{"username": f"user{i}_{int(time.time())}"} for i in range(51)]
+        response = client.post('/api/users/batch',
+            data=json.dumps({'users': users}),
+            content_type='application/json')
+
+        assert response.status_code == 400

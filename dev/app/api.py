@@ -3510,6 +3510,64 @@ def create_user():
         return jsonify({"error": "Internal Error", "message": str(e)}), 500
 
 
+@api.route("/api/users/batch", methods=["POST"])
+@admin_required
+def batch_create_users():
+    """批量创建用户（仅管理员）- 仅支持创建普通用户"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({"error": "Bad Request", "message": "无效的请求数据"}), 400
+    
+    users = data.get("users", [])
+    
+    if not users or not isinstance(users, list):
+        return jsonify({"error": "Bad Request", "message": "请提供用户列表"}), 400
+    
+    # 限制单次批量创建数量
+    if len(users) > 50:
+        return jsonify({"error": "Bad Request", "message": "单次最多创建 50 个用户"}), 400
+    
+    default_password = "123456"
+    results = []
+    created_count = 0
+    failed_count = 0
+    
+    for user_data in users:
+        username = user_data.get("username", "").strip() if isinstance(user_data, dict) else str(user_data).strip()
+        
+        if not username:
+            results.append({"username": username or "(空)", "status": "failed", "error": "用户名不能为空"})
+            failed_count += 1
+            continue
+        
+        # 安全限制：仅支持创建普通用户 role=user
+        role = "user"
+        
+        # 检查用户名是否已存在
+        existing = auth.get_user_by_username(username)
+        if existing:
+            results.append({"username": username, "status": "failed", "error": "用户名已存在"})
+            failed_count += 1
+            continue
+        
+        try:
+            user_id = auth.create_user(username, default_password, role)
+            results.append({"username": username, "status": "created", "id": user_id})
+            created_count += 1
+        except Exception as e:
+            results.append({"username": username, "status": "failed", "error": str(e)})
+            failed_count += 1
+    
+    return jsonify({
+        "success": failed_count == 0,
+        "created": created_count,
+        "failed": failed_count,
+        "password": default_password,
+        "results": results
+    }), 200
+
+
 @api.route("/api/users/<int:user_id>", methods=["PATCH"])
 @admin_required
 def update_user(user_id):
