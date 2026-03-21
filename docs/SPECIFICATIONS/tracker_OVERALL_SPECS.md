@@ -1,6 +1,6 @@
-# 芯片验证 Tracker v0.9.2 总体规格书
+# 芯片验证 Tracker v0.10.1 总体规格书
 
-> **版本**: v0.9.2 | **更新日期**: 2026-03-17 | **状态**: ✅ 已完成
+> **版本**: v0.10.1 | **更新日期**: 2026-03-21 | **状态**: ✅ 已完成
 
 ---
 
@@ -51,6 +51,8 @@
 | **v0.9.0 前端界面优化** | |
 | **v0.9.1 用户反馈功能** | |
 | **v0.9.2 关联状态与滚动优化** | |
+| **v0.10.0 Priority 过滤功能** | |
+| **v0.10.1 批量创建用户** | |
 
 ### 1.4 v0.9.0 重大变更
 
@@ -431,6 +433,8 @@ python3 scripts/data_manager.py clean
 | **F046** | **CP未关联过滤** | 后端支持filter=unlinked参数过滤未关联CP | P1 |
 | **F047** | **admin强制改密码** | admin首次登录强制弹窗修改密码 | P1 |
 | **F048** | **用户反馈功能** | 反馈API+UI，收集用户建议和问题 | P1 |
+| **F049** | **Priority 过滤功能** | 图表支持按 CP Priority (P0-P3) 过滤 | P1 |
+| **F050** | **批量创建用户** | 批量创建普通用户 API，默认密码 123456 | P1 |
 
 ### 3.2 Cover Point 字段
 
@@ -584,6 +588,7 @@ coverage = round(passed / total * 100, 1) if total > 0 else 0.0
 |------|------|------|------|
 | GET | `/api/users` | 获取用户列表 | 管理员 |
 | POST | `/api/users` | 创建用户 | 管理员 |
+| **POST** | **`/api/users/batch`** | **批量创建用户（v0.10.1）** | **管理员** |
 | PATCH | `/api/users/{id}` | 更新用户（禁用/启用） | 管理员 |
 | DELETE | `/api/users/{id}` | 删除用户 | 管理员 |
 | POST | `/api/users/{id}/reset-password` | 重置密码 | 管理员 |
@@ -616,6 +621,37 @@ coverage = round(passed / total * 100, 1) if total > 0 else 0.0
     "username": "newuser",
     "password": "password123",
     "role": "user"
+}
+```
+
+**POST /api/users/batch 请求体** (v0.10.1 新增):
+```json
+{
+    "users": [
+        {"username": "zhangsan"},
+        {"username": "lisi"},
+        {"username": "wangwu"}
+    ]
+}
+```
+
+**说明**：
+- 密码固定为 `123456`（响应中返回）
+- 角色固定为 `user`（普通用户）
+- 单次最多创建 50 个用户
+
+**响应**:
+```json
+{
+    "success": true,
+    "created": 3,
+    "failed": 0,
+    "password": "123456",
+    "results": [
+        {"username": "zhangsan", "status": "created", "id": 10},
+        {"username": "lisi", "status": "created", "id": 11},
+        {"username": "wangwu", "status": "created", "id": 12}
+    ]
 }
 ```
 
@@ -1246,7 +1282,7 @@ UPDATE cover_point SET priority = 'P0' WHERE priority IS NULL;
 
 ### 5.4 v0.8.2 新增表
 
-#### project_progress 表
+#### project_progress 表 (v0.8.2 新增，v0.10.0 扩展)
 
 ```sql
 CREATE TABLE project_progress (
@@ -1258,6 +1294,10 @@ CREATE TABLE project_progress (
     tc_total INTEGER,
     cp_covered INTEGER,
     cp_total INTEGER,
+    p0_coverage REAL,
+    p1_coverage REAL,
+    p2_coverage REAL,
+    p3_coverage REAL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT,
     updated_by TEXT,
@@ -1274,6 +1314,10 @@ CREATE TABLE project_progress (
 | tc_total | INTEGER | 总 TC 数 |
 | cp_covered | INTEGER | 已覆盖 CP 数 |
 | cp_total | INTEGER | 总 CP 数 |
+| **p0_coverage** | REAL | **P0 Priority 覆盖率 (v0.10.0 新增)** |
+| **p1_coverage** | REAL | **P1 Priority 覆盖率 (v0.10.0 新增)** |
+| **p2_coverage** | REAL | **P2 Priority 覆盖率 (v0.10.0 新增)** |
+| **p3_coverage** | REAL | **P3 Priority 覆盖率 (v0.10.0 新增)** |
 | created_at | TIMESTAMP | 创建时间 |
 | updated_at | TEXT | 更新时间 |
 | updated_by | TEXT | 更新人 |
@@ -2029,6 +2073,43 @@ journalctl -u tracker -f
    - 新增反馈 API (`GET/POST /api/feedbacks`)
    - 前端反馈入口和提交表单
    - Manual 补充用户反馈章节
+
+### v0.10.0 详细变更 (2026-03-20)
+
+1. **Priority 过滤功能**（REQ-2.2）：
+   - 图表支持按 CP Priority (P0/P1/P2/P3) 过滤
+   - 后端 API 支持 `priority` 参数（单值/多值）
+   - 多值 Priority 使用加权平均计算覆盖率
+
+2. **project_progress 表扩展**：
+   - 新增 `p0_coverage`、`p1_coverage`、`p2_coverage`、`p3_coverage` 字段
+   - 存储各 Priority 的独立覆盖率
+
+3. **CP 关联列表优化**：
+   - 关联选择列表支持搜索过滤
+   - 已关联 CP 单独显示区域
+   - Ctrl+K 快捷键聚焦搜索框
+
+4. **Demo 项目生成脚本更新**：
+   - 支持 Priority 快照数据生成
+   - 生成包含各 Priority 的测试数据
+
+### v0.10.1 详细变更 (2026-03-21)
+
+1. **批量创建用户 API**：
+   - 新增 `POST /api/users/batch` 接口
+   - 支持一次性创建多个普通用户
+   - 默认密码统一为 `123456`
+   - 单次最多创建 50 个用户
+
+2. **安全限制**：
+   - 仅支持创建 `role=user`（普通用户）
+   - 禁止创建 admin/guest 角色
+   - 需要管理员权限 (`@admin_required`)
+
+3. **生产环境用户管理手册**：
+   - 新增 `Tracker_Production_User_Management_Guide_v1.1.md`
+   - 包含 UI 创建、API 创建、批量创建三种方式
 
 ### v0.5.x 详细变更
 
