@@ -67,3 +67,4 @@ smoke/archives/
 # ========== OpenClaw ==========
 .claude/
 logs/
+snapshots/
