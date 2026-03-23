@@ -2596,3 +2596,102 @@ curl -s -b cookies.txt "http://localhost:8081/api/progress/3?priority=P0,P1,P2"
 # 期望: actual = 72%（与无过滤相同）
 # 当前: actual = 97%（错误）
 ```
+
+---
+
+## BUG-094: TC 状态更新后状态日期不显示
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-23 |
+| **报告人** | 用户反馈 |
+| **修复日期** | 2026-03-23 |
+| **修复人** | Claude Code |
+| **影响版本** | v0.10.1 |
+
+**描述**: 在 TC 界面选择新的 Status 后，状态日期 (Status Date) 没有相应更新或显示。
+
+**复现步骤**:
+1. 进入任意项目，切换到 Test Cases 标签
+2. 选择一个 TC，点击 Status 下拉框
+3. 将状态从 OPEN 改为 CODED (或 PASS/FAIL)
+4. 观察 Status Date 列 - 日期未更新显示
+
+**根本原因**: `updateTCStatus()` 和批量更新函数在更新状态后调用了 `loadTC()` 获取新数据，但没有调用 `renderTC()` 重新渲染界面，导致页面显示的仍是旧的 DOM 数据。
+
+**影响范围**:
+- `index.html` 第 2237 行：`updateTCStatus()` 函数
+- `index.html` 第 2310 行：`executeBatchStatus()` 函数
+- `index.html` 第 2336 行：`executeBatchTargetDate()` 函数
+- `index.html` 第 2362 行：`executeBatchDvMilestone()` 函数
+
+**修复方案**:
+在以下函数中添加 `renderTC()` 调用：
+
+```javascript
+// updateTCStatus 函数 (第 2237 行后)
+await Promise.all([loadTC(), loadStats()]);
+renderTC();  // 重新渲染 TC 列表以显示新的状态日期
+
+// executeBatchStatus 函数 (第 2310 行后)
+await Promise.all([loadTC(), loadStats()]);
+renderTC();  // 重新渲染 TC 列表以显示新的状态日期
+
+// executeBatchTargetDate 函数 (第 2336 行后)
+await Promise.all([loadTC(), loadStats()]);
+renderTC();  // 重新渲染 TC 列表
+
+// executeBatchDvMilestone 函数 (第 2362 行后)
+await Promise.all([loadTC(), loadStats()]);
+renderTC();  // 重新渲染 TC 列表
+```
+
+**验证**:
+1. 选择 TC，修改状态为 CODED/PASS/FAIL
+2. Status Date 列正确显示对应日期
+3. 批量更新状态后，列表正确刷新
+
+---
+
+## BUG-095: Intro 引导页 hideIntroOverlay() 未等待异步初始化
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-23 |
+| **报告人** | 代码审阅 |
+| **修复日期** | 2026-03-23 |
+| **修复人** | Claude Code |
+| **影响版本** | v0.10.1 |
+
+**描述**: `hideIntroOverlay()` 调用 `checkAuth()`、`loadVersion()`、`loadProjects()` 三个异步函数时没有使用 `await`，导致用户点击"开始使用"后主界面数据可能未加载完成就显示。
+
+**根本原因**: `hideIntroOverlay()` 函数未声明为 `async` 并使用 `await` 等待异步操作完成。
+
+**影响范围**:
+- `index.html` 第 1483 行：`hideIntroOverlay()` 函数
+
+**修复方案**:
+```javascript
+// 修改前
+function hideIntroOverlay() {
+    checkAuth();
+    loadVersion();
+    loadProjects();
+}
+
+// 修改后
+async function hideIntroOverlay() {
+    await checkAuth();
+    await loadVersion();
+    await loadProjects();
+}
+```
+
+**验证**:
+1. 清除 localStorage，重新访问页面
+2. 点击"开始使用"
+3. 观察主界面数据是否完整加载（版本号、项目列表）

@@ -187,6 +187,386 @@
             border-radius: var(--radius-sm, 0.25rem);
         }
         .login-error.show { display: block; }
+
+        /* ========== Intro Overlay Styles ========== */
+        .intro-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #fff;
+            z-index: 99998;
+            overflow-y: auto;
+            scroll-behavior: smooth;
+            scroll-snap-type: y mandatory;
+        }
+
+        .intro-overlay.show {
+            display: block;
+        }
+
+        .intro-slide {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 80px 8%;
+            scroll-snap-align: start;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .intro-logo {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--color-primary, #4f46e5);
+            letter-spacing: 0.15em;
+            margin-bottom: 40px;
+            opacity: 0;
+            animation: introFadeIn 0.8s ease 0.2s forwards;
+        }
+
+        .intro-hero-title {
+            font-size: clamp(40px, 7vw, 72px);
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            line-height: 1.05;
+            text-align: center;
+            background: linear-gradient(135deg, #1d1d1f 0%, #515154 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            opacity: 0;
+            animation: introFadeInUp 0.8s ease 0.3s forwards;
+        }
+
+        .intro-hero-subtitle {
+            font-size: clamp(18px, 2.5vw, 26px);
+            font-weight: 400;
+            color: #6e6e73;
+            margin-top: 20px;
+            text-align: center;
+            opacity: 0;
+            animation: introFadeInUp 0.8s ease 0.4s forwards;
+        }
+
+        .intro-version-badge {
+            display: inline-block;
+            padding: 6px 14px;
+            background: rgba(79, 70, 229, 0.08);
+            border-radius: 100px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--color-primary, #4f46e5);
+            margin-top: 24px;
+            opacity: 0;
+            animation: introFadeInUp 0.8s ease 0.5s forwards;
+        }
+
+        .intro-nav-hint {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            color: #86868b;
+            font-size: 13px;
+            opacity: 0;
+            animation: introFadeIn 1s ease 1.5s forwards;
+        }
+
+        .intro-nav-arrow {
+            width: 20px;
+            height: 20px;
+            border-right: 2px solid currentColor;
+            border-bottom: 2px solid currentColor;
+            transform: rotate(45deg);
+            animation: introBounce 2s infinite;
+        }
+
+        .intro-screenshot-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            align-items: center;
+            width: 100%;
+            max-width: 1300px;
+            opacity: 0;
+            transform: translateX(-30px);
+            transition: opacity 0.8s ease, transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .intro-screenshot-layout.visible {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .intro-screenshot-layout.reverse {
+            transform: translateX(30px);
+        }
+
+        .intro-screenshot-layout.reverse.visible {
+            transform: translateX(0);
+        }
+
+        .intro-screenshot-content {
+            padding: 20px 0;
+        }
+
+        .intro-screenshot-label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--color-primary, #4f46e5);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        .intro-screenshot-title {
+            font-size: clamp(28px, 3.5vw, 40px);
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            line-height: 1.2;
+            margin-bottom: 14px;
+        }
+
+        .intro-screenshot-desc {
+            font-size: 15px;
+            color: #6e6e73;
+            line-height: 1.7;
+            margin-bottom: 24px;
+        }
+
+        .intro-feature-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .intro-feature-list li {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+            color: #1d1d1f;
+        }
+
+        .intro-feature-list .icon-wrapper {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .intro-feature-list .icon-wrapper svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .intro-icon-blue { background: rgba(79, 70, 229, 0.1); }
+        .intro-icon-blue svg { fill: var(--color-primary, #4f46e5); }
+
+        .intro-icon-green { background: rgba(52, 199, 89, 0.1); }
+        .intro-icon-green svg { fill: #34C759; }
+
+        .intro-icon-orange { background: rgba(255, 149, 0, 0.1); }
+        .intro-icon-orange svg { fill: #FF9500; }
+
+        .intro-icon-purple { background: rgba(88, 86, 214, 0.1); }
+        .intro-icon-purple svg { fill: #5856D6; }
+
+        .intro-browser-mockup {
+            background: #1d1d1f;
+            border-radius: 14px;
+            padding: 12px;
+            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.12);
+        }
+
+        .intro-browser-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 10px;
+            padding: 0 4px;
+        }
+
+        .intro-browser-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .intro-browser-dot.red { background: #FF5F57; }
+        .intro-browser-dot.yellow { background: #FEBC2E; }
+        .intro-browser-dot.green { background: #28C840; }
+
+        .intro-browser-url {
+            flex: 1;
+            height: 24px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 5px;
+            margin-left: 10px;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .intro-browser-screenshot {
+            width: 100%;
+            border-radius: 6px;
+            overflow: hidden;
+            display: block;
+        }
+
+        .intro-browser-screenshot img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .intro-stats-row {
+            display: flex;
+            gap: 32px;
+            margin-top: 28px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(0, 0, 0, 0.06);
+        }
+
+        .intro-stat-item {
+            text-align: left;
+        }
+
+        .intro-stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1d1d1f;
+            line-height: 1;
+        }
+
+        .intro-stat-value.primary { color: var(--color-primary, #4f46e5); }
+        .intro-stat-value.green { color: #34C759; }
+        .intro-stat-value.orange { color: #FF9500; }
+
+        .intro-stat-label {
+            font-size: 12px;
+            color: #86868b;
+            margin-top: 5px;
+        }
+
+        .intro-cta-slide {
+            background: linear-gradient(180deg, #f5f5f7 0%, #fff 100%);
+        }
+
+        .intro-cta-container {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+            opacity: 0;
+            animation: introFadeInUp 0.8s ease 0.2s forwards;
+        }
+
+        .intro-cta-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 16px 32px;
+            border-radius: 100px;
+            font-size: 16px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+            cursor: pointer;
+            border: none;
+        }
+
+        .intro-cta-primary {
+            background: var(--color-primary, #4f46e5);
+            color: white;
+        }
+
+        .intro-cta-primary:hover {
+            transform: scale(1.04);
+            box-shadow: 0 8px 28px rgba(79, 70, 229, 0.3);
+        }
+
+        .intro-progress-dots {
+            position: fixed;
+            right: 24px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 99999;
+        }
+
+        .intro-progress-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.12);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .intro-progress-dot.active {
+            background: var(--color-primary, #4f46e5);
+            transform: scale(1.3);
+        }
+
+        /* Intro Animations */
+        @keyframes introFadeInUp {
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes introFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes introBounce {
+            0%, 20%, 50%, 80%, 100% { transform: rotate(45deg) translateY(0); }
+            40% { transform: rotate(45deg) translateY(6px); }
+            60% { transform: rotate(45deg) translateY(3px); }
+        }
+
+        /* Intro Responsive */
+        @media (max-width: 1024px) {
+            .intro-screenshot-layout {
+                grid-template-columns: 1fr;
+                gap: 32px;
+            }
+
+            .intro-screenshot-layout.reverse .intro-screenshot-content {
+                order: 2;
+            }
+
+            .intro-screenshot-layout.reverse .intro-browser-mockup {
+                order: 1;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .intro-slide { padding: 60px 6%; }
+            .intro-progress-dots { display: none; }
+            .intro-stats-row { flex-wrap: wrap; gap: 20px; }
+        }
     </style>
     <!-- Chart.js for Progress Charts (v0.8.0) - CDN优先，超时自动切换本地 -->
     <script>
@@ -249,6 +629,233 @@
     <script src="/static/js/app_constants.js"></script>
 </head>
 <body>
+    <!-- Intro Overlay -->
+    <div id="introOverlay" class="intro-overlay">
+        <!-- Progress Dots -->
+        <nav class="intro-progress-dots" id="introProgressDots"></nav>
+
+        <!-- Slide 1: Cover -->
+        <section class="intro-slide">
+            <div class="intro-logo">CHIP VERIFICATION TRACKER</div>
+            <h1 class="intro-hero-title">芯片验证管理系统</h1>
+            <p class="intro-hero-subtitle">一站式管理 Cover Points 与 Test Cases</p>
+            <span class="intro-version-badge" id="introVersionTag">加载中...</span>
+            <div class="intro-nav-hint">
+                <span>向下滚动探索更多</span>
+                <div class="intro-nav-arrow"></div>
+            </div>
+        </section>
+
+        <!-- Slide 2: CP Management -->
+        <section class="intro-slide">
+            <div class="intro-screenshot-layout">
+                <div class="intro-screenshot-content">
+                    <div class="intro-screenshot-label">Cover Points</div>
+                    <h2 class="intro-screenshot-title">覆盖点管理</h2>
+                    <p class="intro-screenshot-desc">
+                        集中管理 SOC_DV 项目中的 30 个覆盖点，通过直观的进度条展示每个 CP 的验证状态，支持按 Feature、Priority 和关联状态过滤。
+                    </p>
+                    <ul class="intro-feature-list">
+                        <li>
+                            <span class="icon-wrapper intro-icon-blue">
+                                <svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+                            </span>
+                            结构化表格展示 Feature / Sub-Feature 分层
+                        </li>
+                        <li>
+                            <span class="icon-wrapper intro-icon-green">
+                                <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                            </span>
+                            彩色进度条直观显示覆盖率 (0-100%)
+                        </li>
+                        <li>
+                            <span class="icon-wrapper intro-icon-purple">
+                                <svg viewBox="0 0 24 24"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>
+                            </span>
+                            Priority 优先级筛选 (P0/P1/P2)
+                        </li>
+                        <li>
+                            <span class="icon-wrapper intro-icon-orange">
+                                <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14h-2v-4H6v-2h4V7h2v4h4v2h-4v4z"/></svg>
+                            </span>
+                            一键添加/编辑/删除覆盖点
+                        </li>
+                    </ul>
+                    <div class="intro-stats-row">
+                        <div class="intro-stat-item">
+                            <div class="intro-stat-value primary">30</div>
+                            <div class="intro-stat-label">总覆盖点</div>
+                        </div>
+                        <div class="intro-stat-item">
+                            <div class="intro-stat-value green">36.6%</div>
+                            <div class="intro-stat-label">总覆盖率</div>
+                        </div>
+                        <div class="intro-stat-item">
+                            <div class="intro-stat-value">8</div>
+                            <div class="intro-stat-label">功能模块</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="intro-browser-mockup">
+                    <div class="intro-browser-toolbar">
+                        <span class="intro-browser-dot red"></span>
+                        <span class="intro-browser-dot yellow"></span>
+                        <span class="intro-browser-dot green"></span>
+                        <span class="intro-browser-url">tracker.soc_dv/cp</span>
+                    </div>
+                    <div class="intro-browser-screenshot">
+                        <img src="static/images/slides/cp-management.png" alt="Cover Points Management">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Slide 3: TC Management -->
+        <section class="intro-slide">
+            <div class="intro-screenshot-layout reverse">
+                <div class="intro-browser-mockup">
+                    <div class="intro-browser-toolbar">
+                        <span class="intro-browser-dot red"></span>
+                        <span class="intro-browser-dot yellow"></span>
+                        <span class="intro-browser-dot green"></span>
+                        <span class="intro-browser-url">tracker.soc_dv/tc</span>
+                    </div>
+                    <div class="intro-browser-screenshot">
+                        <img src="static/images/slides/tc-management.png" alt="Test Cases Management">
+                    </div>
+                </div>
+                <div class="intro-screenshot-content">
+                    <div class="intro-screenshot-label">Test Cases</div>
+                    <h2 class="intro-screenshot-title">测试用例管理</h2>
+                    <p class="intro-screenshot-desc">
+                        高效管理 52 个测试用例，支持批量操作和多维度筛选。颜色标签直观区分 PASS/FAIL/CODED/OPEN 状态，助力验证进度一目了然。
+                    </p>
+                    <ul class="intro-feature-list">
+                        <li>
+                            <span class="icon-wrapper intro-icon-blue">
+                                <svg viewBox="0 0 24 24"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>
+                            </span>
+                            批量更新状态/日期/DV Milestone
+                        </li>
+                        <li>
+                            <span class="icon-wrapper intro-icon-green">
+                                <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                            </span>
+                            状态标签颜色区分 (PASS绿/FAIL红/CODED橙)
+                        </li>
+                        <li>
+                            <span class="icon-wrapper intro-icon-purple">
+                                <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                            </span>
+                            按 Owner/Category/DV Milestone 筛选
+                        </li>
+                        <li>
+                            <span class="icon-wrapper intro-icon-orange">
+                                <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-4 14h-2v-4H7v-2h6v4h-2v2h4v-2z"/></svg>
+                            </span>
+                            导入/导出 CSV 数据
+                        </li>
+                    </ul>
+                    <div class="intro-stats-row">
+                        <div class="intro-stat-item">
+                            <div class="intro-stat-value primary">52</div>
+                            <div class="intro-stat-label">总测试用例</div>
+                        </div>
+                        <div class="intro-stat-item">
+                            <div class="intro-stat-value green">21</div>
+                            <div class="intro-stat-label">PASS</div>
+                        </div>
+                        <div class="intro-stat-item">
+                            <div class="intro-stat-value orange">10</div>
+                            <div class="intro-stat-label">CODED</div>
+                        </div>
+                        <div class="intro-stat-item">
+                            <div class="intro-stat-value" style="color: #FF3B30;">7</div>
+                            <div class="intro-stat-label">FAIL</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Slide 4: Progress Charts -->
+        <section class="intro-slide">
+            <div class="intro-screenshot-layout">
+                <div class="intro-screenshot-content">
+                    <div class="intro-screenshot-label">Progress Charts</div>
+                    <h2 class="intro-screenshot-title">进度可视化</h2>
+                    <p class="intro-screenshot-desc">
+                        实时追踪验证进度，图表化展示计划曲线与实际覆盖率的对比。按时间维度分析项目健康度，及时发现进度偏差。
+                    </p>
+                    <ul class="intro-feature-list">
+                        <li>
+                            <span class="icon-wrapper intro-icon-blue">
+                                <svg viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
+                            </span>
+                            计划曲线 vs 实际进度双线对比
+                        </li>
+                        <li>
+                            <span class="icon-wrapper intro-icon-green">
+                                <svg viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
+                            </span>
+                            面积填充直观展示累积覆盖率
+                        </li>
+                        <li>
+                            <span class="icon-wrapper intro-icon-purple">
+                                <svg viewBox="0 0 24 24"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>
+                            </span>
+                            Priority 优先级过滤分析
+                        </li>
+                        <li>
+                            <span class="icon-wrapper intro-icon-orange">
+                                <svg viewBox="0 0 24 24"><path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42z"/></svg>
+                            </span>
+                            快照管理 & 一键刷新
+                        </li>
+                    </ul>
+                    <div class="intro-stats-row">
+                        <div class="intro-stat-item">
+                            <div class="intro-stat-value primary">36.6%</div>
+                            <div class="intro-stat-label">当前覆盖率</div>
+                        </div>
+                        <div class="intro-stat-item">
+                            <div class="intro-stat-value green">↑ 进度</div>
+                            <div class="intro-stat-label">高于计划</div>
+                        </div>
+                        <div class="intro-stat-item">
+                            <div class="intro-stat-value orange">2026.Q1</div>
+                            <div class="intro-stat-label">当前阶段</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="intro-browser-mockup">
+                    <div class="intro-browser-toolbar">
+                        <span class="intro-browser-dot red"></span>
+                        <span class="intro-browser-dot yellow"></span>
+                        <span class="intro-browser-dot green"></span>
+                        <span class="intro-browser-url">tracker.soc_dv/charts</span>
+                    </div>
+                    <div class="intro-browser-screenshot">
+                        <img src="static/images/slides/progress-charts.png" alt="Progress Charts">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Slide 5: CTA -->
+        <section class="intro-slide intro-cta-slide">
+            <h2 class="intro-screenshot-title" style="margin-bottom: 40px;">准备开始使用了吗？</h2>
+            <div class="intro-cta-container">
+                <button class="intro-cta-btn intro-cta-primary" onclick="hideIntroOverlay()">
+                    开始使用
+                    <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/>
+                    </svg>
+                </button>
+            </div>
+        </section>
+    </div>
+
     <!-- 登录模态框 -->
     <div class="login-overlay" id="loginOverlay">
         <div class="login-box">
@@ -835,12 +1442,100 @@
             return originalFetch(url, options);
         };
         
-        document.addEventListener('DOMContentLoaded', async () => { 
-            await checkAuth();
-            await loadVersion(); 
-            await loadProjects(); 
+        document.addEventListener('DOMContentLoaded', async () => {
+            // 检查是否看过 intro
+            const hasSeenIntro = localStorage.getItem('tracker_intro_seen');
+
+            if (!hasSeenIntro) {
+                // 首次访问：显示 intro
+                showIntroOverlay();
+            } else {
+                // 已看过 intro：正常初始化
+                await checkAuth();
+                await loadVersion();
+                await loadProjects();
+            }
         });
-        
+
+        // ========== Intro Overlay Functions ==========
+
+        function showIntroOverlay() {
+            const introOverlay = document.getElementById('introOverlay');
+            introOverlay.classList.add('show');
+            initIntroProgressDots();
+            initIntroScrollReveal();
+            // 加载版本号到 intro
+            loadIntroVersion();
+        }
+
+        async function loadIntroVersion() {
+            try {
+                const res = await fetch(`${API_BASE}/version`);
+                const data = await res.json();
+                const introTag = document.getElementById('introVersionTag');
+                introTag.textContent = `v${data.version} ${data.version_type}`;
+                introTag.style.display = 'inline-block';
+            } catch (e) {
+                console.error('加载版本信息失败:', e);
+                document.getElementById('introVersionTag').style.display = 'none';
+            }
+        }
+
+        async function hideIntroOverlay() {
+            const introOverlay = document.getElementById('introOverlay');
+            introOverlay.classList.remove('show');
+            introOverlay.style.display = 'none';
+            // 记录已看过 intro
+            localStorage.setItem('tracker_intro_seen', 'true');
+            // 正常初始化主应用（等待异步完成）
+            await checkAuth();
+            await loadVersion();
+            await loadProjects();
+        }
+
+        function initIntroProgressDots() {
+            const slides = document.querySelectorAll('.intro-slide');
+            const dotsContainer = document.getElementById('introProgressDots');
+
+            slides.forEach((_, index) => {
+                const dot = document.createElement('div');
+                dot.className = 'intro-progress-dot';
+                if (index === 0) dot.classList.add('active');
+                dot.addEventListener('click', () => {
+                    slides[index].scrollIntoView({ behavior: 'smooth' });
+                });
+                dotsContainer.appendChild(dot);
+            });
+
+            // 更新 active dot on scroll
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const index = Array.from(slides).indexOf(entry.target);
+                        dotsContainer.querySelectorAll('.intro-progress-dot').forEach((dot, i) => {
+                            dot.classList.toggle('active', i === index);
+                        });
+                    }
+                });
+            }, { threshold: 0.5 });
+
+            slides.forEach(slide => observer.observe(slide));
+        }
+
+        function initIntroScrollReveal() {
+            const layouts = document.querySelectorAll('.intro-screenshot-layout');
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('visible');
+                    }
+                });
+            }, { threshold: 0.2 });
+
+            layouts.forEach(layout => observer.observe(layout));
+        }
+
         // ========== 登录相关函数 ==========
         
         async function checkAuth() {
@@ -2229,12 +2924,13 @@
             }
             
             try {
-                await fetch(`/api/tc/${id}/status`, { 
-                    method: 'POST', 
-                    headers: {'Content-Type': 'application/json'}, 
-                    body: JSON.stringify({ project_id: currentProject.id, status: newStatus }) 
+                await fetch(`/api/tc/${id}/status`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ project_id: currentProject.id, status: newStatus })
                 });
                 await Promise.all([loadTC(), loadStats()]);
+                renderTC();  // 重新渲染 TC 列表以显示新的状态日期
             } catch (e) {
                 alert('状态更新失败');
             }
@@ -2307,6 +3003,7 @@
                 if (result.success !== undefined) {
                     closeModal('batchStatusModal');
                     await Promise.all([loadTC(), loadStats()]);
+                    renderTC();  // 重新渲染 TC 列表以显示新的状态日期
                     alert(`批量更新完成: 成功 ${result.success} 个, 失败 ${result.failed} 个`);
                 } else {
                     alert(result.error || '批量更新失败');
@@ -2315,7 +3012,7 @@
                 alert('批量更新失败: ' + e);
             }
         }
-        
+
         async function executeBatchTargetDate() {
             const targetDate = document.getElementById('batchTargetDateValue').value;
             
@@ -2333,6 +3030,7 @@
                 if (result.success !== undefined) {
                     closeModal('batchTargetDateModal');
                     await Promise.all([loadTC(), loadStats()]);
+                    renderTC();  // 重新渲染 TC 列表
                     alert(`批量更新完成: 成功 ${result.success} 个, 失败 ${result.failed} 个`);
                 } else {
                     alert(result.error || '批量更新失败');
@@ -2341,7 +3039,7 @@
                 alert('批量更新失败: ' + e);
             }
         }
-        
+
         async function executeBatchDvMilestone() {
             const dvMilestone = document.getElementById('batchDvMilestoneValue').value;
             
@@ -2359,6 +3057,7 @@
                 if (result.success !== undefined) {
                     closeModal('batchDvMilestoneModal');
                     await Promise.all([loadTC(), loadStats()]);
+                    renderTC();  // 重新渲染 TC 列表
                     alert(`批量更新完成: 成功 ${result.success} 个, 失败 ${result.failed} 个`);
                 } else {
                     alert(result.error || '批量更新失败');

@@ -73,7 +73,47 @@ launchOptions: {
 }
 ```
 
-**测试数据原则**: 使用现有 SOC_DV 项目数据 (30 CP)，避免在每个测试中创建新数据
+### 浏览器自动化
+
+> **使用 agent-browser CLI** 进行截图和浏览器自动化
+
+**路径**: `/root/.nvm/versions/node/v22.22.0/bin/agent-browser`
+
+**⚠️ 必须格式**: 每个命令必须包含 `--args "--no-sandbox"` 参数
+
+```bash
+# 基础工作流
+agent-browser --args "--no-sandbox" close                                    # 先关闭现有会话
+agent-browser --args "--no-sandbox" open http://localhost:8081               # 打开页面
+agent-browser --args "--no-sandbox" snapshot                                 # 获取可访问性树
+agent-browser --args "--no-sandbox" fill @e2 "admin"                         # 填写输入框
+agent-browser --args "--no-sandbox" click @e4                                # 点击按钮
+agent-browser --args "--no-sandbox" screenshot /path/to/save.png             # 截图
+agent-browser --args "--no-sandbox" errors                                   # 查看控制台错误
+agent-browser --args "--no-sandbox" close                                    # 关闭浏览器
+```
+
+**常用命令：**
+
+| 命令 | 说明 |
+|------|------|
+| `open <url>` | 打开页面 |
+| `snapshot` | 获取可访问性树（元素 refs） |
+| `fill @e1 <text>` | 填写输入框 |
+| `click @e1` | 点击元素 |
+| `screenshot [path]` | 截图 |
+| `errors` | 查看控制台错误 |
+| `console` | 查看所有控制台消息 |
+| `close` | 关闭浏览器 |
+
+**注意事项：**
+- 每次打开新页面前先执行 `close`，避免 "Target page closed" 错误
+- 使用 `snapshot` 获取元素 refs（如 @e1, @e2），再用于 fill/click 命令
+- `select` 命令未在测试中验证，常用 `fill` 代替
+
+**测试数据原则**: 使用现有 SOC_DV 项目数据 (30 CP, 52 TC, 8 modules, id=3)，避免在每个测试中创建新数据
+
+**测试凭证**: 测试服务器登录: `admin` / `admin123`
 
 ### 代码检查
 
@@ -387,4 +427,4 @@ curl -X POST "https://open.feishu.cn/open-apis/bot/v2/hook/00f0719c-89c0-4595-9c
 
 ---
 
-*最后更新: 2026-03-13 | 署名: Claude Code*
+*最后更新: 2026-03-23 | 署名: Claude Code*

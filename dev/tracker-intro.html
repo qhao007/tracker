@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tracker 芯片验证管理系统 - 介绍</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #0066CC;
+            --primary-dark: #0052A3;
+            --primary-light: #3395E8;
+            --accent-green: #34C759;
+            --accent-orange: #FF9500;
+            --accent-red: #FF3B30;
+            --accent-purple: #5856D6;
+            --text-dark: #1d1d1f;
+            --text-gray: #6e6e73;
+            --text-light: #86868b;
+            --bg-white: #ffffff;
+            --bg-gray: #f5f5f7;
+            --bg-dark: #000000;
+            --border-light: rgba(0, 0, 0, 0.06);
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
+            --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.08);
+            --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.12);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            scroll-snap-type: y mandatory;
+        }
+
+        body {
+            font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-white);
+            color: var(--text-dark);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Slide Base */
+        .slide {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 80px 8%;
+            scroll-snap-align: start;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Typography */
+        .hero-title {
+            font-size: clamp(48px, 8vw, 88px);
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            line-height: 1.05;
+            text-align: center;
+            background: linear-gradient(135deg, #1d1d1f 0%, #515154 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            opacity: 0;
+            transform: translateY(40px);
+            animation: fadeInUp 1s ease forwards;
+        }
+
+        .hero-subtitle {
+            font-size: clamp(22px, 3vw, 32px);
+            font-weight: 400;
+            color: var(--text-gray);
+            margin-top: 24px;
+            text-align: center;
+            opacity: 0;
+            transform: translateY(30px);
+            animation: fadeInUp 1s ease 0.2s forwards;
+        }
+
+        .section-title {
+            font-size: clamp(36px, 5vw, 56px);
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            text-align: center;
+            margin-bottom: 20px;
+            opacity: 0;
+            transform: translateY(40px);
+        }
+
+        .section-subtitle {
+            font-size: clamp(16px, 2vw, 20px);
+            color: var(--text-gray);
+            text-align: center;
+            max-width: 600px;
+            margin-bottom: 50px;
+            opacity: 0;
+            transform: translateY(30px);
+        }
+
+        /* Cover Slide */
+        .slide-cover {
+            background: linear-gradient(180deg, #ffffff 0%, var(--bg-gray) 100%);
+        }
+
+        .slide-cover::before {
+            content: '';
+            position: absolute;
+            top: -30%;
+            right: -10%;
+            width: 60%;
+            height: 120%;
+            background: radial-gradient(ellipse at center, rgba(0, 102, 204, 0.06) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .logo {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 18px;
+            font-weight: 500;
+            color: var(--primary);
+            letter-spacing: 0.15em;
+            margin-bottom: 50px;
+            opacity: 0;
+            animation: fadeIn 1s ease 0.3s forwards;
+        }
+
+        .version-badge {
+            display: inline-block;
+            padding: 6px 14px;
+            background: rgba(0, 102, 204, 0.08);
+            border-radius: 100px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--primary);
+            margin-top: 30px;
+            opacity: 0;
+            animation: fadeInUp 1s ease 0.4s forwards;
+        }
+
+        /* Feature Cards */
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            width: 100%;
+            max-width: 1100px;
+        }
+
+        .feature-card {
+            background: var(--bg-white);
+            border-radius: 20px;
+            padding: 36px 32px;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-light);
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease;
+            opacity: 0;
+            transform: translateY(40px);
+        }
+
+        .feature-card:hover {
+            transform: translateY(-6px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .feature-icon {
+            width: 52px;
+            height: 52px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .feature-icon svg {
+            width: 26px;
+            height: 26px;
+            fill: white;
+        }
+
+        .feature-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: var(--text-dark);
+        }
+
+        .feature-desc {
+            font-size: 15px;
+            color: var(--text-gray);
+            line-height: 1.6;
+        }
+
+        /* Role Cards */
+        .role-container {
+            display: flex;
+            gap: 32px;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: 100%;
+            max-width: 1050px;
+        }
+
+        .role-card {
+            flex: 1;
+            min-width: 280px;
+            max-width: 320px;
+            background: var(--bg-white);
+            border-radius: 24px;
+            padding: 40px 36px;
+            text-align: center;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-light);
+            opacity: 0;
+            transform: scale(0.92);
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .role-card:hover {
+            transform: scale(1.02);
+        }
+
+        .role-badge {
+            display: inline-block;
+            padding: 8px 18px;
+            border-radius: 100px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        .role-admin {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+        }
+
+        .role-user {
+            background: linear-gradient(135deg, var(--accent-green) 0%, #248A3D 100%);
+            color: white;
+        }
+
+        .role-guest {
+            background: linear-gradient(135deg, var(--text-light) 0%, #636366 100%);
+            color: white;
+        }
+
+        .role-name {
+            font-size: 26px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .role-permissions {
+            list-style: none;
+            text-align: left;
+            font-size: 14px;
+            color: var(--text-gray);
+        }
+
+        .role-permissions li {
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border-light);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .role-permissions li:last-child {
+            border-bottom: none;
+        }
+
+        .check-icon {
+            color: var(--accent-green);
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        /* ==================== Screenshot Slides ==================== */
+        .screenshot-slide {
+            padding: 60px 6%;
+        }
+
+        .screenshot-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            align-items: center;
+            width: 100%;
+            max-width: 1400px;
+            opacity: 0;
+            transform: translateX(-40px);
+            transition: opacity 0.8s ease, transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .screenshot-layout.visible {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .screenshot-layout.reverse {
+            transform: translateX(40px);
+        }
+
+        .screenshot-layout.reverse.visible {
+            transform: translateX(0);
+        }
+
+        .screenshot-content {
+            padding: 20px 0;
+        }
+
+        .screenshot-label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--primary);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            margin-bottom: 12px;
+        }
+
+        .screenshot-title {
+            font-size: clamp(32px, 4vw, 44px);
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            line-height: 1.2;
+            margin-bottom: 16px;
+        }
+
+        .screenshot-desc {
+            font-size: 16px;
+            color: var(--text-gray);
+            line-height: 1.7;
+            margin-bottom: 28px;
+        }
+
+        .feature-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .feature-list li {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            font-size: 15px;
+            color: var(--text-dark);
+        }
+
+        .feature-list .icon-wrapper {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .feature-list .icon-wrapper svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .icon-blue { background: rgba(0, 102, 204, 0.1); }
+        .icon-blue svg { fill: var(--primary); }
+
+        .icon-green { background: rgba(52, 199, 89, 0.1); }
+        .icon-green svg { fill: var(--accent-green); }
+
+        .icon-orange { background: rgba(255, 149, 0, 0.1); }
+        .icon-orange svg { fill: var(--accent-orange); }
+
+        .icon-purple { background: rgba(88, 86, 214, 0.1); }
+        .icon-purple svg { fill: var(--accent-purple); }
+
+        /* Browser Mockup */
+        .browser-mockup {
+            position: relative;
+            background: #1d1d1f;
+            border-radius: 16px;
+            padding: 14px;
+            box-shadow: var(--shadow-lg), 0 0 0 1px rgba(0, 0, 0, 0.05);
+        }
+
+        .browser-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+            padding: 0 4px;
+        }
+
+        .browser-dot {
+            width: 11px;
+            height: 11px;
+            border-radius: 50%;
+        }
+
+        .browser-dot.red { background: #FF5F57; }
+        .browser-dot.yellow { background: #FEBC2E; }
+        .browser-dot.green { background: #28C840; }
+
+        .browser-url {
+            flex: 1;
+            height: 28px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 6px;
+            margin-left: 12px;
+            display: flex;
+            align-items: center;
+            padding: 0 12px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .browser-screenshot {
+            width: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+            display: block;
+        }
+
+        .browser-screenshot img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        /* Stats Row */
+        .stats-row {
+            display: flex;
+            gap: 40px;
+            margin-top: 32px;
+            padding-top: 28px;
+            border-top: 1px solid var(--border-light);
+        }
+
+        .stat-item {
+            text-align: left;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text-dark);
+            line-height: 1;
+        }
+
+        .stat-value.primary { color: var(--primary); }
+        .stat-value.green { color: var(--accent-green); }
+        .stat-value.orange { color: var(--accent-orange); }
+
+        .stat-label {
+            font-size: 13px;
+            color: var(--text-light);
+            margin-top: 6px;
+        }
+
+        /* ==================== Summary Slide ==================== */
+        .slide-summary {
+            background: linear-gradient(180deg, var(--bg-gray) 0%, var(--bg-white) 100%);
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 40px;
+            width: 100%;
+            max-width: 1000px;
+            margin-bottom: 50px;
+        }
+
+        .summary-item {
+            text-align: center;
+            opacity: 0;
+            transform: translateY(30px);
+        }
+
+        .summary-number {
+            font-size: clamp(44px, 5vw, 64px);
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .summary-label {
+            font-size: 15px;
+            color: var(--text-gray);
+            margin-top: 8px;
+        }
+
+        .cta-container {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+            opacity: 0;
+            transform: translateY(30px);
+        }
+
+        .cta-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 16px 32px;
+            border-radius: 100px;
+            font-size: 16px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+        }
+
+        .cta-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .cta-primary:hover {
+            transform: scale(1.04);
+            box-shadow: 0 8px 28px rgba(0, 102, 204, 0.3);
+        }
+
+        .cta-secondary {
+            background: transparent;
+            color: var(--primary);
+            border: 2px solid var(--primary);
+        }
+
+        .cta-secondary:hover {
+            background: var(--primary);
+            color: white;
+        }
+
+        /* Slide Dark */
+        .slide-dark {
+            background: linear-gradient(180deg, #0d0d0f 0%, #1d1d1f 100%);
+            color: white;
+        }
+
+        .slide-dark .section-title {
+            background: linear-gradient(135deg, #ffffff 0%, #a1a1a6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .slide-dark .section-subtitle {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .slide-dark .feature-card {
+            background: rgba(255, 255, 255, 0.04);
+            border-color: rgba(255, 255, 255, 0.08);
+        }
+
+        .slide-dark .feature-title {
+            color: white;
+        }
+
+        .slide-dark .feature-desc {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        /* Progress Dots */
+        .progress-dots {
+            position: fixed;
+            right: 28px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 100;
+        }
+
+        .progress-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.12);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .progress-dot.active {
+            background: var(--primary);
+            transform: scale(1.3);
+        }
+
+        .slide-dark .progress-dot {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .slide-dark .progress-dot.active {
+            background: white;
+        }
+
+        /* Nav Hint */
+        .nav-hint {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-light);
+            font-size: 13px;
+            opacity: 0;
+            animation: fadeIn 1s ease 1.5s forwards;
+        }
+
+        .nav-arrow {
+            width: 20px;
+            height: 20px;
+            border-right: 2px solid currentColor;
+            border-bottom: 2px solid currentColor;
+            transform: rotate(45deg);
+            animation: bounce 2s infinite;
+        }
+
+        /* Animations */
+        @keyframes fadeInUp {
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% { transform: rotate(45deg) translateY(0); }
+            40% { transform: rotate(45deg) translateY(6px); }
+            60% { transform: rotate(45deg) translateY(3px); }
+        }
+
+        /* Scroll Reveal */
+        .reveal {
+            opacity: 0;
+            transform: translateY(40px);
+            transition: opacity 0.8s ease, transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .reveal.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .screenshot-layout {
+                grid-template-columns: 1fr;
+                gap: 40px;
+            }
+
+            .screenshot-layout.reverse .screenshot-content {
+                order: 2;
+            }
+
+            .screenshot-layout.reverse .browser-mockup {
+                order: 1;
+            }
+
+            .summary-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 30px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .slide { padding: 60px 6%; }
+
+            .feature-grid { grid-template-columns: 1fr; }
+
+            .role-container { flex-direction: column; align-items: center; }
+
+            .progress-dots { display: none; }
+
+            .stats-row { flex-wrap: wrap; gap: 24px; }
+
+            .summary-grid { grid-template-columns: repeat(2, 1fr); gap: 24px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Progress Dots -->
+    <nav class="progress-dots" id="progressDots"></nav>
+
+    <!-- Slide 1: Cover -->
+    <section class="slide slide-cover" id="slide-1">
+        <div class="logo">CHIP VERIFICATION TRACKER</div>
+        <h1 class="hero-title">芯片验证管理系统</h1>
+        <p class="hero-subtitle">一站式管理 Cover Points 与 Test Cases</p>
+        <span class="version-badge">v0.10.1 正式版</span>
+        <div class="nav-hint">
+            <span>向下滚动探索更多</span>
+            <div class="nav-arrow"></div>
+        </div>
+    </section>
+
+    <!-- Slide 2: What is Tracker -->
+    <section class="slide" id="slide-2">
+        <h2 class="section-title reveal">什么是 Tracker？</h2>
+        <p class="section-subtitle reveal">
+            专为芯片验证团队设计的项目管理工具，用于跟踪和管理验证过程中的 Cover Points 与 Test Cases。
+        </p>
+        <div class="feature-grid">
+            <div class="feature-card reveal">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+                </div>
+                <h3 class="feature-title">项目管理</h3>
+                <p class="feature-desc">创建、切换、备份和恢复项目，支持多项目并行管理。</p>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon" style="background: linear-gradient(135deg, #34C759 0%, #248A3D 100%);">
+                    <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                </div>
+                <h3 class="feature-title">覆盖点追踪</h3>
+                <p class="feature-desc">管理 Cover Points，自动计算覆盖率和验证进度。</p>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon" style="background: linear-gradient(135deg, #FF9500 0%, #FF6B00 100%);">
+                    <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14h-2v-4H6v-2h4V7h2v4h4v2h-4v4z"/></svg>
+                </div>
+                <h3 class="feature-title">测试用例管理</h3>
+                <p class="feature-desc">全面管理 Test Cases，追踪状态变更和完成日期。</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 3: Core Features -->
+    <section class="slide slide-dark" id="slide-3">
+        <h2 class="section-title reveal">核心功能</h2>
+        <div class="feature-grid">
+            <div class="feature-card reveal">
+                <div class="feature-icon" style="background: linear-gradient(135deg, #34C759 0%, #248A3D 100%);">
+                    <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                </div>
+                <h3 class="feature-title">CP/TC 关联管理</h3>
+                <p class="feature-desc">建立测试用例与覆盖点的多对多关联，未关联项高亮显示提醒。</p>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon" style="background: linear-gradient(135deg, #FF9500 0%, #FF6B00 100%);">
+                    <svg viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z"/></svg>
+                </div>
+                <h3 class="feature-title">状态日期跟踪</h3>
+                <p class="feature-desc">自动记录 CODED/FAIL/PASS/REMOVED 状态变更日期。</p>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon" style="background: linear-gradient(135deg, #5856D6 0%, #3634A3 100%);">
+                    <svg viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
+                </div>
+                <h3 class="feature-title">进度图表</h3>
+                <p class="feature-desc">可视化展示计划曲线与实际覆盖率，支持按 Priority 过滤。</p>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon" style="background: linear-gradient(135deg, #FF2D55 0%, #C41E3A 100%);">
+                    <svg viewBox="0 0 24 24"><path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42z"/></svg>
+                </div>
+                <h3 class="feature-title">快照管理</h3>
+                <p class="feature-desc">定期采集项目进度快照，支持导出 CSV/JSON 格式。</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 4: User Roles -->
+    <section class="slide" id="slide-4">
+        <h2 class="section-title reveal">用户角色</h2>
+        <p class="section-subtitle reveal">三种角色，灵活权限控制</p>
+        <div class="role-container">
+            <div class="role-card reveal">
+                <span class="role-badge role-admin">管理员</span>
+                <h3 class="role-name">Admin</h3>
+                <ul class="role-permissions">
+                    <li><span class="check-icon">&#10003;</span> 用户管理</li>
+                    <li><span class="check-icon">&#10003;</span> 快照管理</li>
+                    <li><span class="check-icon">&#10003;</span> 删除项目</li>
+                    <li><span class="check-icon">&#10003;</span> 所有操作权限</li>
+                </ul>
+            </div>
+            <div class="role-card reveal">
+                <span class="role-badge role-user">普通用户</span>
+                <h3 class="role-name">User</h3>
+                <ul class="role-permissions">
+                    <li><span class="check-icon">&#10003;</span> 导入/导出数据</li>
+                    <li><span class="check-icon">&#10003;</span> 创建/编辑/删除 CP/TC</li>
+                    <li><span class="check-icon">&#10003;</span> 查看进度图表</li>
+                    <li><span class="check-icon">&#10003;</span> 提交反馈</li>
+                </ul>
+            </div>
+            <div class="role-card reveal">
+                <span class="role-badge role-guest">访客</span>
+                <h3 class="role-name">Guest</h3>
+                <ul class="role-permissions">
+                    <li><span class="check-icon">&#10003;</span> 只读访问</li>
+                    <li><span class="check-icon">&#10003;</span> 查看项目数据</li>
+                    <li><span class="check-icon">&#10003;</span> 查看手册</li>
+                    <li style="color: rgba(0,0,0,0.3);"><span>&#10005;</span> 无法修改数据</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 5: CP Management -->
+    <section class="slide screenshot-slide" id="slide-5">
+        <div class="screenshot-layout">
+            <div class="screenshot-content">
+                <div class="screenshot-label">Cover Points</div>
+                <h2 class="screenshot-title">覆盖点管理</h2>
+                <p class="screenshot-desc">
+                    集中管理 SOC_DV 项目中的 30 个覆盖点，通过直观的进度条展示每个 CP 的验证状态，支持按 Feature、Priority 和关联状态过滤。
+                </p>
+                <ul class="feature-list">
+                    <li>
+                        <span class="icon-wrapper icon-blue">
+                            <svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+                        </span>
+                        结构化表格展示 Feature / Sub-Feature 分层
+                    </li>
+                    <li>
+                        <span class="icon-wrapper icon-green">
+                            <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                        </span>
+                        彩色进度条直观显示覆盖率 (0-100%)
+                    </li>
+                    <li>
+                        <span class="icon-wrapper icon-purple">
+                            <svg viewBox="0 0 24 24"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>
+                        </span>
+                        Priority 优先级筛选 (P0/P1/P2)
+                    </li>
+                    <li>
+                        <span class="icon-wrapper icon-orange">
+                            <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14h-2v-4H6v-2h4V7h2v4h4v2h-4v4z"/></svg>
+                        </span>
+                        一键添加/编辑/删除覆盖点
+                    </li>
+                </ul>
+                <div class="stats-row">
+                    <div class="stat-item">
+                        <div class="stat-value primary">30</div>
+                        <div class="stat-label">总覆盖点</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value green">36.6%</div>
+                        <div class="stat-label">总覆盖率</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">8</div>
+                        <div class="stat-label">功能模块</div>
+                    </div>
+                </div>
+            </div>
+            <div class="browser-mockup">
+                <div class="browser-toolbar">
+                    <span class="browser-dot red"></span>
+                    <span class="browser-dot yellow"></span>
+                    <span class="browser-dot green"></span>
+                    <span class="browser-url">tracker.soc_dv/cp</span>
+                </div>
+                <div class="browser-screenshot">
+                    <img src="static/images/slides/cp-management.png" alt="Cover Points Management">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 6: TC Management -->
+    <section class="slide screenshot-slide" id="slide-6">
+        <div class="screenshot-layout reverse">
+            <div class="browser-mockup">
+                <div class="browser-toolbar">
+                    <span class="browser-dot red"></span>
+                    <span class="browser-dot yellow"></span>
+                    <span class="browser-dot green"></span>
+                    <span class="browser-url">tracker.soc_dv/tc</span>
+                </div>
+                <div class="browser-screenshot">
+                    <img src="static/images/slides/tc-management.png" alt="Test Cases Management">
+                </div>
+            </div>
+            <div class="screenshot-content">
+                <div class="screenshot-label">Test Cases</div>
+                <h2 class="screenshot-title">测试用例管理</h2>
+                <p class="screenshot-desc">
+                    高效管理 52 个测试用例，支持批量操作和多维度筛选。颜色标签直观区分 PASS/FAIL/CODED/OPEN 状态，助力验证进度一目了然。
+                </p>
+                <ul class="feature-list">
+                    <li>
+                        <span class="icon-wrapper icon-blue">
+                            <svg viewBox="0 0 24 24"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>
+                        </span>
+                        批量更新状态/日期/DV Milestone
+                    </li>
+                    <li>
+                        <span class="icon-wrapper icon-green">
+                            <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                        </span>
+                        状态标签颜色区分 (PASS绿/FAIL红/CODED橙)
+                    </li>
+                    <li>
+                        <span class="icon-wrapper icon-purple">
+                            <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                        </span>
+                        按 Owner/Category/DV Milestone 筛选
+                    </li>
+                    <li>
+                        <span class="icon-wrapper icon-orange">
+                            <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-4 14h-2v-4H7v-2h6v4h-2v2h4v-2z"/></svg>
+                        </span>
+                        导入/导出 CSV 数据
+                    </li>
+                </ul>
+                <div class="stats-row">
+                    <div class="stat-item">
+                        <div class="stat-value primary">52</div>
+                        <div class="stat-label">总测试用例</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value green">21</div>
+                        <div class="stat-label">PASS</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value orange">10</div>
+                        <div class="stat-label">CODED</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" style="color: var(--accent-red);">7</div>
+                        <div class="stat-label">FAIL</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 7: Progress Charts -->
+    <section class="slide screenshot-slide" id="slide-7">
+        <div class="screenshot-layout">
+            <div class="screenshot-content">
+                <div class="screenshot-label">Progress Charts</div>
+                <h2 class="screenshot-title">进度可视化</h2>
+                <p class="screenshot-desc">
+                    实时追踪验证进度，图表化展示计划曲线与实际覆盖率的对比。按时间维度分析项目健康度，及时发现进度偏差。
+                </p>
+                <ul class="feature-list">
+                    <li>
+                        <span class="icon-wrapper icon-blue">
+                            <svg viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
+                        </span>
+                        计划曲线 vs 实际进度双线对比
+                    </li>
+                    <li>
+                        <span class="icon-wrapper icon-green">
+                            <svg viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
+                        </span>
+                        面积填充直观展示累积覆盖率
+                    </li>
+                    <li>
+                        <span class="icon-wrapper icon-purple">
+                            <svg viewBox="0 0 24 24"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>
+                        </span>
+                        Priority 优先级过滤分析
+                    </li>
+                    <li>
+                        <span class="icon-wrapper icon-orange">
+                            <svg viewBox="0 0 24 24"><path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42z"/></svg>
+                        </span>
+                        快照管理 & 一键刷新
+                    </li>
+                </ul>
+                <div class="stats-row">
+                    <div class="stat-item">
+                        <div class="stat-value primary">36.6%</div>
+                        <div class="stat-label">当前覆盖率</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value green">↑ 进度</div>
+                        <div class="stat-label">高于计划</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value orange">2026.Q1</div>
+                        <div class="stat-label">当前阶段</div>
+                    </div>
+                </div>
+            </div>
+            <div class="browser-mockup">
+                <div class="browser-toolbar">
+                    <span class="browser-dot red"></span>
+                    <span class="browser-dot yellow"></span>
+                    <span class="browser-dot green"></span>
+                    <span class="browser-url">tracker.soc_dv/charts</span>
+                </div>
+                <div class="browser-screenshot">
+                    <img src="static/images/slides/progress-charts.png" alt="Progress Charts">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 8: Summary -->
+    <section class="slide slide-summary" id="slide-8">
+        <h2 class="section-title reveal">为什么选择 Tracker？</h2>
+        <div class="summary-grid">
+            <div class="summary-item reveal">
+                <div class="summary-number">30 CP</div>
+                <div class="summary-label">覆盖点管理</div>
+            </div>
+            <div class="summary-item reveal">
+                <div class="summary-number">52 TC</div>
+                <div class="summary-label">测试用例</div>
+            </div>
+            <div class="summary-item reveal">
+                <div class="summary-number">8</div>
+                <div class="summary-label">功能模块</div>
+            </div>
+            <div class="summary-item reveal">
+                <div class="summary-number">36.6%</div>
+                <div class="summary-label">当前覆盖率</div>
+            </div>
+        </div>
+        <div class="cta-container reveal">
+            <a href="#" class="cta-btn cta-primary">
+                开始使用
+                <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/>
+                </svg>
+            </a>
+            <a href="#" class="cta-btn cta-secondary">
+                查看文档
+            </a>
+        </div>
+    </section>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const slides = document.querySelectorAll('.slide');
+            const dotsContainer = document.getElementById('progressDots');
+
+            // Create progress dots
+            slides.forEach((_, index) => {
+                const dot = document.createElement('div');
+                dot.className = 'progress-dot';
+                dot.addEventListener('click', () => {
+                    slides[index].scrollIntoView({ behavior: 'smooth' });
+                });
+                dotsContainer.appendChild(dot);
+            });
+
+            const dots = document.querySelectorAll('.progress-dot');
+
+            // Intersection Observer for scroll reveal
+            const observerOptions = { threshold: 0.15, rootMargin: '0px' };
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('visible');
+                    }
+                });
+            }, observerOptions);
+
+            document.querySelectorAll('.reveal, .screenshot-layout').forEach(el => observer.observe(el));
+
+            // Update active dot on scroll
+            const slideObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const index = Array.from(slides).indexOf(entry.target);
+                        dots.forEach((dot, i) => {
+                            dot.classList.toggle('active', i === index);
+                        });
+                    }
+                });
+            }, { threshold: 0.5 });
+
+            slides.forEach(slide => slideObserver.observe(slide));
+        });
+    </script>
+</body>
+</html>
