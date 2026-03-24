@@ -954,8 +954,8 @@
                     <input type="text" class="search-input" placeholder="搜索..." onkeyup="filterTC(this.value)">
                     <select id="tcStatusFilter" onchange="applyTCFilter()"><option value="">全部 Status</option><option value="OPEN">OPEN</option><option value="CODED">CODED</option><option value="FAIL">FAIL</option><option value="PASS">PASS</option><option value="REMOVED">REMOVED</option></select>
                     <select id="tcDvFilter" onchange="applyTCFilter()"><option value="">全部 DV Milestone</option></select>
-                    <select id="tcOwnerFilter" onchange="applyTCFilter()"><option value="">全部 Owner</option></select>
-                    <select id="tcCategoryFilter" onchange="applyTCFilter()"><option value="">全部 Category</option></select>
+                    <select id="tcOwnerFilter" onchange="applyTCFilter()" style="max-width: 120px; overflow: hidden; text-overflow: ellipsis;" title="全部 Owner"><option value="">全部 Owner</option></select>
+                    <select id="tcCategoryFilter" onchange="applyTCFilter()" style="max-width: 150px; overflow: hidden; text-overflow: ellipsis;" title="全部 Category"><option value="">全部 Category</option></select>
                     <button class="btn" onclick="resetTCFilter()" style="padding: 4px 8px; font-size: 12px;">重置</button>
                     <span id="tcFilterCount" style="margin-left: auto; font-size: 12px; color: #999;">显示 0/0 条</span>
                 </div>
