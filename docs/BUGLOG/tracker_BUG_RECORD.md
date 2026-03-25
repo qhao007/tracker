@@ -2695,3 +2695,51 @@ async function hideIntroOverlay() {
 1. 清除 localStorage，重新访问页面
 2. 点击"开始使用"
 3. 观察主界面数据是否完整加载（版本号、项目列表）
+
+---
+
+## BUG-096: TC 目标日期编辑后不立即显示
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-25 |
+| **报告人** | Howard |
+| **修复日期** | 2026-03-25 |
+| **修复人** | 小栗子 |
+| **影响版本** | v0.10.x |
+
+**描述**: 在 TC 界面编辑目标日期（target_date）后，点击确定按钮需要刷新浏览器才能看到更新后的目标日期。
+
+**复现步骤**:
+1. 进入任意项目，切换到 Test Cases 标签
+2. 点击某个 TC 的"编辑"按钮
+3. 修改目标日期（target_date）
+4. 点击"确定"保存
+5. 观察：目标日期列未立即更新，仍显示旧值
+
+**根本原因**: `saveTC()` 函数在保存成功后调用了 `loadTC()` 获取新数据，但没有调用 `renderTC()` 重新渲染界面，导致页面显示的仍是旧的 DOM 数据。
+
+**影响范围**:
+- `index.html` 第 2866 行：`saveTC()` 函数
+
+**修复方案**:
+```javascript
+// 修改前
+if (result.success) { 
+    closeModal('tcModal'); 
+    await Promise.all([loadTC(), loadStats()]); 
+}
+
+// 修改后
+if (result.success) { 
+    closeModal('tcModal'); 
+    await Promise.all([loadTC(), loadStats()]); 
+    renderTC();  // 重新渲染 TC 列表以显示新的目标日期
+}
+```
+
+**验证**:
+1. 编辑 TC 的目标日期，点击确定
+2. 目标日期列立即显示新值，无需刷新页面
