@@ -375,7 +375,7 @@ python3 scripts/data_manager.py clean
 
 | 版本 | 端口 | 数据目录 | 启动命令 |
 |------|------|----------|----------|
-| 正式版 | 8080 | user_data | `cd stable && python3 server.py` |
+| 正式版 | 8080 | user_data | systemd 服务管理 (gunicorn) |
 | 测试版 | 8081 | test_data | `cd dev && bash start_server_test.sh` |
 
 ---
@@ -1789,17 +1789,17 @@ bash start_server_test.sh
 # （由 release.py 自动生成，无需手动配置）
 
 [Unit]
-Description=Chip Verification Tracker v0.3
+Description=Chip Verification Tracker
 After=network.target
 
 [Service]
 User=root
 WorkingDirectory=/release/tracker/current
-ExecStart=/usr/bin/python3 server.py
+ExecStart=/usr/local/bin/gunicorn --config /release/tracker/current/gunicorn.conf.py wsgi:app
 Restart=always
 RestartSec=10
 StandardOutput=append:/var/log/tracker.log
-StandardError=append:/var/log/tracker.error.log
+StandardError=append:/var/log/tracker_error.log
 
 [Install]
 WantedBy=multi-user.target

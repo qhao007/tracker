@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 """
-版本发布脚本 (v0.4)
+版本发布脚本 (v0.5)
 
 功能：
 1. 将 dev 代码发布到 /release/tracker/v{version}
 2. 自动检查兼容性
 3. 创建 current 软链接指向当前版本
-4. 更新 systemd 服务
+4. 更新 systemd 服务（使用 gunicorn）
 5. 支持回滚（切换软链接）
 
 用法：
     python3 scripts/release.py [--version VERSION] [--migrate] [--force]
     python3 scripts/release.py --rollback [--force]
+
+更新历史：
+- v0.5: systemd 服务改用 gunicorn 启动，支持 access log
 """
 import os
 import sys
@@ -32,7 +35,7 @@ RELEASE_CURRENT = os.path.join(RELEASE_BASE, 'current')
 SERVICE_FILE = '/etc/systemd/system/tracker.service'
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Tracker 版本发布脚本 (v0.4)')
+    parser = argparse.ArgumentParser(description='Tracker 版本发布脚本 (v0.5)')
     parser.add_argument('--version', '-v', default=None, help='版本号 (默认: v0.3.x)')
     parser.add_argument('--migrate', action='store_true', help='执行数据库迁移')
     parser.add_argument('--rollback', action='store_true', help='回滚到上一版本')
@@ -268,10 +271,14 @@ def update_current_symlink(version, dry_run=False):
     return True
 
 def update_systemd_service(version, dry_run=False):
-    """更新 systemd 服务配置"""
+    """更新 systemd 服务配置
+    
+    生产服务使用 gunicorn 启动，使用 current 软链接指向最新版本
+    """
     print(f"\n⚙️  {'演练' if dry_run else '更新'} systemd 服务...")
     
-    release_dir = os.path.join(RELEASE_BASE, version)
+    # 使用 current 软链接，这样发布后不需要修改 systemd 配置
+    release_dir = RELEASE_CURRENT  # /release/tracker/current
     service_content = f"""[Unit]
 Description=Chip Verification Tracker {version}
 After=network.target
@@ -280,11 +287,11 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory={release_dir}
-ExecStart=/usr/bin/python3 server.py
+ExecStart=/usr/local/bin/gunicorn --config {release_dir}/gunicorn.conf.py wsgi:app
 Restart=always
 RestartSec=10
 StandardOutput=append:/var/log/tracker.log
-StandardError=append:/var/log/tracker.error.log
+StandardError=append:/var/log/tracker_error.log
 
 [Install]
 WantedBy=multi-user.target
@@ -566,7 +573,7 @@ def main():
         create_release('dev', version, dry_run=True)
         update_current_symlink(version, dry_run=True)
         update_systemd_service(version, dry_run=True)
-        generate_release_notes(version, '/release/tracker/v0.3.x', dry_run=True)
+        generate_release_notes(version, RELEASE_CURRENT, dry_run=True)
         print("\n✅ 演练完成")
         return
     

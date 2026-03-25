@@ -770,28 +770,32 @@ sudo systemctl restart tracker
 
 #### 6.5.1 systemd 服务配置
 
-生产环境通过 systemd 服务管理，配置文件位于 `/etc/systemd/system/tracker.service`:
+生产环境通过 systemd 服务管理，使用 gunicorn 启动以支持 access log。配置文件位于 `/etc/systemd/system/tracker.service`:
 
 ```ini
 [Unit]
-Description=Tracker Chip Verification Management System
+Description=Chip Verification Tracker
 After=network.target
 
 [Service]
 Type=simple
-User=www-data
-Group=www-data
+User=root
 WorkingDirectory=/release/tracker/current
-Environment="FLASK_ENV=production"
-Environment="FLASK_SECRET_KEY=your-secret-key-change-in-production"
-Environment="CRON_API_TOKEN=your-cron-token-change-in-production"
-ExecStart=/usr/bin/python3 /release/tracker/current/server.py
+ExecStart=/usr/local/bin/gunicorn --config /release/tracker/current/gunicorn.conf.py wsgi:app
 Restart=always
 RestartSec=10
+StandardOutput=append:/var/log/tracker.log
+StandardError=append:/var/log/tracker_error.log
 
 [Install]
 WantedBy=multi-user.target
 ```
+
+**服务特性**:
+- 使用 gunicorn 作为 WSGI 服务器（替代直接 Flask app.run）
+- 使用 `current` 软链接，发布后自动指向新版本
+- 启用 access log 到 `/var/log/tracker_access_prod.log`
+- error log 到 `/var/log/tracker_error.log`
 
 **创建服务文件**:
 ```bash
@@ -838,14 +842,19 @@ journalctl -u tracker -n 50
 
 #### 6.5.4 端口配置
 
-| 端口 | 用途 | 数据目录 |
-|------|------|----------|
-| 8080 | 生产环境 | `shared/data/user_data/` |
-| 8081 | 测试环境 | `shared/data/test_data/` |
+| 端口 | 用途 | 数据目录 | 日志文件 |
+|------|------|----------|----------|
+| 8080 | 生产环境 | `shared/data/user_data/` | `/var/log/tracker_access_prod.log` |
+| 8081 | 测试环境 | `shared/data/test_data/` | `/tmp/gunicorn_access.log` |
 
 **启动方式**:
-- **生产版 (8080)**: 通过 systemd 服务管理
-- **测试版 (8081)**: `dev/start_server_test.sh`
+- **生产版 (8080)**: 通过 systemd 服务管理（gunicorn）
+- **测试版 (8081)**: `dev/start_server_test.sh`（gunicorn）
+
+**日志说明**:
+- **生产 access log**: `/var/log/tracker_access_prod.log`
+- **测试 access log**: `/tmp/gunicorn_access.log`
+- **错误日志**: `/var/log/tracker_error.log`
 
 
 ## 7. 文档规范
@@ -934,26 +943,52 @@ python3 scripts/release.py --rollback --force
 
 #### 测试版 (8081)
 ```bash
+# 启动测试服务
+cd /projects/management/tracker/dev && bash start_server_test.sh
+
 # 重启测试服务
 pkill -f "gunicorn.*8081"
-cd /projects/management/tracker/dev && python3 -m gunicorn -c gunicorn.conf.py "app:create_app()" --bind 0.0.0.0:8081 --daemon
+cd /projects/management/tracker/dev && gunicorn --workers 2 --bind 0.0.0.0:8081 --access-logfile /tmp/gunicorn_access.log --error-logfile /tmp/gunicorn_error.log --capture-output --config gunicorn.conf.py wsgi:app &
 
 # 查看测试服务是否运行
 ps aux | grep "gunicorn.*8081"
 
 # 测试服务是否正常
 curl -s http://localhost:8081/api/version
+
+# 测试日志位置
+tail -f /tmp/gunicorn_access.log
+```
+
+#### 生产版 (8080)
+```bash
+# 查看服务状态
+systemctl status tracker
+
+# 查看生产日志
+tail -f /var/log/tracker_access_prod.log
+
+# 重启生产服务
+systemctl restart tracker
 ```
 
 
 ---
 
-**文档版本**: v1.9  
-**最后更新**: 2026-03-06
+**文档版本**: v2.0  
+**最后更新**: 2026-03-25
 
 ---
 
 ## 更新日志
+
+### 2026-03-25
+
+- 更新 6.5 部署配置：生产服务改用 gunicorn 启动
+- 更新 systemd 服务配置示例
+- 新增日志文件路径说明（生产/测试分离）
+- 更新服务管理命令（生产/测试）
+**维护者**: 小栗子 🌰
 
 ### 2026-03-06
 
