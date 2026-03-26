@@ -15,13 +15,33 @@ const BASE_URL = 'http://localhost:8081';
 test.describe('Integration - 项目日期验证 & 常量管理 (v0.8.3)', () => {
 
   // ========== v0.8.3: 项目日期验证 ==========
-  
-  test('v0.8.3-PRJ-002: 创建项目填有效日期成功', async ({ page }) => {
+
+  test.beforeEach(async ({ page }) => {
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+
+    // 处理引导页（v0.10.x 新增）
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
+  });
+
+  test('v0.8.3-PRJ-002: 创建项目填有效日期成功', async ({ page }) => {
     await page.fill('#loginUsername', 'admin');
     await page.fill('#loginPassword', 'admin123');
     await page.click('button.login-btn');
     await page.waitForTimeout(1500);
+
+    // 处理首次登录密码修改模态框（v0.10.x 新增）
+    const changePwdModal = page.locator('#changePasswordModal');
+    if (await changePwdModal.isVisible().catch(() => false)) {
+      await page.fill('#newPassword', 'admin123');
+      await page.fill('#confirmPassword', 'admin123');
+      await page.click('#changePasswordModal button.btn-primary');
+      await page.waitForSelector('#changePasswordModal', { state: 'hidden', timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(1000);
+    }
 
     // 点击项目管理按钮
     await page.click('#projectManageBtn');
@@ -43,11 +63,20 @@ test.describe('Integration - 项目日期验证 & 常量管理 (v0.8.3)', () => 
   });
 
   test('v0.8.3-PRJ-003: 结束日期早于开始日期显示错误', async ({ page }) => {
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
     await page.fill('#loginUsername', 'admin');
     await page.fill('#loginPassword', 'admin123');
     await page.click('button.login-btn');
     await page.waitForTimeout(1500);
+
+    // 处理首次登录密码修改模态框（v0.10.x 新增）
+    const changePwdModal = page.locator('#changePasswordModal');
+    if (await changePwdModal.isVisible().catch(() => false)) {
+      await page.fill('#newPassword', 'admin123');
+      await page.fill('#confirmPassword', 'admin123');
+      await page.click('#changePasswordModal button.btn-primary');
+      await page.waitForSelector('#changePasswordModal', { state: 'hidden', timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(1000);
+    }
 
     // 点击项目管理按钮
     await page.click('#projectManageBtn');
@@ -73,13 +102,12 @@ test.describe('Integration - 项目日期验证 & 常量管理 (v0.8.3)', () => 
 
   test('v0.8.3-CONST-001: 登录流程正常', async ({ page }) => {
     // 测试普通用户登录流程
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
-    
+
     // 验证登录表单存在
     const usernameInput = page.locator('#loginUsername');
     const passwordInput = page.locator('#loginPassword');
     const loginBtn = page.locator('button.login-btn');
-    
+
     await expect(usernameInput).toBeVisible();
     await expect(passwordInput).toBeVisible();
     await expect(loginBtn).toBeVisible();
@@ -90,17 +118,36 @@ test.describe('Integration - 项目日期验证 & 常量管理 (v0.8.3)', () => 
     await page.click('button.login-btn');
     await page.waitForTimeout(1500);
 
+    // 处理首次登录密码修改模态框（v0.10.x 新增）
+    const changePwdModal = page.locator('#changePasswordModal');
+    if (await changePwdModal.isVisible().catch(() => false)) {
+      await page.fill('#newPassword', 'admin123');
+      await page.fill('#confirmPassword', 'admin123');
+      await page.click('#changePasswordModal button.btn-primary');
+      await page.waitForSelector('#changePasswordModal', { state: 'hidden', timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(1000);
+    }
+
     // 验证登录成功 - 页面应该跳转到项目列表
     const projectSelect = page.locator('#projectSelector');
     await expect(projectSelect).toBeVisible();
   });
 
   test('v0.8.3-CONST-002: 项目 CRUD 正常', async ({ page }) => {
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
     await page.fill('#loginUsername', 'admin');
     await page.fill('#loginPassword', 'admin123');
     await page.click('button.login-btn');
     await page.waitForTimeout(1500);
+
+    // 处理首次登录密码修改模态框（v0.10.x 新增）
+    const changePwdModal = page.locator('#changePasswordModal');
+    if (await changePwdModal.isVisible().catch(() => false)) {
+      await page.fill('#newPassword', 'admin123');
+      await page.fill('#confirmPassword', 'admin123');
+      await page.click('#changePasswordModal button.btn-primary');
+      await page.waitForSelector('#changePasswordModal', { state: 'hidden', timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(1000);
+    }
 
     const testProjectName = `Test_CRUD_${Date.now()}`;
 

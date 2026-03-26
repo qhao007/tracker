@@ -30,15 +30,41 @@ test.describe('Integration - 项目管理', () => {
       localStorage.clear();
       sessionStorage.clear();
     });
+
+    // 导航到首页并处理引导页（v0.10.x 新增）
+    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
   });
 
   // ========== PROJ-001: 项目选择器可见 ==========
   test('PROJ-001: 项目选择器可见', async ({ page }) => {
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    await page.waitForLoadState('domcontentloaded');
+
+    // 处理引导页（v0.10.x 新增）
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
+
     await page.fill('#loginUsername', 'admin');
     await page.fill('#loginPassword', 'admin123');
     await page.click('button.login-btn');
     await page.waitForTimeout(1500);
+
+    // 处理首次登录密码修改模态框（v0.10.x 新增）
+    const changePwdModal = page.locator('#changePasswordModal');
+    if (await changePwdModal.isVisible().catch(() => false)) {
+      await page.fill('#newPassword', 'admin123');
+      await page.fill('#confirmPassword', 'admin123');
+      await page.click('#changePasswordModal button.btn-primary');
+      await page.waitForSelector('#changePasswordModal', { state: 'hidden', timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(1000);
+    }
 
     // 验证项目选择器存在
     await expect(page.locator('#projectSelector')).toBeVisible();
@@ -46,7 +72,15 @@ test.describe('Integration - 项目管理', () => {
 
   // ========== PROJ-002: guest 可以访问项目 ==========
   test('PROJ-002: guest 可以访问项目', async ({ page }) => {
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    await page.waitForLoadState('domcontentloaded');
+
+    // 处理引导页（v0.10.x 新增）
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
+
     // 使用 guest 登录按钮（guest 没有密码）
     await page.click('#guestLoginBtn');
     // 等待登录成功并等待覆盖层消失
@@ -64,11 +98,29 @@ test.describe('Integration - 项目管理', () => {
 
   // ========== PROJ-003: 点击删除弹出确认框 ==========
   test('PROJ-003: 点击删除弹出确认框', async ({ page }) => {
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    await page.waitForLoadState('domcontentloaded');
+
+    // 处理引导页（v0.10.x 新增）
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
+
     await page.fill('#loginUsername', 'admin');
     await page.fill('#loginPassword', 'admin123');
     await page.click('button.login-btn');
     await page.waitForTimeout(1500);
+
+    // 处理首次登录密码修改模态框（v0.10.x 新增）
+    const changePwdModal = page.locator('#changePasswordModal');
+    if (await changePwdModal.isVisible().catch(() => false)) {
+      await page.fill('#newPassword', 'admin123');
+      await page.fill('#confirmPassword', 'admin123');
+      await page.click('#changePasswordModal button.btn-primary');
+      await page.waitForSelector('#changePasswordModal', { state: 'hidden', timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(1000);
+    }
 
     // 先创建一个测试项目
     const testProject = `Test_Delete_${Date.now()}`;
@@ -104,11 +156,29 @@ test.describe('Integration - 项目管理', () => {
 
   // ========== PROJ-004: 确认删除后项目被删除 ==========
   test('PROJ-004: 确认删除后项目被删除', async ({ page }) => {
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    await page.waitForLoadState('domcontentloaded');
+
+    // 处理引导页（v0.10.x 新增）
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
+
     await page.fill('#loginUsername', 'admin');
     await page.fill('#loginPassword', 'admin123');
     await page.click('button.login-btn');
     await page.waitForTimeout(1500);
+
+    // 处理首次登录密码修改模态框（v0.10.x 新增）
+    const changePwdModal = page.locator('#changePasswordModal');
+    if (await changePwdModal.isVisible().catch(() => false)) {
+      await page.fill('#newPassword', 'admin123');
+      await page.fill('#confirmPassword', 'admin123');
+      await page.click('#changePasswordModal button.btn-primary');
+      await page.waitForSelector('#changePasswordModal', { state: 'hidden', timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(1000);
+    }
 
     // 创建测试项目
     const testProject = `Test_Delete_Confirm_${Date.now()}`;
@@ -154,11 +224,29 @@ test.describe('Integration - 项目管理', () => {
 
   // ========== PROJ-005: 取消删除后项目保留 ==========
   test('PROJ-005: 取消删除后项目保留', async ({ page }) => {
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    await page.waitForLoadState('domcontentloaded');
+
+    // 处理引导页（v0.10.x 新增）
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
+
     await page.fill('#loginUsername', 'admin');
     await page.fill('#loginPassword', 'admin123');
     await page.click('button.login-btn');
     await page.waitForTimeout(1500);
+
+    // 处理首次登录密码修改模态框（v0.10.x 新增）
+    const changePwdModal = page.locator('#changePasswordModal');
+    if (await changePwdModal.isVisible().catch(() => false)) {
+      await page.fill('#newPassword', 'admin123');
+      await page.fill('#confirmPassword', 'admin123');
+      await page.click('#changePasswordModal button.btn-primary');
+      await page.waitForSelector('#changePasswordModal', { state: 'hidden', timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(1000);
+    }
 
     // 创建测试项目
     const testProject = `Test_Cancel_${Date.now()}`;

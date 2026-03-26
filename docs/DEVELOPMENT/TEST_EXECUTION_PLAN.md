@@ -88,8 +88,10 @@ PYTHONPATH=. pytest tests/test_api/ -v --reruns 2
 **执行命令**:
 ```bash
 cd /projects/management/tracker/dev
-npx playwright test tests/test_ui/specs/smoke/smoke.spec.ts --project=firefox --timeout=60000
+PLAYWRIGHT_BROWSERS_PATH=/tmp/.playwright HOME=/home/hqi XDG_RUNTIME_DIR=/tmp npx playwright test tests/test_ui/specs/smoke/ --project=firefox --timeout=60000
 ```
+
+> **注意**: v0.10.x 版本新增了 Intro 引导页，测试已适配自动处理。如遇浏览器启动问题，确保设置正确的 HOME 目录。
 
 **冒烟用例清单** (共 20 个):
 
@@ -186,8 +188,10 @@ PYTHONPATH=. pytest tests/test_api/ -v --tb=short
 **执行命令**:
 ```bash
 cd /projects/management/tracker/dev
-npx playwright test tests/test_ui/specs/integration/ --project=firefox --timeout=60000
+PLAYWRIGHT_BROWSERS_PATH=/tmp/.playwright HOME=/home/hqi XDG_RUNTIME_DIR=/tmp npx playwright test tests/test_ui/specs/integration/ --project=firefox --timeout=60000
 ```
+
+> **注意**: v0.10.x 版本新增了 Intro 引导页和 changePasswordModal，测试已适配自动处理。
 
 **测试用例数量**: 110 个
 

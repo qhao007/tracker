@@ -30,15 +30,37 @@ test.describe('Integration - 用户反馈功能', () => {
       localStorage.clear();
       sessionStorage.clear();
     });
+
+    // 导航到首页并处理引导页（v0.10.x 新增）
+    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
   });
 
   // 登录辅助函数
   async function loginAsAdmin(page: any) {
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
-    await page.fill('#loginUsername', 'admin');
-    await page.fill('#loginPassword', 'admin123');
-    await page.click('button.login-btn');
-    await page.waitForTimeout(1500);
+    // 已经导航到页面，只需要处理可能出现的密码模态框
+    // 处理首次登录密码修改模态框（v0.10.x 新增）
+    const changePwdModal = page.locator('#changePasswordModal');
+    if (await changePwdModal.isVisible().catch(() => false)) {
+      await page.fill('#newPassword', 'admin123');
+      await page.fill('#confirmPassword', 'admin123');
+      await page.click('#changePasswordModal button.btn-primary');
+      await page.waitForSelector('#changePasswordModal', { state: 'hidden', timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(1000);
+    }
+
+    // 如果需要登录（页面可能已刷新或会话过期）
+    const needsLogin = await page.locator('#loginForm').isVisible().catch(() => false);
+    if (needsLogin) {
+      await page.fill('#loginUsername', 'admin');
+      await page.fill('#loginPassword', 'admin123');
+      await page.click('button.login-btn');
+      await page.waitForTimeout(1500);
+    }
   }
 
   // ========== UI-FB-001: 反馈标签页存在 ==========

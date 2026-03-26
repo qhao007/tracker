@@ -15,20 +15,48 @@ import { setupDialogHandler, teardownDialogHandler } from '../../utils/dialog-he
 test.describe('CP-TC 关联测试', () => {
 
   /**
-   * 登录辅助函数 - v0.7.1 需要登录
+   * 登录辅助函数 - v0.10.x 需要处理引导页和密码修改模态框
    */
   async function loginAsAdmin(page: any) {
     await page.goto('http://localhost:8081', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
+
+    // 处理引导页（v0.10.x 新增）
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
+
     // 填写登录表单
     await page.fill('#loginUsername', 'admin');
     await page.fill('#loginPassword', 'admin123');
     await page.click('#loginForm button[type="submit"]');
+    await page.waitForTimeout(1500);
+
+    // 处理首次登录密码修改模态框（v0.10.x 新增）
+    const changePwdModal = page.locator('#changePasswordModal');
+    if (await changePwdModal.isVisible().catch(() => false)) {
+      await page.fill('#newPassword', 'admin123');
+      await page.fill('#confirmPassword', 'admin123');
+      await page.click('#changePasswordModal button.btn-primary');
+      await page.waitForSelector('#changePasswordModal', { state: 'hidden', timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(1000);
+    }
+
+    // 等待项目选择器加载并强制选择 SOC_DV 项目
+    await page.waitForSelector('#projectSelector', { timeout: 10000 });
+    await page.waitForTimeout(500);
+
+    // 强制选择 SOC_DV 项目（因为 cleanupProjectData 可能改变了选择）
+    await page.click('#projectSelector');
+    await page.waitForTimeout(300);
+    await page.selectOption('#projectSelector', { label: 'SOC_DV' });
     await page.waitForTimeout(1000);
   }
 
   test.beforeEach(async ({ page }) => {
-    // 登录 - v0.7.1 需要认证
+    // 登录 - v0.10.x 需要处理引导页和密码模态框
     await loginAsAdmin(page);
     // 登录后等待页面加载完成
     try {
@@ -38,6 +66,15 @@ test.describe('CP-TC 关联测试', () => {
     } catch (e) {
       // 如果页面已关闭，忽略错误
     }
+    // 选择 SOC_DV 项目
+    await page.waitForTimeout(500);
+    await page.selectOption('#projectSelector', { label: 'SOC_DV' });
+    // 等待项目切换完成，CP 列表加载
+    await page.waitForTimeout(2000);
+    // 确保在 CP 标签页
+    await page.click('button.tab:has-text("Cover Points")');
+    await page.waitForSelector('#cpPanel', { state: 'visible', timeout: 10000 });
+    await page.waitForTimeout(500);
   });
 
   test.afterEach(async ({ page }, testInfo) => {
@@ -49,12 +86,7 @@ test.describe('CP-TC 关联测试', () => {
         path: `test-results/screenshots/connection-${testInfo.title}-${Date.now()}.png`
       });
     }
-    // 清理项目数据，保留最新5条
-    try {
-      await cleanupProjectData(page);
-    } catch (e) {
-      // 忽略清理错误
-    }
+    // 注意：不在 afterEach 中清理数据，让测试创建的数据保留供后续验证
   });
 
   /**
@@ -76,7 +108,9 @@ test.describe('CP-TC 关联测试', () => {
     await page.fill('#cpCoverPoint', cpName);
     await page.fill('#cpDetails', '测试关联 CP');
     await page.click('#cpModal button[type="submit"]');
-    await page.waitForTimeout(2000);
+    // 等待模态框关闭
+    await page.waitForSelector('#cpModal', { state: 'hidden', timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(1000);
 
     // 2. 创建 TC
     await page.click('button.tab:has-text("Test Cases")');
@@ -105,6 +139,8 @@ test.describe('CP-TC 关联测试', () => {
     await page.fill('#cpCoverPoint', cpName);
     await page.fill('#cpDetails', '测试详情');
     await page.click('#cpModal button[type="submit"]');
+    // 等待模态框关闭
+    await page.waitForSelector('#cpModal', { state: 'hidden', timeout: 10000 }).catch(() => {});
     await page.waitForTimeout(2000);
 
     // 验证 CP 存在
@@ -148,6 +184,8 @@ test.describe('CP-TC 关联测试', () => {
       // 修改描述
       await page.fill('#cpDetails', '更新后的描述');
       await page.click('#cpModal button[type="submit"]');
+      // 等待模态框关闭
+      await page.waitForSelector('#cpModal', { state: 'hidden', timeout: 10000 }).catch(() => {});
       await page.waitForTimeout(2000);
     }
   });
@@ -156,20 +194,48 @@ test.describe('CP-TC 关联测试', () => {
 test.describe('CP-TC 关联测试 - 边界场景', () => {
 
   /**
-   * 登录辅助函数 - v0.7.1 需要登录
+   * 登录辅助函数 - v0.10.x 需要处理引导页和密码修改模态框
    */
   async function loginAsAdmin(page: any) {
     await page.goto('http://localhost:8081', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
+
+    // 处理引导页（v0.10.x 新增）
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
+
     // 填写登录表单
     await page.fill('#loginUsername', 'admin');
     await page.fill('#loginPassword', 'admin123');
     await page.click('#loginForm button[type="submit"]');
+    await page.waitForTimeout(1500);
+
+    // 处理首次登录密码修改模态框（v0.10.x 新增）
+    const changePwdModal = page.locator('#changePasswordModal');
+    if (await changePwdModal.isVisible().catch(() => false)) {
+      await page.fill('#newPassword', 'admin123');
+      await page.fill('#confirmPassword', 'admin123');
+      await page.click('#changePasswordModal button.btn-primary');
+      await page.waitForSelector('#changePasswordModal', { state: 'hidden', timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(1000);
+    }
+
+    // 等待项目选择器加载并强制选择 SOC_DV 项目
+    await page.waitForSelector('#projectSelector', { timeout: 10000 });
+    await page.waitForTimeout(500);
+
+    // 强制选择 SOC_DV 项目（因为 cleanupProjectData 可能改变了选择）
+    await page.click('#projectSelector');
+    await page.waitForTimeout(300);
+    await page.selectOption('#projectSelector', { label: 'SOC_DV' });
     await page.waitForTimeout(1000);
   }
 
   test.beforeEach(async ({ page }) => {
-    // 登录 - v0.7.1 需要认证
+    // 登录 - v0.10.x 需要处理引导页和密码模态框
     await loginAsAdmin(page);
     // 登录后等待页面加载完成
     try {
@@ -179,9 +245,10 @@ test.describe('CP-TC 关联测试 - 边界场景', () => {
     } catch (e) {
       // 如果页面已关闭，忽略错误
     }
-    // 清理项目数据，保留最新5条
-    await cleanupProjectData(page);
+    // 选择 SOC_DV 项目
     await page.waitForTimeout(500);
+    await page.selectOption('#projectSelector', { label: 'SOC_DV' });
+    await page.waitForTimeout(2000);  // 等待项目数据加载
   });
 
   test.afterEach(async ({ page }) => {

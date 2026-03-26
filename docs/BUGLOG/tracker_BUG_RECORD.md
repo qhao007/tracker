@@ -1287,6 +1287,80 @@ cd dev && npx playwright test tests/tracker.spec.ts --project=firefox
 
 ---
 
+### BUG-098: saveCP() 未调用 renderCP() 导致创建的 CP 不显示
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-26 |
+| **报告人** | Claude Code |
+| **修复日期** | 2026-03-27 |
+| **修复人** | Claude Code |
+
+**描述**: 在 v0.10.x 版本中，通过 UI 创建 CP 后，新创建的 CP 不出现在 CP 列表中。但 API 调用实际上成功了（可以通过 Feature 过滤器看到新创建的 feature）。
+
+**根因分析**:
+- `saveCP()` 函数在创建/更新 CP 后调用 `loadCP()` 和 `loadStats()`
+- 但 `loadCP()` 是异步加载数据，`saveTC()` 还额外调用了 `renderTC()` 来刷新 UI
+- `saveCP()` 缺少 `renderCP()` 调用，导致列表不刷新
+
+**影响测试用例**:
+- CONN-002: 展开 CP 详情
+- CONN-003: 编辑 CP
+- CONN-004: 创建多个 CP
+- CP-001, CP-002, CP-003, CP-007, CP-009 (集成测试)
+- SMOKE-009 (编辑 CP) - 也有同样问题但 smoke 测试未严格验证
+
+**临时解决方案**:
+- 相关测试用例已标记为 `test.skip`
+- 等待前端修复后恢复测试
+
+**修复建议**:
+在 `index.html` 的 `saveCP()` 函数中，在 `await Promise.all([loadCP(), loadStats()]);` 之后添加 `renderCP()` 调用。
+
+**已修复**: ✅ 2026-03-27 在 `index.html` 第 2852 行添加 `renderCP();`
+
+---
+
+### BUG-099: deleteCP() 未调用 renderCP() 导致删除的 CP 仍显示
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-27 |
+| **报告人** | Claude Code |
+| **修复日期** | 2026-03-27 |
+| **修复人** | Claude Code |
+
+**描述**: `deleteCP()` 删除 CP 后调用 `loadCP()` 但未调用 `renderCP()` 刷新 UI，导致删除的 CP 仍显示在列表中。
+
+**修复**: 在 `index.html` 第 2886 行 `await loadCP();` 后添加 `renderCP();`
+
+**已修复**: ✅ 2026-03-27 在 `index.html` 添加 `renderCP();`
+
+---
+
+### BUG-100: deleteTC() 未调用 renderTC() 导致删除的 TC 仍显示
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-27 |
+| **报告人** | Claude Code |
+| **修复日期** | 2026-03-27 |
+| **修复人** | Claude Code |
+
+**描述**: `deleteTC()` 删除 TC 后调用 `loadTC()` 和 `loadStats()` 但未调用 `renderTC()` 刷新 UI，导致删除的 TC 仍显示在列表中。
+
+**修复**: 在 `index.html` 第 2907 行 `await Promise.all([loadTC(), loadStats()]);` 后添加 `renderTC();`
+
+**已修复**: ✅ 2026-03-27 在 `index.html` 添加 `renderTC();`
+
+---
+
 ## BUG-053: guest 删除操作无错误提示
 **日期**: 2026-02-22
 **版本**: v0.7.1
@@ -2743,3 +2817,87 @@ if (result.success) {
 **验证**:
 1. 编辑 TC 的目标日期，点击确定
 2. 目标日期列立即显示新值，无需刷新页面
+
+---
+
+## BUG-097: v0.10.x Intro 引导页导致 UI 测试失败
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-26 |
+| **报告人** | Claude Code |
+| **修复日期** | 2026-03-26 |
+| **修复人** | Claude Code |
+| **影响版本** | v0.10.x |
+
+**描述**: v0.10.x 新增 Intro 引导页功能，首次访问时显示 5 页引导。测试中 `localStorage.clear()` 会清除 `tracker_intro_seen` 标志，导致每次测试都弹出引导页遮挡登录表单，测试无法正常执行。
+
+**受影响的测试文件**:
+- `01-smoke.spec.ts`
+- `02-login.spec.ts`
+- `09-project-management.spec.ts`
+- `10-help.spec.ts`
+- `12-feedback.spec.ts`
+- `actual_curve.spec.ts`
+- 以及其他 16 个集成测试文件
+
+**根本原因**:
+1. Intro 引导页通过 `localStorage.getItem('tracker_intro_seen')` 控制显示
+2. 测试的 `beforeEach` 中清理 `localStorage` 会导致引导页每次都弹出
+3. 引导页 `.intro-cta-btn` 覆盖在登录表单之上
+
+**修复方案**:
+1. 在 `beforeEach` 中 `page.goto()` 之后添加引导页处理：
+```typescript
+test.beforeEach(async ({ page }) => {
+  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+  // 处理引导页（v0.10.x 新增）
+  const introBtn = page.locator('.intro-cta-btn');
+  if (await introBtn.isVisible().catch(() => false)) {
+    await introBtn.click();
+    await page.waitForTimeout(500);
+  }
+});
+```
+
+2. 在 `loginAsAdmin` 函数中添加密码修改模态框处理：
+```typescript
+async function loginAsAdmin(page: any) {
+  await page.fill('#loginUsername', 'admin');
+  await page.fill('#loginPassword', 'admin123');
+  await page.click('button.login-btn');
+  await page.waitForTimeout(1500);
+
+  // 处理首次登录密码修改模态框（v0.10.x 新增）
+  const changePwdModal = page.locator('#changePasswordModal');
+  if (await changePwdModal.isVisible().catch(() => false)) {
+    await page.fill('#newPassword', 'admin123');
+    await page.fill('#confirmPassword', 'admin123');
+    await page.click('#changePasswordModal button.btn-primary');
+    await page.waitForSelector('#changePasswordModal', { state: 'hidden', timeout: 10000 });
+    await page.waitForTimeout(1000);
+  }
+  // ...
+}
+```
+
+**影响范围**:
+- `dev/playwright.config.ts` - HOME 环境变量配置
+- `dev/tests/test_ui/specs/smoke/01-smoke.spec.ts` - 14 个测试
+- `dev/tests/test_ui/specs/smoke/02-login.spec.ts` - 6 个测试
+- `dev/tests/test_ui/specs/integration/*.spec.ts` - 16 个测试文件
+
+**验证**:
+```bash
+cd /projects/management/tracker/dev
+PLAYWRIGHT_BROWSERS_PATH=/tmp/.playwright HOME=/home/hqi XDG_RUNTIME_DIR=/tmp npx playwright test tests/test_ui/specs/smoke/ --project=firefox --timeout=60000
+# 结果: 20/20 通过
+```
+
+**相关文档**:
+- `docs/REPORTS/UI_TEST_v0.10.x_FIX_REPORT_20260326.md`
+- `docs/DEVELOPMENT/TEST_EXECUTION_PLAN.md`
+- `docs/DEVELOPMENT/playwright_debug_best_practices.md`
+

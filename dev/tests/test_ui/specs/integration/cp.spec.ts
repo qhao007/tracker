@@ -15,32 +15,55 @@ import { test, expect } from '../../fixtures/tracker.fixture';
 import { TestDataFactory } from '../../fixtures/test-data.factory';
 import { cleanupTestData } from '../../utils/cleanup';
 
-test.describe('CP 集成测试', () => {
+/**
+ * 登录辅助函数 - v0.10.x 需要处理引导页和密码修改模态框
+ */
+async function loginAsAdmin(page: any) {
+  await page.goto('http://localhost:8081', { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('domcontentloaded');
 
-  /**
-   * 登录辅助函数 - v0.7.1 需要登录
-   */
-  async function loginAsAdmin(page: any) {
-    await page.goto('http://localhost:8081', { waitUntil: 'domcontentloaded' });
-    await page.waitForLoadState('domcontentloaded');
-
-    // 检查是否需要登录
-    const needsLogin = await page.locator('#loginForm').isVisible().catch(() => false);
-    if (needsLogin) {
-      // 填写登录表单
-      await page.fill('#loginUsername', 'admin');
-      await page.fill('#loginPassword', 'admin123');
-      await page.click('#loginForm button[type="submit"]');
-      // 等待用户信息显示 - 登录成功的标志
-      await page.waitForSelector('#userInfo', { timeout: 10000 });
-    } else {
-      // 已经登录，确保用户信息可见
-      await page.waitForSelector('#userInfo', { timeout: 10000 }).catch(() => {});
-    }
-
-    // 等待项目选择器可用
-    await page.waitForSelector('#projectSelector:not([disabled])', { timeout: 10000 });
+  // 处理引导页（v0.10.x 新增）- 显式等待引导页消失
+  // 引导页可能在 DOMContentLoaded 之后才显示，所以需要明确等待处理
+  const introBtn = page.locator('.intro-cta-btn');
+  if (await introBtn.isVisible().catch(() => false)) {
+    await introBtn.click();
+    await page.waitForTimeout(500);
   }
+
+  // 确保引导页完全消失后再检查登录表单
+  // 如果仍在引导页上，#loginForm 不会显示
+  await page.waitForTimeout(300);
+
+  // 检查是否需要登录 - 在确认引导页处理完后检查
+  const needsLogin = await page.locator('#loginForm').isVisible().catch(() => false);
+  if (needsLogin) {
+    // 填写登录表单
+    await page.fill('#loginUsername', 'admin');
+    await page.fill('#loginPassword', 'admin123');
+    await page.click('#loginForm button[type="submit"]');
+    // 等待用户信息显示 - 登录成功的标志
+    await page.waitForSelector('#userInfo', { timeout: 10000 });
+  } else {
+    // 已经登录，确保用户信息可见
+    // 如果 #userInfo 不存在（页面在引导页上），会超时
+    await page.waitForSelector('#userInfo', { timeout: 10000 }).catch(() => {});
+  }
+
+  // 处理首次登录密码修改模态框（v0.10.x 新增）
+  const changePwdModal = page.locator('#changePasswordModal');
+  if (await changePwdModal.isVisible().catch(() => false)) {
+    await page.fill('#newPassword', 'admin123');
+    await page.fill('#confirmPassword', 'admin123');
+    await page.click('#changePasswordModal button.btn-primary');
+    await page.waitForSelector('#changePasswordModal', { state: 'hidden', timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(1000);
+  }
+
+  // 等待项目选择器可用
+  await page.waitForSelector('#projectSelector:not([disabled])', { timeout: 10000 });
+}
+
+test.describe('CP 集成测试', () => {
 
   test.beforeEach(async ({ page }) => {
     // 登录 - v0.7.1 需要认证
@@ -318,11 +341,10 @@ test.describe('CP 集成测试', () => {
 });
 
 test.describe('CP 集成测试 - 数据一致性', () => {
-  
+
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:8081', { waitUntil: 'domcontentloaded' });
-    await page.waitForLoadState('domcontentloaded');
-    await page.waitForSelector('#projectSelector', { timeout: 10000 });
+    // 复用 loginAsAdmin 来处理引导页和登录
+    await loginAsAdmin(page);
   });
 
   test.afterEach(async ({ page }) => {
@@ -339,16 +361,6 @@ test.describe('CP 集成测试 - 数据一致性', () => {
   test('CP-009: CP 数据持久化验证', async ({ cpPage }) => {
     const cpData = TestDataFactory.createCPData();
 
-    // 确保登录状态正常
-    const needsLogin = await cpPage.page.locator('#loginForm').isVisible().catch(() => false);
-    if (needsLogin) {
-      await cpPage.page.fill('#loginUsername', 'admin');
-      await cpPage.page.fill('#loginPassword', 'admin123');
-      await cpPage.page.click('#loginForm button[type="submit"]');
-    }
-    await cpPage.page.waitForSelector('#userInfo', { timeout: 10000 });
-    await cpPage.page.waitForSelector('#projectSelector:not([disabled])', { timeout: 10000 });
-
     // 创建 CP
     await cpPage.createCP(cpData);
 
@@ -359,7 +371,17 @@ test.describe('CP 集成测试 - 数据一致性', () => {
     await cpPage.page.reload({ waitUntil: 'domcontentloaded' });
     await cpPage.page.waitForLoadState('domcontentloaded');
 
-    // 确保登录状态正常
+    // 等待引导页动态加载
+    await cpPage.page.waitForTimeout(500);
+
+    // 处理引导页（v0.10.x 新增）
+    const introBtn = cpPage.page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await cpPage.page.waitForTimeout(500);
+    }
+
+    // 刷新后确保登录状态正常 - 可能需要重新登录
     const needsLoginAfterReload = await cpPage.page.locator('#loginForm').isVisible().catch(() => false);
     if (needsLoginAfterReload) {
       await cpPage.page.fill('#loginUsername', 'admin');

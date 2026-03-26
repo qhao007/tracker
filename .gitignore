@@ -53,6 +53,7 @@ stable/backup_*/
 # ========== Node.js ==========
 node_modules/
 .playwright-cli/
+.playwright-browsers/
 
 # ========== 归档文件 ==========
 dev/archives/*.json

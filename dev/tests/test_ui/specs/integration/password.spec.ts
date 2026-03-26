@@ -15,11 +15,18 @@ const BASE_URL = 'http://localhost:8081';
 test.describe('强制改密码测试', () => {
 
   /**
-   * 登录辅助函数 - admin 版本，会处理密码弹窗
+   * 登录辅助函数 - admin 版本，会处理密码弹窗和引导页
    */
   async function loginAsAdmin(page: any) {
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
+
+    // 处理引导页（v0.10.x 新增）
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
 
     await page.fill('#loginUsername', 'admin');
     await page.fill('#loginPassword', 'admin123');

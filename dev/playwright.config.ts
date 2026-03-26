@@ -4,6 +4,9 @@ export default defineConfig({
   // 测试目录
   testDir: './tests',
 
+  // Playwright 浏览器路径
+  browsersDir: './.playwright-browsers',
+
   // 排除旧测试文件（模块导入路径已失效）
   testIgnore: '**/smoke/archives/**',
 
@@ -54,11 +57,12 @@ export default defineConfig({
     // 视窗大小
     viewport: { width: 1280, height: 720 },
 
-    // 沙箱环境：设置 HOME 环境变量
+    // 沙箱环境：使用当前用户的 HOME 目录
     launchOptions: {
       env: {
-        HOME: '/root',
+        HOME: process.env.HOME || '/home/hqi',
         XDG_RUNTIME_DIR: '/tmp',
+        MOZ_ENABLE_WAYLAND: '0',
       },
     },
   },

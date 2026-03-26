@@ -143,9 +143,76 @@ await expect(page.locator('.project-item:has-text("Test_Project")')).toBeVisible
 
 ---
 
+### 1.7 Intro 引导页遮挡问题 (v0.10.x)
+
+**问题**: v0.10.x 新增 Intro 引导页，首次访问时显示 5 页引导，遮挡登录表单
+
+**常见原因**:
+- `localStorage.clear()` 清除 `tracker_intro_seen` 标志
+- 每次测试都弹出引导页遮挡 UI
+
+**解决方案 - beforeEach 统一处理**:
+```typescript
+test.beforeEach(async ({ page }) => {
+  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+
+  // 处理引导页（v0.10.x 新增）
+  const introBtn = page.locator('.intro-cta-btn');
+  if (await introBtn.isVisible().catch(() => false)) {
+    await introBtn.click();
+    await page.waitForTimeout(500);
+  }
+});
+```
+
+**安全检查方式**:
+```typescript
+// 使用 catch(() => false) 避免元素不存在时抛出异常
+if (await page.locator('.intro-cta-btn').isVisible().catch(() => false)) {
+  await page.locator('.intro-cta-btn').click();
+  await page.waitForTimeout(500);
+}
+```
+
 ---
 
-### 1.4 选择器混淆问题
+### 1.8 changePasswordModal 密码修改模态框问题 (v0.10.x)
+
+**问题**: admin 首次登录时弹出密码修改模态框，遮挡页面
+
+**常见原因**:
+- 首次以 admin 登录需要修改密码
+- 测试未处理该模态框导致后续操作超时
+
+**解决方案 - loginAsAdmin 函数添加处理**:
+```typescript
+async function loginAsAdmin(page: any) {
+  await page.fill('#loginUsername', 'admin');
+  await page.fill('#loginPassword', 'admin123');
+  await page.click('button.login-btn');
+  await page.waitForTimeout(1500);
+
+  // 处理首次登录密码修改模态框（v0.10.x 新增）
+  const changePwdModal = page.locator('#changePasswordModal');
+  if (await changePwdModal.isVisible().catch(() => false)) {
+    await page.fill('#newPassword', 'admin123');
+    await page.fill('#confirmPassword', 'admin123');
+    await page.click('#changePasswordModal button.btn-primary');
+    await page.waitForSelector('#changePasswordModal', { state: 'hidden', timeout: 10000 });
+    await page.waitForTimeout(1000);
+  }
+
+  // 等待项目选择器加载
+  await page.waitForFunction(() => {
+    const selector = document.getElementById('projectSelector');
+    return selector && selector.options.length > 1;
+  }, { timeout: 15000 });
+}
+```
+
+---
+
+### 1.9 选择器混淆问题
 
 **问题**: 测试找不到元素或点击错误的元素
 

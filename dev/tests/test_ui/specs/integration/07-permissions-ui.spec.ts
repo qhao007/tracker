@@ -18,6 +18,13 @@ test.describe('Integration - UI 权限控制', () => {
   test.beforeEach(async ({ page }) => {
     // 刷新页面确保干净状态
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+
+    // 处理引导页（v0.10.x 新增）
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
   });
 
   // ========== PERM-UI-001: 未登录不显示项目列表 ==========
