@@ -30,15 +30,41 @@ test.describe('Integration - 帮助手册', () => {
       localStorage.clear();
       sessionStorage.clear();
     });
+
+    // 导航到首页并处理引导页（v0.10.x 新增）
+    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
   });
 
   // ========== HELP-001: 帮助按钮在 Header 显示 ==========
   test('HELP-001: 帮助按钮在 Header 显示', async ({ page }) => {
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    await page.waitForLoadState('domcontentloaded');
+
+    // 处理引导页（v0.10.x 新增）
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
+
     await page.fill('#loginUsername', 'admin');
     await page.fill('#loginPassword', 'admin123');
     await page.click('button.login-btn');
     await page.waitForTimeout(1500);
+
+    // 处理首次登录密码修改模态框（v0.10.x 新增）
+    const changePwdModal = page.locator('#changePasswordModal');
+    if (await changePwdModal.isVisible().catch(() => false)) {
+      await page.fill('#newPassword', 'admin123');
+      await page.fill('#confirmPassword', 'admin123');
+      await page.click('#changePasswordModal button.btn-primary');
+      await page.waitForSelector('#changePasswordModal', { state: 'hidden', timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(1000);
+    }
 
     // 验证帮助按钮存在
     const helpBtn = page.locator('a[href="/manual"], button:has-text("帮助"), a:has-text("帮助")');
@@ -86,11 +112,11 @@ test.describe('Integration - 帮助手册', () => {
 
   // ========== HELP-004: 手册页面标题验证 ==========
   test('HELP-004: 手册页面标题验证', async ({ page }) => {
-    await page.goto(`${BASE_URL}/manual`, { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(2000);
+    await page.goto(`${BASE_URL}/manual`, { waitUntil: 'commit' });
+    await page.waitForTimeout(3000);
 
-    // 验证页面标题包含"用户手册" - 使用 first() 避免 strict mode
-    const title = page.locator('h1').first();
+    // 验证页面标题包含"用户手册" - 使用 .header h1 定位header中的标题，避免与manual-content中的h1混淆
+    const title = page.locator('.header h1');
     await expect(title).toBeVisible();
     await expect(title).toContainText('用户手册');
   });
@@ -134,11 +160,29 @@ test.describe('Integration - 帮助手册', () => {
 
   // ========== HELP-007: 帮助按钮在新标签页打开 ==========
   test('HELP-007: 帮助按钮在新标签页打开', async ({ page }) => {
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    await page.waitForLoadState('domcontentloaded');
+
+    // 处理引导页（v0.10.x 新增）
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
+
     await page.fill('#loginUsername', 'admin');
     await page.fill('#loginPassword', 'admin123');
     await page.click('button.login-btn');
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(1500);
+
+    // 处理首次登录密码修改模态框（v0.10.x 新增）
+    const changePwdModal = page.locator('#changePasswordModal');
+    if (await changePwdModal.isVisible().catch(() => false)) {
+      await page.fill('#newPassword', 'admin123');
+      await page.fill('#confirmPassword', 'admin123');
+      await page.click('#changePasswordModal button.btn-primary');
+      await page.waitForSelector('#changePasswordModal', { state: 'hidden', timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(1000);
+    }
 
     // 获取当前标签页数量
     const initialPages = page.context().pages().length;
@@ -172,12 +216,12 @@ test.describe('Integration - 帮助手册', () => {
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
 
-    // 直接访问手册页面
-    await page.goto(`${BASE_URL}/manual`, { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(2000);
+    // 直接访问手册页面 - 使用 commit 避免等待外部 CDN 资源
+    await page.goto(`${BASE_URL}/manual`, { waitUntil: 'commit' });
+    await page.waitForTimeout(3000);
 
-    // 验证手册页面正常加载 - 使用 first() 避免 strict mode
-    const title = page.locator('h1').first();
+    // 验证手册页面正常加载 - 使用 .header h1 定位header中的标题，避免与manual-content中的h1混淆
+    const title = page.locator('.header h1');
     await expect(title).toBeVisible();
     await expect(title).toContainText('用户手册');
   });

@@ -30,6 +30,14 @@ test.describe('实际曲线与快照 (v0.8.2)', () => {
       localStorage.clear();
       sessionStorage.clear();
     });
+
+    // 导航到首页并处理引导页（v0.10.x 新增）
+    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
   });
 
   // 等待 Chart.js 加载完成（CDN + Fallback 方案）
@@ -40,6 +48,14 @@ test.describe('实际曲线与快照 (v0.8.2)', () => {
   // 登录辅助函数
   async function loginAs(page: any, username: string, password: string) {
     await page.goto('http://localhost:8081', { waitUntil: 'domcontentloaded' });
+
+    // 处理引导页（v0.10.x 新增）
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
+
     // 清除旧的项目选择
     await page.addInitScript(() => {
       localStorage.removeItem('tracker_last_project_id');
@@ -75,6 +91,18 @@ test.describe('实际曲线与快照 (v0.8.2)', () => {
     await page.fill('#loginUsername', username);
     await page.fill('#loginPassword', password);
     await page.click('button.login-btn');
+    await page.waitForTimeout(1500);
+
+    // 处理首次登录密码修改模态框（v0.10.x 新增）
+    const changePwdModal = page.locator('#changePasswordModal');
+    if (await changePwdModal.isVisible().catch(() => false)) {
+      await page.fill('#newPassword', 'admin123');
+      await page.fill('#confirmPassword', 'admin123');
+      await page.click('#changePasswordModal button.btn-primary');
+      await page.waitForSelector('#changePasswordModal', { state: 'hidden', timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(1000);
+    }
+
     // 等待项目选项加载完成（至少有一个非空选项）
     await page.waitForFunction(() => {
       const selector = document.getElementById('projectSelector');
@@ -157,6 +185,14 @@ test.describe('实际曲线与快照 (v0.8.2)', () => {
   test('UI-ACT-012: guest 看不到刷新按钮', async ({ page }) => {
     // 使用 guest 账户测试（非 admin 角色看不到快照按钮）
     await page.goto('http://localhost:8081', { waitUntil: 'domcontentloaded' });
+
+    // 处理引导页（v0.10.x 新增）
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
+
     // 使用 guest 登录按钮（guest 没有密码）
     await page.click('#guestLoginBtn');
     // 等待登录成功并等待覆盖层消失

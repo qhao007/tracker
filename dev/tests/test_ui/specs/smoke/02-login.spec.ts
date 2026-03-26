@@ -14,9 +14,20 @@ const BASE_URL = 'http://localhost:8081';
 
 test.describe('Smoke - 认证与权限', () => {
 
+  // ========== 每个测试前处理引导页 ==========
+  test.beforeEach(async ({ page }) => {
+    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    // 处理引导页（v0.10.x 新增）
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
+  });
+
   // ========== 登录辅助函数 ==========
   async function loginAs(page: any, username: string, password: string) {
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    // beforeEach 已经处理了引导页
     await page.fill('#loginUsername', username);
     await page.fill('#loginPassword', password);
     await page.click('button.login-btn');

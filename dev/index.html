@@ -2849,7 +2849,7 @@
             e.preventDefault();
             const id = document.getElementById('cpId').value;
             const data = { project_id: currentProject.id, priority: document.getElementById('cpPriority').value, feature: document.getElementById('cpFeature').value, sub_feature: document.getElementById('cpSubFeature').value, cover_point: document.getElementById('cpCoverPoint').value, cover_point_details: document.getElementById('cpDetails').value, comments: document.getElementById('cpComments').value };
-            try { const res = await fetch(`/api/cp${id ? '/'+id : ''}`, { method: id ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data), credentials: 'include' }); const result = await res.json(); if (result.success) { closeModal('cpModal'); await Promise.all([loadCP(), loadStats()]); } else { alert(result.error || result.message || '保存失败'); } } catch (err) { alert('保存失败: ' + err); }
+            try { const res = await fetch(`/api/cp${id ? '/'+id : ''}`, { method: id ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data), credentials: 'include' }); const result = await res.json(); if (result.success) { closeModal('cpModal'); await Promise.all([loadCP(), loadStats()]); renderCP(); } else { alert(result.error || result.message || '保存失败'); } } catch (err) { alert('保存失败: ' + err); }
         }
 
         /**
@@ -2883,6 +2883,7 @@
                     return;
                 }
                 await loadCP();
+                renderCP();
             } catch (e) { alert('删除失败'); }
         }
 
@@ -2903,6 +2904,7 @@
                     return;
                 }
                 await Promise.all([loadTC(), loadStats()]);
+                renderTC();
             } catch (e) { alert('删除失败'); }
         }
 

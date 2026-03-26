@@ -368,6 +368,38 @@ export default defineConfig({
 });
 ```
 
+### 3.3 沙箱环境配置 (v0.10.x 更新)
+
+在沙箱环境中运行 Playwright 需要特殊配置：
+
+**问题**:
+- `/root` 目录无写权限导致 glib/GIO 配置失败
+- 浏览器启动超时或挂起
+
+**解决方案 - playwright.config.ts**:
+```typescript
+launchOptions: {
+  env: {
+    HOME: process.env.HOME || '/home/hqi',  // 使用当前用户目录
+    XDG_RUNTIME_DIR: '/tmp',
+    MOZ_ENABLE_WAYLAND: '0',
+  },
+},
+```
+
+**环境变量说明**:
+
+| 变量 | 说明 | 推荐值 |
+|------|------|--------|
+| `HOME` | 用户主目录 | `process.env.HOME` |
+| `XDG_RUNTIME_DIR` | 运行时目录 | `/tmp` |
+| `PLAYWRIGHT_BROWSERS_PATH` | 浏览器安装路径 | `/tmp/.playwright` |
+
+**运行命令**:
+```bash
+PLAYWRIGHT_BROWSERS_PATH=/tmp/.playwright HOME=/home/hqi XDG_RUNTIME_DIR=/tmp npx playwright test --project=firefox
+```
+
 ---
 
 ## 4. 内存受限环境优化策略

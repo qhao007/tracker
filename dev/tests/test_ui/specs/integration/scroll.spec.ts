@@ -12,8 +12,18 @@ const BASE_URL = 'http://localhost:8081';
 
 test.describe('Scroll Fixed Height', () => {
 
+  test.beforeEach(async ({ page }) => {
+    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+
+    // 处理引导页（v0.10.x 新增）
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
+  });
+
   test('test_height_fixed', async ({ page }) => {
-    await page.goto(BASE_URL);
     await page.waitForLoadState('domcontentloaded');
 
     // Use guest login (simpler, no password)

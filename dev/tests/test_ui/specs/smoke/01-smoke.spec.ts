@@ -14,13 +14,35 @@ const BASE_URL = 'http://localhost:8081';
 
 test.describe('Smoke - 核心功能', () => {
 
+  // ========== 每个测试前处理引导页 ==========
+  test.beforeEach(async ({ page }) => {
+    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    // 处理引导页（v0.10.x 新增）
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
+  });
+
   // ========== 登录辅助函数 ==========
   async function loginAsAdmin(page: any) {
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    // beforeEach 已经处理了引导页，直接登录
     await page.fill('#loginUsername', 'admin');
     await page.fill('#loginPassword', 'admin123');
     await page.click('button.login-btn');
     await page.waitForTimeout(1500);
+
+    // 处理首次登录密码修改模态框（v0.10.x 新增）
+    const changePwdModal = page.locator('#changePasswordModal');
+    if (await changePwdModal.isVisible().catch(() => false)) {
+      await page.fill('#newPassword', 'admin123');
+      await page.fill('#confirmPassword', 'admin123');
+      await page.click('#changePasswordModal button.btn-primary');
+      await page.waitForSelector('#changePasswordModal', { state: 'hidden', timeout: 10000 });
+      await page.waitForTimeout(1000);
+    }
+
     // 等待项目选择器加载
     await page.waitForFunction(() => {
       const selector = document.getElementById('projectSelector');
@@ -37,7 +59,7 @@ test.describe('Smoke - 核心功能', () => {
 
   // ========== SMOKE-001: 页面加载 ==========
   test('SMOKE-001: 页面加载', async ({ page }) => {
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    // beforeEach 已经 goto 并处理引导页
 
     // 验证页面标题
     await expect(page).toHaveTitle(/Tracker|芯片验证/);
@@ -50,7 +72,7 @@ test.describe('Smoke - 核心功能', () => {
 
   // ========== SMOKE-002: admin 登录成功 ==========
   test('SMOKE-002: admin 登录成功', async ({ page }) => {
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    // beforeEach 已经处理了引导页
     await page.fill('#loginUsername', 'admin');
     await page.fill('#loginPassword', 'admin123');
     await page.click('button.login-btn');
@@ -70,7 +92,7 @@ test.describe('Smoke - 核心功能', () => {
 
   // ========== SMOKE-003: guest 登录成功 ==========
   test('SMOKE-003: guest 登录成功', async ({ page }) => {
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    // beforeEach 已经处理了引导页
     // 使用 guest 登录按钮（guest 没有密码）
     await page.click('#guestLoginBtn');
 
@@ -86,7 +108,7 @@ test.describe('Smoke - 核心功能', () => {
 
   // ========== SMOKE-004: 错误密码提示 ==========
   test('SMOKE-004: 错误密码提示', async ({ page }) => {
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    // beforeEach 已经处理了引导页
     await page.fill('#loginUsername', 'admin');
     await page.fill('#loginPassword', 'wrongpassword');
     await page.click('button.login-btn');

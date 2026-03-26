@@ -16,11 +16,18 @@ const BASE_URL = 'http://localhost:8081';
 test.describe('过滤功能测试', () => {
 
   /**
-   * 登录辅助函数
+   * 登录辅助函数 - v0.10.x 需要处理引导页和密码修改模态框
    */
   async function loginAsAdmin(page: any) {
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
+
+    // 处理引导页（v0.10.x 新增）
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
 
     // 检查是否需要登录
     const needsLogin = await page.locator('#loginForm').isVisible().catch(() => false);
@@ -31,16 +38,14 @@ test.describe('过滤功能测试', () => {
       await page.waitForTimeout(1500);
     }
 
-    // 检查是否需要强制修改密码
-    const passwordModal = page.locator('#changePasswordModal');
-    const isPasswordModalVisible = await passwordModal.isVisible().catch(() => false);
-
-    if (isPasswordModalVisible) {
-      // 需要修改密码，填写新密码
+    // 处理首次登录密码修改模态框（v0.10.x 新增）
+    const changePwdModal = page.locator('#changePasswordModal');
+    if (await changePwdModal.isVisible().catch(() => false)) {
       await page.fill('#newPassword', 'admin123');
       await page.fill('#confirmPassword', 'admin123');
-      await page.click('#changePasswordModal button:has-text("确认修改")');
-      await page.waitForTimeout(2000);
+      await page.click('#changePasswordModal button.btn-primary');
+      await page.waitForSelector('#changePasswordModal', { state: 'hidden', timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(1000);
     }
 
     await page.waitForSelector('#projectSelector:not([disabled])', { timeout: 10000 });

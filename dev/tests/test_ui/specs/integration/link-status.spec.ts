@@ -18,20 +18,17 @@ const BASE_URL = 'http://localhost:8081';
 test.describe('关联状态可视化测试', () => {
 
   /**
-   * 登录辅助函数
+   * 登录辅助函数 - v0.10.x 需要处理引导页和密码修改模态框
    */
   async function loginAsAdmin(page: any) {
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
 
-    // 首先检查是否有密码修改弹窗（可能是之前的会话残留）
-    const passwordModal = page.locator('#changePasswordModal');
-    let isPasswordModalVisible = await passwordModal.isVisible().catch(() => false);
-
-    if (isPasswordModalVisible) {
-      // 关闭密码弹窗，然后重新登录
-      await page.reload({ waitUntil: 'domcontentloaded' });
-      await page.waitForLoadState('domcontentloaded');
+    // 处理引导页（v0.10.x 新增）
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
     }
 
     // 检查是否需要登录
@@ -40,21 +37,17 @@ test.describe('关联状态可视化测试', () => {
       await page.fill('#loginUsername', 'admin');
       await page.fill('#loginPassword', 'admin123');
       await page.click('#loginForm button[type="submit"]');
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(1500);
     }
 
-    // 再次检查是否需要强制修改密码
-    isPasswordModalVisible = await passwordModal.isVisible().catch(() => false);
-
-    if (isPasswordModalVisible) {
-      // 需要修改密码，填写新密码
-      await page.fill('#newPassword', 'admin456');
-      await page.fill('#confirmPassword', 'admin456');
-      await page.click('#changePasswordModal button:has-text("确认修改")');
-      await page.waitForTimeout(2000);
-
-      // 等待密码弹窗关闭
-      await passwordModal.waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
+    // 处理首次登录密码修改模态框（v0.10.x 新增）
+    const changePwdModal = page.locator('#changePasswordModal');
+    if (await changePwdModal.isVisible().catch(() => false)) {
+      await page.fill('#newPassword', 'admin123');
+      await page.fill('#confirmPassword', 'admin123');
+      await page.click('#changePasswordModal button.btn-primary');
+      await page.waitForSelector('#changePasswordModal', { state: 'hidden', timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(1000);
     }
 
     await page.waitForSelector('#projectSelector:not([disabled])', { timeout: 30000 });
@@ -219,7 +212,7 @@ test.describe('关联状态可视化测试', () => {
     await page.click('#cpModal button[type="submit"]');
     await page.waitForTimeout(2000);
 
-    // 创建 TC
+    // 创建 TC 并关联 CP（在 TC Modal 中直接勾选 CP）
     await page.click('button.tab:has-text("Test Cases")');
     await page.waitForSelector('#tcPanel', { state: 'visible', timeout: 10000 });
     await page.click('text=+ 添加 TC');
@@ -227,49 +220,28 @@ test.describe('关联状态可视化测试', () => {
     await page.fill('#tcTestbench', 'tb_link');
     await page.fill('#tcTestName', tcName);
     await page.fill('#tcScenario', '用于关联测试');
-    await page.click('#tcModal button[type="submit"]');
-    await page.waitForTimeout(2000);
 
-    // 获取 CP 和 TC 的 ID
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('#projectSelector', { timeout: 10000 });
-    await page.waitForTimeout(500);
+    // 在 TC Modal 中勾选要关联的 CP
+    // 注意：CP 复选框在 TC Modal 的 #cpCheckboxes 容器中
+    // HTML 结构：<div class="checkbox-item"><input ...><label for="cp_${id}">${cpName}</label></div>
+    await page.waitForSelector('#cpCheckboxes', { state: 'visible', timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(500); // 等待 CP 列表渲染
 
-    const options = await page.locator('#projectSelector option').count();
-    if (options > 0) {
-      const lastOptionValue = await page.locator('#projectSelector option').nth(options - 1).getAttribute('value');
-      await page.selectOption('#projectSelector', lastOptionValue);
-    }
-    await page.waitForTimeout(500);
-
-    // 切换到 TC 面板，找到 TC 并关联 CP
-    await page.click('button.tab:has-text("Test Cases")');
-    await page.waitForSelector('#tcPanel', { state: 'visible', timeout: 10000 });
-    await page.waitForTimeout(1000);
-
-    const tcRow = page.locator(`#tcList tr:has-text("${tcName}")`).first();
-    await expect(tcRow).toBeVisible({ timeout: 10000 });
-
-    // 点击 TC 的关联按钮
-    const linkBtn = tcRow.locator('button:has-text("关联")');
-    if (await linkBtn.count() > 0) {
-      await linkBtn.click();
-      await page.waitForTimeout(1000);
-
-      // 在关联弹窗中选择 CP
-      const cpCheckbox = page.locator(`.cp-select-list input[type="checkbox"]:has-text("${cpName}")`);
-      if (await cpCheckbox.count() > 0) {
-        await cpCheckbox.check();
-        await page.waitForTimeout(500);
-
-        // 点击确认关联按钮
-        const confirmBtn = page.locator('button:has-text("确认关联")');
-        if (await confirmBtn.count() > 0) {
-          await confirmBtn.click();
-          await page.waitForTimeout(2000);
+    // 通过 label 的 for 属性找到对应的 checkbox
+    const targetLabel = page.locator(`#cpCheckboxes label`).filter({ hasText: cpName });
+    if (await targetLabel.count() > 0) {
+      const forAttr = await targetLabel.getAttribute('for');
+      if (forAttr) {
+        const targetCheckbox = page.locator(`#${forAttr}`);
+        if (await targetCheckbox.count() > 0) {
+          await targetCheckbox.check({ force: true });
+          await page.waitForTimeout(300);
         }
       }
     }
+
+    await page.click('#tcModal button[type="submit"]');
+    await page.waitForTimeout(2000);
 
     // 刷新页面验证
     await page.reload({ waitUntil: 'domcontentloaded' });
@@ -318,7 +290,7 @@ test.describe('关联状态可视化测试', () => {
     await page.click('#cpModal button[type="submit"]');
     await page.waitForTimeout(2000);
 
-    // 创建 TC
+    // 创建 TC 并关联 CP（在 TC Modal 中直接勾选 CP）
     await page.click('button.tab:has-text("Test Cases")');
     await page.waitForSelector('#tcPanel', { state: 'visible', timeout: 10000 });
     await page.click('text=+ 添加 TC');
@@ -326,49 +298,28 @@ test.describe('关联状态可视化测试', () => {
     await page.fill('#tcTestbench', 'tb_linked');
     await page.fill('#tcTestName', tcName);
     await page.fill('#tcScenario', '测试关联TC');
-    await page.click('#tcModal button[type="submit"]');
-    await page.waitForTimeout(2000);
 
-    // 刷新页面
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('#projectSelector', { timeout: 10000 });
-    await page.waitForTimeout(500);
+    // 在 TC Modal 中勾选要关联的 CP
+    // 注意：CP 复选框在 TC Modal 的 #cpCheckboxes 容器中
+    // HTML 结构：<div class="checkbox-item"><input ...><label for="cp_${id}">${cpName}</label></div>
+    await page.waitForSelector('#cpCheckboxes', { state: 'visible', timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(500); // 等待 CP 列表渲染
 
-    const options = await page.locator('#projectSelector option').count();
-    if (options > 0) {
-      const lastOptionValue = await page.locator('#projectSelector option').nth(options - 1).getAttribute('value');
-      await page.selectOption('#projectSelector', lastOptionValue);
-    }
-    await page.waitForTimeout(500);
-
-    // 切换到 TC 面板，找到 TC 并关联 CP
-    await page.click('button.tab:has-text("Test Cases")');
-    await page.waitForSelector('#tcPanel', { state: 'visible', timeout: 10000 });
-    await page.waitForTimeout(1000);
-
-    const tcRow = page.locator(`#tcList tr:has-text("${tcName}")`).first();
-    await expect(tcRow).toBeVisible({ timeout: 10000 });
-
-    // 点击 TC 的关联按钮
-    const linkBtn = tcRow.locator('button:has-text("关联")');
-    if (await linkBtn.count() > 0) {
-      await linkBtn.click();
-      await page.waitForTimeout(1000);
-
-      // 在关联弹窗中选择 CP
-      const cpCheckbox = page.locator(`.cp-select-list input[type="checkbox"]:has-text("${cpName}")`);
-      if (await cpCheckbox.count() > 0) {
-        await cpCheckbox.check();
-        await page.waitForTimeout(500);
-
-        // 点击确认关联按钮
-        const confirmBtn = page.locator('button:has-text("确认关联")');
-        if (await confirmBtn.count() > 0) {
-          await confirmBtn.click();
-          await page.waitForTimeout(2000);
+    // 通过 label 的 for 属性找到对应的 checkbox
+    const targetLabel = page.locator(`#cpCheckboxes label`).filter({ hasText: cpName });
+    if (await targetLabel.count() > 0) {
+      const forAttr = await targetLabel.getAttribute('for');
+      if (forAttr) {
+        const targetCheckbox = page.locator(`#${forAttr}`);
+        if (await targetCheckbox.count() > 0) {
+          await targetCheckbox.check({ force: true });
+          await page.waitForTimeout(300);
         }
       }
     }
+
+    await page.click('#tcModal button[type="submit"]');
+    await page.waitForTimeout(2000);
 
     // 刷新页面验证
     await page.reload({ waitUntil: 'domcontentloaded' });

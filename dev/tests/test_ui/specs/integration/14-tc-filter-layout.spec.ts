@@ -14,15 +14,33 @@ const BASE_URL = 'http://localhost:8081';
 test.describe('TC 过滤布局测试 (UI-COV-004)', () => {
 
   /**
-   * 登录辅助函数
+   * 登录辅助函数 - v0.10.x 需要处理引导页和密码修改模态框
    */
   async function loginAsAdmin(page: any) {
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+
+    // 处理引导页（v0.10.x 新增）
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
 
     // 登录
     await page.fill('#loginUsername', 'admin');
     await page.fill('#loginPassword', 'admin123');
     await page.click('button.login-btn');
+    await page.waitForTimeout(1500);
+
+    // 处理首次登录密码修改模态框（v0.10.x 新增）
+    const changePwdModal = page.locator('#changePasswordModal');
+    if (await changePwdModal.isVisible().catch(() => false)) {
+      await page.fill('#newPassword', 'admin123');
+      await page.fill('#confirmPassword', 'admin123');
+      await page.click('#changePasswordModal button.btn-primary');
+      await page.waitForSelector('#changePasswordModal', { state: 'hidden', timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(1000);
+    }
 
     // 等待项目选择器加载
     await page.waitForFunction(() => {

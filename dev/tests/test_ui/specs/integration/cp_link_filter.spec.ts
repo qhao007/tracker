@@ -25,6 +25,13 @@ test.describe('CP 关联选择与 Priority 过滤测试', () => {
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
 
+    // 处理引导页（v0.10.x 新增）
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
+
     // 检查登录表单
     const needsLogin = await page.locator('#loginForm').isVisible().catch(() => false);
     if (needsLogin) {
