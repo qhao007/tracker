@@ -917,6 +917,7 @@
             <button class="tab active" onclick="switchTab('cp', event)">Cover Points</button>
             <button class="tab" onclick="switchTab('tc', event)">Test Cases</button>
             <button class="tab" onclick="switchTab('progress', event)">Progress Charts</button>
+            <button class="tab" id="fcTab" onclick="switchTab('fc', event)" style="display: none;">FC</button>
         </div>
         <div id="cpPanel">
             <div class="toolbar">
@@ -1013,6 +1014,34 @@
                 </div>
                 <canvas id="progressChart" style="display: none; max-height: 400px;"></canvas>
             </div>
+        </div>
+    </div>
+
+    <!-- FC Panel (v0.11.0) - 仅在 FC-CP 模式下显示 -->
+    <div id="fcPanel" style="display: none;">
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <button class="btn btn-primary" onclick="openFCModal()">+ 添加 FC</button>
+                <button class="btn" onclick="openImportModal('fc')">📥 导入 FC</button>
+                <button class="btn" onclick="exportData('fc')">📤 导出 FC</button>
+                <button class="btn" onclick="openImportModal('fc-cp-assoc')">📥 导入 FC-CP 关联</button>
+                <input type="text" class="search-input" id="fcSearchInput" placeholder="搜索 Bin Name..." onkeyup="filterFC(this.value)">
+                <select id="fcCovergroupFilter" onchange="filterFCByCovergroup()"><option value="">全部 Covergroup</option></select>
+                <select id="fcCoverpointFilter" onchange="filterFCByCoverpoint()"><option value="">全部 Coverpoint</option></select>
+                <select id="fcCoverageTypeFilter" onchange="filterFCByCoverageType()"><option value="">全部 Type</option></select>
+                <button class="btn" onclick="resetFCFilter()" style="padding: 4px 8px; font-size: 12px;">重置</button>
+            </div>
+            <div class="toolbar-right">
+                <span style="color: #666; font-size: 12px;">共 <span id="fcCount">0</span> 条</span>
+                <button class="btn" id="toggleAllFCExpand" onclick="toggleAllFC()" style="padding: 4px 8px; font-size: 12px;">全部展开 ▼</button>
+            </div>
+        </div>
+        <div id="fcContainer" style="padding: 10px; max-height: calc(100vh - 220px); overflow-y: auto;">
+            <div id="fcEmptyState" style="text-align: center; padding: 50px; color: #999;">
+                <p>暂无 Functional Coverage 数据</p>
+                <p style="font-size: 12px;">点击"导入 FC"按钮导入数据</p>
+            </div>
+            <div id="fcList"></div>
         </div>
     </div>
 
@@ -1118,6 +1147,15 @@
                     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
                         <input type="date" class="form-control" id="newProjectStartDate" placeholder="开始日期 *" required>
                         <input type="date" class="form-control" id="newProjectEndDate" placeholder="结束日期 *" required>
+                    </div>
+                    <!-- v0.11.0: Coverage Mode 选择 -->
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: block; margin-bottom: 4px; font-weight: bold; font-size: 12px;">Coverage Mode</label>
+                        <select class="form-control" id="newProjectCoverageMode">
+                            <option value="tc_cp" selected>TC-CP 模式</option>
+                            <option value="fc_cp">FC-CP 模式</option>
+                        </select>
+                        <small style="color: #666; font-size: 11px;">创建后不可更改</small>
                     </div>
                     <div style="margin-bottom: 10px;">
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
@@ -1430,7 +1468,10 @@
             AUTH_LOGIN: `${API_BASE}/auth/login`,
             AUTH_LOGOUT: `${API_BASE}/auth/logout`,
             AUTH_ME: `${API_BASE}/auth/me`,
-            FEEDBACK: `${API_BASE}/feedback`
+            FEEDBACK: `${API_BASE}/feedback`,
+            // FC - v0.11.0
+            FC: `${API_BASE}/fc`,
+            FC_CP_ASSOCIATION: `${API_BASE}/fc-cp-association`
         });
         
         // 全局 fetch 包装，确保所有请求发送 credentials
@@ -1798,6 +1839,7 @@
             if (currentProject) {
                 localStorage.setItem('tracker_last_project_id', projectId);
                 updateProjectSelector();
+                updateFCTabVisibility();  // v0.11.0: 更新 FC Tab 显示状态
                 await loadData();
             }
         }
@@ -1857,7 +1899,213 @@
                 document.getElementById('statCoverage').textContent = stats.coverage;
             } catch (e) { console.error('加载统计失败:', e); }
         }
-        
+
+        // ============ Functional Coverage (FC) - v0.11.0 ============
+        let functionalCoverages = [];
+        let fcExpandedGroups = JSON.parse(localStorage.getItem('tracker_fc_expanded_groups') || '{}');
+        let fcExpandedCoverpoints = JSON.parse(localStorage.getItem('tracker_fc_expanded_coverpoints') || '{}');
+
+        async function loadFC() {
+            if (!currentProject) return;
+            try {
+                const res = await fetch(`${API_ENDPOINTS.FC}?project_id=${currentProject.id}`);
+                functionalCoverages = await res.json();
+                renderFC();
+                // 填充筛选下拉框
+                const covergroups = [...new Set(functionalCoverages.map(fc => fc.covergroup).filter(g => g))];
+                const coverpoints = [...new Set(functionalCoverages.map(fc => fc.coverpoint).filter(p => p))];
+                const covergroupSelect = document.getElementById('fcCovergroupFilter');
+                if (covergroupSelect) {
+                    covergroupSelect.innerHTML = '<option value="">全部 Covergroup</option>' +
+                        covergroups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+                }
+                const coverpointSelect = document.getElementById('fcCoverpointFilter');
+                if (coverpointSelect) {
+                    coverpointSelect.innerHTML = '<option value="">全部 Coverpoint</option>' +
+                        coverpoints.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
+                }
+            } catch (e) { console.error('加载 FC 失败:', e); }
+        }
+
+        function renderFC() {
+            const fcList = document.getElementById('fcList');
+            const fcEmptyState = document.getElementById('fcEmptyState');
+            const fcCount = document.getElementById('fcCount');
+
+            if (!functionalCoverages.length) {
+                fcList.innerHTML = '';
+                fcEmptyState.style.display = 'block';
+                fcCount.textContent = '0';
+                return;
+            }
+
+            fcEmptyState.style.display = 'none';
+            fcCount.textContent = functionalCoverages.length;
+
+            // 应用筛选
+            const covergroupFilter = document.getElementById('fcCovergroupFilter')?.value || '';
+            const coverpointFilter = document.getElementById('fcCoverpointFilter')?.value || '';
+            const coverageTypeFilter = document.getElementById('fcCoverageTypeFilter')?.value || '';
+            const searchFilter = document.getElementById('fcSearchInput')?.value || '';
+
+            let filtered = functionalCoverages;
+            if (covergroupFilter) {
+                filtered = filtered.filter(fc => fc.covergroup === covergroupFilter);
+            }
+            if (coverpointFilter) {
+                filtered = filtered.filter(fc => fc.coverpoint === coverpointFilter);
+            }
+            if (coverageTypeFilter) {
+                filtered = filtered.filter(fc => fc.coverage_type === coverageTypeFilter);
+            }
+            if (searchFilter) {
+                filtered = filtered.filter(fc => fc.bin_name && fc.bin_name.toLowerCase().includes(searchFilter.toLowerCase()));
+            }
+
+            // 按 covergroup 分组
+            const groups = {};
+            filtered.forEach(fc => {
+                const cg = fc.covergroup || 'Unknown';
+                if (!groups[cg]) groups[cg] = {};
+                const cp = fc.coverpoint || 'Unknown';
+                if (!groups[cg][cp]) groups[cg][cp] = [];
+                groups[cg][cp].push(fc);
+            });
+
+            // 渲染
+            let html = '';
+            Object.keys(groups).sort().forEach(covergroup => {
+                const coverpoints = groups[covergroup];
+                const totalBins = Object.values(coverpoints).reduce((sum, bins) => sum + bins.length, 0);
+                const cpCount = Object.keys(coverpoints).length;
+                const isExpanded = fcExpandedGroups[covergroup] !== false; // 默认展开
+
+                html += `<div class="fc-covergroup" style="margin-bottom: 8px; border: 1px solid #ddd; border-radius: 4px; overflow: hidden;">
+                    <div class="fc-covergroup-header" onclick="toggleFCGroup('${escapeHtml(covergroup)}')" style="background: #f5f5f5; padding: 8px 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: bold;">${isExpanded ? '▼' : '▶'} ${escapeHtml(covergroup)} (${cpCount} coverpoints, ${totalBins} bins)</span>
+                    </div>
+                    <div class="fc-covergroup-content" style="display: ${isExpanded ? 'block' : 'none'}; padding: 8px;">
+                        ${Object.keys(coverpoints).sort().map(coverpoint => {
+                            const bins = coverpoints[coverpoint];
+                            const cpIsExpanded = fcExpandedCoverpoints[`${covergroup}|${coverpoint}`] !== false;
+                            return `<div class="fc-coverpoint" style="margin-left: 16px; margin-bottom: 8px;">
+                                <div class="fc-coverpoint-header" onclick="toggleFCCoverpoint('${escapeHtml(covergroup)}', '${escapeHtml(coverpoint)}')" style="cursor: pointer; padding: 4px 8px; background: #eee; border-radius: 3px; display: flex; justify-content: space-between; align-items: center;">
+                                    <span>${cpIsExpanded ? '▼' : '▶'} ${escapeHtml(coverpoint)} (${bins.length} bins)</span>
+                                </div>
+                                <div class="fc-coverpoint-content" style="display: ${cpIsExpanded ? 'block' : 'none'}; padding: 8px 0;">
+                                    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                                        <thead><tr style="background: #fafafa;"><th style="text-align: left; padding: 4px;">Bin Name</th><th style="text-align: left; padding: 4px;">Bin Value</th><th style="text-align: left; padding: 4px;">Type</th><th style="text-align: center; padding: 4px;">Coverage</th><th style="text-align: center; padding: 4px;">Status</th><th style="text-align: left; padding: 4px;">Comments</th></tr></thead>
+                                        <tbody>
+                                            ${bins.map(bin => `
+                                                <tr style="border-bottom: 1px solid #eee;">
+                                                    <td style="padding: 4px;">${escapeHtml(bin.bin_name || '')}</td>
+                                                    <td style="padding: 4px; font-family: monospace;">${escapeHtml(bin.bin_val || '')}</td>
+                                                    <td style="padding: 4px;">${escapeHtml(bin.coverage_type || '')}</td>
+                                                    <td style="padding: 4px; text-align: center;">${(bin.coverage_pct || 0).toFixed(1)}%</td>
+                                                    <td style="padding: 4px; text-align: center;">${getFCStatusIcon(bin.status)}</td>
+                                                    <td style="padding: 4px;">${escapeHtml(bin.comments || '')}</td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>`;
+                        }).join('')}
+                    </div>
+                </div>`;
+            });
+
+            fcList.innerHTML = html;
+        }
+
+        function getFCStatusIcon(status) {
+            switch (status) {
+                case 'ready': return '✅';
+                case 'missing': return '⏳';
+                case 'error': return '❌';
+                default: return '⏳';
+            }
+        }
+
+        function toggleFCGroup(covergroup) {
+            fcExpandedGroups[covergroup] = fcExpandedGroups[covergroup] === false ? true : false;
+            localStorage.setItem('tracker_fc_expanded_groups', JSON.stringify(fcExpandedGroups));
+            renderFC();
+        }
+
+        function toggleFCCoverpoint(covergroup, coverpoint) {
+            const key = `${covergroup}|${coverpoint}`;
+            fcExpandedCoverpoints[key] = fcExpandedCoverpoints[key] === false ? true : false;
+            localStorage.setItem('tracker_fc_expanded_coverpoints', JSON.stringify(fcExpandedCoverpoints));
+            renderFC();
+        }
+
+        function toggleAllFC() {
+            const allExpanded = Object.values(fcExpandedGroups).every(v => v !== false);
+            if (allExpanded) {
+                // 全部折叠
+                fcExpandedGroups = {};
+                fcExpandedCoverpoints = {};
+            } else {
+                // 全部展开
+                fcExpandedGroups = {};
+                fcExpandedCoverpoints = {};
+            }
+            localStorage.setItem('tracker_fc_expanded_groups', JSON.stringify(fcExpandedGroups));
+            localStorage.setItem('tracker_fc_expanded_coverpoints', JSON.stringify(fcExpandedCoverpoints));
+            renderFC();
+            // 更新按钮文字
+            const btn = document.getElementById('toggleAllFCExpand');
+            if (btn) btn.textContent = allExpanded ? '全部折叠 ▲' : '全部展开 ▼';
+        }
+
+        function filterFC(searchValue) {
+            renderFC();
+        }
+
+        function filterFCByCovergroup() {
+            renderFC();
+        }
+
+        function filterFCByCoverpoint() {
+            renderFC();
+        }
+
+        function filterFCByCoverageType() {
+            renderFC();
+        }
+
+        function resetFCFilter() {
+            document.getElementById('fcCovergroupFilter').value = '';
+            document.getElementById('fcCoverpointFilter').value = '';
+            document.getElementById('fcCoverageTypeFilter').value = '';
+            document.getElementById('fcSearchInput').value = '';
+            renderFC();
+        }
+
+        function openFCModal() {
+            alert('FC 添加功能开发中');
+        }
+
+        // 更新 FC Tab 显示状态
+        function updateFCTabVisibility() {
+            const fcTab = document.getElementById('fcTab');
+            if (!fcTab) return;
+
+            if (currentProject && currentProject.coverage_mode === 'fc_cp') {
+                fcTab.style.display = '';
+            } else {
+                fcTab.style.display = 'none';
+                // 如果当前在 FC Tab，切换到 CP Tab
+                if (currentTab === 'fc') {
+                    switchTab('cp', null);
+                    // 取消 FC Tab 的 active 状态
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    document.querySelector('.tab').classList.add('active');
+                }
+            }
+        }
+
         // Progress Charts (v0.8.0)
         let progressChart = null;
         let currentProgressData = null;
@@ -2558,7 +2806,9 @@
             document.getElementById('cpPanel').style.display = tab === 'cp' ? 'block' : 'none';
             document.getElementById('tcPanel').style.display = tab === 'tc' ? 'block' : 'none';
             document.getElementById('progressPanel').style.display = tab === 'progress' ? 'block' : 'none';
+            document.getElementById('fcPanel').style.display = tab === 'fc' ? 'block' : 'none';
             if (tab === 'progress') loadProgressChart();
+            if (tab === 'fc') loadFC();
         }
         // 切换版本对话框中的标签页
         function switchVersionTab(tab, event) {
@@ -3193,12 +3443,13 @@
             const name = document.getElementById('newProjectName').value.trim();
             const startDate = document.getElementById('newProjectStartDate').value;
             const endDate = document.getElementById('newProjectEndDate').value;
+            const coverageMode = document.getElementById('newProjectCoverageMode').value;
             const createTestUser = document.getElementById('createTestUser').checked;
-            
+
             if (!name) { alert('请输入项目名称'); return; }
             if (!startDate) { alert('请输入开始日期'); return; }
             if (!endDate) { alert('请输入结束日期'); return; }
-            
+
             try {
                 const res = await fetch(API_ENDPOINTS.PROJECTS, {
                     method: 'POST',
@@ -3207,6 +3458,7 @@
                         name,
                         start_date: startDate,
                         end_date: endDate,
+                        coverage_mode: coverageMode,  // v0.11.0
                         create_test_user: createTestUser
                     })
                 });

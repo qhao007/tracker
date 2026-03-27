@@ -530,9 +530,9 @@ def main():
     if len(sys.argv) < 2:
         print(__doc__)
         return 1
-    
+
     command = sys.argv[1].lower()
-    
+
     if command == 'sync':
         return 0 if sync() else 1
     elif command == 'clean':
@@ -543,10 +543,89 @@ def main():
         return 0 if test_api() else 1
     elif command == 'all':
         return all_tests()
+    elif command == 'migrate':
+        return run_migration()
     else:
         print(f"未知命令: {command}")
         print(__doc__)
         return 1
+
+
+def run_migration():
+    """执行数据库迁移"""
+    import argparse
+
+    parser = argparse.ArgumentParser(description='执行数据库迁移')
+    parser.add_argument('--version', type=str, help='目标版本号 (如 v0.11.0)')
+    args = parser.parse_args(sys.argv[2:])  # 跳过 'migrate' 命令本身
+
+    version = args.version
+
+    print_step(f"执行数据库迁移 (版本: {version or '最新'})")
+
+    # 构建迁移脚本路径
+    migrations_dir = Path(__file__).parent / 'migrations'
+
+    if not migrations_dir.exists():
+        print_error("migrations 目录不存在")
+        return 1
+
+    # 查找对应的迁移脚本
+    if version:
+        # 特定版本迁移
+        migration_script = migrations_dir / f'v{version.replace(".", "_")}_migration.py'
+        if not migration_script.exists():
+            # 尝试另一种命名格式
+            migration_script = migrations_dir / f'migrate_{version}.py'
+        if not migration_script.exists():
+            print_error(f"找不到版本 {version} 的迁移脚本")
+            return 1
+
+        print(f"执行迁移: {migration_script.name}")
+        try:
+            result = subprocess.run(
+                [sys.executable, str(migration_script)],
+                capture_output=True,
+                text=True,
+                cwd=str(Path(__file__).parent.parent)
+            )
+            print(result.stdout)
+            if result.returncode != 0:
+                print_error(f"迁移失败: {result.stderr}")
+                return 1
+            print_ok(f"版本 {version} 迁移完成")
+            return 0
+        except Exception as e:
+            print_error(f"执行迁移脚本失败: {e}")
+            return 1
+    else:
+        # 执行所有迁移脚本（按版本顺序）
+        migration_scripts = sorted(migrations_dir.glob('*.py'))
+        if not migration_scripts:
+            print_warn("没有找到迁移脚本")
+            return 0
+
+        for script in migration_scripts:
+            if script.name == '__init__.py':
+                continue
+            print(f"\n执行迁移: {script.name}")
+            try:
+                result = subprocess.run(
+                    [sys.executable, str(script)],
+                    capture_output=True,
+                    text=True,
+                    cwd=str(Path(__file__).parent.parent)
+                )
+                print(result.stdout)
+                if result.returncode != 0:
+                    print_error(f"迁移失败: {result.stderr}")
+                    return 1
+            except Exception as e:
+                print_error(f"执行迁移脚本失败: {e}")
+                return 1
+
+        print_ok("所有迁移完成")
+        return 0
 
 
 if __name__ == '__main__':

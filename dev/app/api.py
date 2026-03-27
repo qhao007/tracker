@@ -161,6 +161,49 @@ def init_project_db(project_name):
         )
     """)
 
+    # 创建 Functional Coverage 表 (v0.11.0)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS functional_coverage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER,
+            covergroup TEXT NOT NULL,
+            coverpoint TEXT NOT NULL,
+            coverage_type TEXT NOT NULL,
+            bin_name TEXT NOT NULL,
+            bin_val TEXT,
+            comments TEXT,
+            coverage_pct REAL DEFAULT 0.0,
+            status TEXT DEFAULT 'missing',
+            owner TEXT,
+            created_by TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now')),
+            UNIQUE (project_id, covergroup, coverpoint, bin_name)
+        )
+    """)
+
+    # 创建 FC-CP 关联表 (v0.11.0)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS fc_cp_association (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER,
+            cp_id INTEGER,
+            fc_id INTEGER,
+            created_by TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            UNIQUE (cp_id, fc_id),
+            FOREIGN KEY (cp_id) REFERENCES cover_point(id),
+            FOREIGN KEY (fc_id) REFERENCES functional_coverage(id)
+        )
+    """)
+
+    # 创建索引 (v0.11.0)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_fc_covergroup ON functional_coverage(covergroup)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_fc_coverpoint ON functional_coverage(coverpoint)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_fc_coverage_type ON functional_coverage(coverage_type)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_fc_cp_assoc_cp ON fc_cp_association(cp_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_fc_cp_assoc_fc ON fc_cp_association(fc_id)")
+
     conn.commit()
     conn.close()
 
@@ -241,6 +284,7 @@ def get_projects():
                 "version": p.get("version", "stable"),
                 "start_date": p.get("start_date", ""),
                 "end_date": p.get("end_date", ""),
+                "coverage_mode": p.get("coverage_mode", "tc_cp"),  # v0.11.0
                 "cp_count": cp_count,
                 "tc_count": tc_count,
             }
@@ -289,6 +333,7 @@ def get_project(project_id):
             "version": project.get("version", "stable"),
             "start_date": project.get("start_date", ""),
             "end_date": project.get("end_date", ""),
+            "coverage_mode": project.get("coverage_mode", "tc_cp"),  # v0.11.0
             "cp_count": cp_count,
             "tc_count": tc_count,
             "pass_count": pass_count,
@@ -306,6 +351,8 @@ def create_project():
     start_date = data.get("start_date", "").strip()
     end_date = data.get("end_date", "").strip()
     create_test_user = data.get("create_test_user", False)  # v0.8.3: 自动创建测试用户
+    # v0.11.0: coverage_mode - 'tc_cp' 或 'fc_cp'
+    coverage_mode = data.get("coverage_mode", "tc_cp").strip()
 
     if not name:
         return jsonify({"error": "项目名称不能为空"}), 400
@@ -342,6 +389,7 @@ def create_project():
         "version": "stable",
         "start_date": start_date,
         "end_date": end_date,
+        "coverage_mode": coverage_mode,  # v0.11.0
     }
     projects.append(project)
     save_projects(projects)
@@ -2447,6 +2495,477 @@ def batch_update_cp_priority():
     return jsonify({"success": success_count, "failed": len(cp_ids) - success_count})
 
 
+# ============ Functional Coverage (FC) API - v0.11.0 ============
+
+
+@api.route("/api/fc", methods=["GET"])
+@login_required
+def get_fc_list():
+    """获取 FC 列表（支持筛选）"""
+    project_id = request.args.get("project_id", type=int)
+    covergroup_filter = request.args.get("covergroup")
+    coverpoint_filter = request.args.get("coverpoint")
+    coverage_type_filter = request.args.get("coverage_type")
+    bin_name_search = request.args.get("bin_name")  # 模糊搜索
+
+    if not project_id:
+        return jsonify([])
+
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+
+    if not project:
+        return jsonify([])
+
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
+
+    # 构建过滤查询
+    query = "SELECT * FROM functional_coverage WHERE 1=1"
+    params = []
+
+    if covergroup_filter:
+        groups = [g.strip() for g in covergroup_filter.split(",")]
+        placeholders = ",".join(["?"] * len(groups))
+        query += f" AND covergroup IN ({placeholders})"
+        params.extend(groups)
+
+    if coverpoint_filter:
+        points = [p.strip() for p in coverpoint_filter.split(",")]
+        placeholders = ",".join(["?"] * len(points))
+        query += f" AND coverpoint IN ({placeholders})"
+        params.extend(points)
+
+    if coverage_type_filter:
+        types = [t.strip() for t in coverage_type_filter.split(",")]
+        placeholders = ",".join(["?"] * len(types))
+        query += f" AND coverage_type IN ({placeholders})"
+        params.extend(types)
+
+    if bin_name_search:
+        query += " AND bin_name LIKE ?"
+        params.append(f"%{bin_name_search}%")
+
+    query += " ORDER BY covergroup, coverpoint, bin_name"
+    cursor.execute(query, params)
+
+    fc_list = [dict(row) for row in cursor.fetchall()]
+    return jsonify(fc_list)
+
+
+@api.route("/api/fc/import", methods=["POST"])
+@login_required
+def import_fc():
+    """导入 FC (CSV)"""
+    project_id = request.args.get("project_id", type=int)
+
+    if not project_id:
+        return jsonify({"error": "缺少 project_id"}), 400
+
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+
+    if not project:
+        return jsonify({"error": "项目不存在"}), 404
+
+    # 获取 CSV 数据
+    csv_data = request.json.get("csv_data", [])
+    if not csv_data or len(csv_data) < 2:
+        return jsonify({"error": "CSV 数据为空或格式错误"}), 400
+
+    headers = csv_data[0]
+    header_map = {}
+    for idx, header in enumerate(headers):
+        if header:
+            header_map[header.strip()] = idx
+
+    # 检查必填字段
+    required_fields = ["Covergroup", "Coverpoint", "Type", "Bin_Name"]
+    for field in required_fields:
+        if field not in header_map:
+            return jsonify({"error": f"缺少必填字段: {field}"}), 400
+
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
+
+    imported = 0
+    errors = []
+    created_by = session.get(SESSION_USERNAME_KEY, "unknown")
+
+    for row_idx, row in enumerate(csv_data[1:], start=2):
+        try:
+            covergroup = (
+                row[header_map.get("Covergroup", 0)]
+                if header_map.get("Covergroup", 0) < len(row)
+                else None
+            )
+            coverpoint = (
+                row[header_map.get("Coverpoint", 1)]
+                if header_map.get("Coverpoint", 1) < len(row)
+                else None
+            )
+            coverage_type = (
+                row[header_map.get("Type", 2)]
+                if header_map.get("Type", 2) < len(row)
+                else None
+            )
+            bin_name = (
+                row[header_map.get("Bin_Name", 3)]
+                if header_map.get("Bin_Name", 3) < len(row)
+                else None
+            )
+
+            if not all([covergroup, coverpoint, coverage_type, bin_name]):
+                errors.append(f"第{row_idx}行: 必填字段缺失")
+                continue
+
+            # 检查重名 (project_id + covergroup + coverpoint + bin_name)
+            cursor.execute(
+                "SELECT id FROM functional_coverage WHERE project_id=? AND covergroup=? AND coverpoint=? AND bin_name=?",
+                (project["id"], covergroup, coverpoint, bin_name)
+            )
+            if cursor.fetchone():
+                errors.append(f'第{row_idx}行: FC "{covergroup}/{coverpoint}/{bin_name}" 已存在')
+                continue
+
+            # 获取可选字段
+            bin_val = (
+                row[header_map.get("Bin_Value", 4)]
+                if header_map.get("Bin_Value", 4) < len(row)
+                else None
+            )
+            coverage_pct = 0.0
+            if header_map.get("Coverage_Pct", 5) < len(row):
+                try:
+                    coverage_pct = float(row[header_map.get("Coverage_Pct", 5)] or 0)
+                except (ValueError, TypeError):
+                    coverage_pct = 0.0
+            status = (
+                row[header_map.get("Status", 6)]
+                if header_map.get("Status", 6) < len(row)
+                else "missing"
+            )
+            comments = (
+                row[header_map.get("Comments", 7)]
+                if header_map.get("Comments", 7) < len(row)
+                else None
+            )
+
+            cursor.execute(
+                """
+                INSERT INTO functional_coverage (project_id, covergroup, coverpoint, coverage_type, bin_name, bin_val, coverage_pct, status, comments, created_by, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                """,
+                (project["id"], covergroup, coverpoint, coverage_type, bin_name, bin_val, coverage_pct, status, comments, created_by)
+            )
+
+            imported += 1
+        except Exception as e:
+            errors.append(f"第{row_idx}行: {str(e)}")
+
+    if imported > 0:
+        conn.commit()
+
+    return jsonify({"success": True, "imported": imported, "failed": len(errors), "errors": errors})
+
+
+@api.route("/api/fc/export", methods=["GET"])
+@login_required
+def export_fc():
+    """导出 FC (CSV)"""
+    project_id = request.args.get("project_id", type=int)
+
+    if not project_id:
+        return jsonify({"error": "缺少 project_id"}), 400
+
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+
+    if not project:
+        return jsonify({"error": "项目不存在"}), 404
+
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM functional_coverage ORDER BY covergroup, coverpoint, bin_name")
+    fc_list = [dict(row) for row in cursor.fetchall()]
+
+    # 生成 CSV
+    headers = ["Covergroup", "Coverpoint", "Type", "Bin_Name", "Bin_Value", "Coverage_Pct", "Status", "Comments"]
+    csv_data = [headers]
+
+    for fc in fc_list:
+        csv_data.append([
+            fc.get("covergroup", ""),
+            fc.get("coverpoint", ""),
+            fc.get("coverage_type", ""),
+            fc.get("bin_name", ""),
+            fc.get("bin_val", ""),
+            str(fc.get("coverage_pct", 0.0)),
+            fc.get("status", "missing"),
+            fc.get("comments", "") or ""
+        ])
+
+    return jsonify({"success": True, "csv_data": csv_data})
+
+
+# ============ FC-CP 关联 API - v0.11.0 ============
+
+
+@api.route("/api/fc-cp-association", methods=["GET"])
+@login_required
+def get_fc_cp_associations():
+    """获取 FC-CP 关联列表"""
+    project_id = request.args.get("project_id", type=int)
+
+    if not project_id:
+        return jsonify([])
+
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+
+    if not project:
+        return jsonify([])
+
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT fcca.*,
+               cp.feature as cp_feature, cp.sub_feature as cp_sub_feature, cp.cover_point as cp_cover_point,
+               fc.covergroup as fc_covergroup, fc.coverpoint as fc_coverpoint, fc.bin_name as fc_bin_name
+        FROM fc_cp_association fcca
+        LEFT JOIN cover_point cp ON fcca.cp_id = cp.id
+        LEFT JOIN functional_coverage fc ON fcca.fc_id = fc.id
+        ORDER BY cp.feature, cp.sub_feature, cp.cover_point
+    """)
+
+    associations = []
+    for row in cursor.fetchall():
+        assoc = dict(row)
+        # 添加 CP 和 FC 的详细信息
+        associations.append({
+            "id": assoc["id"],
+            "project_id": assoc["project_id"],
+            "cp_id": assoc["cp_id"],
+            "fc_id": assoc["fc_id"],
+            "created_by": assoc.get("created_by"),
+            "created_at": assoc.get("created_at"),
+            "cp_feature": assoc.get("cp_feature"),
+            "cp_sub_feature": assoc.get("cp_sub_feature"),
+            "cp_cover_point": assoc.get("cp_cover_point"),
+            "fc_covergroup": assoc.get("fc_covergroup"),
+            "fc_coverpoint": assoc.get("fc_coverpoint"),
+            "fc_bin_name": assoc.get("fc_bin_name")
+        })
+
+    return jsonify(associations)
+
+
+@api.route("/api/fc-cp-association", methods=["POST"])
+@login_required
+def create_fc_cp_association():
+    """创建 FC-CP 关联"""
+    project_id = request.json.get("project_id")
+    cp_id = request.json.get("cp_id")
+    fc_id = request.json.get("fc_id")
+
+    if not all([project_id, cp_id, fc_id]):
+        return jsonify({"error": "缺少必要参数"}), 400
+
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+
+    if not project:
+        return jsonify({"error": "项目不存在"}), 404
+
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
+
+    # 检查 CP 是否存在
+    cursor.execute("SELECT id FROM cover_point WHERE id=?", (cp_id,))
+    if not cursor.fetchone():
+        return jsonify({"error": "CP 不存在"}), 404
+
+    # 检查 FC 是否存在
+    cursor.execute("SELECT id FROM functional_coverage WHERE id=?", (fc_id,))
+    if not cursor.fetchone():
+        return jsonify({"error": "FC 不存在"}), 404
+
+    # 检查关联是否已存在
+    cursor.execute("SELECT id FROM fc_cp_association WHERE cp_id=? AND fc_id=?", (cp_id, fc_id))
+    if cursor.fetchone():
+        return jsonify({"error": "关联已存在"}), 400
+
+    created_by = session.get(SESSION_USERNAME_KEY, "unknown")
+
+    try:
+        cursor.execute(
+            """
+            INSERT INTO fc_cp_association (project_id, cp_id, fc_id, created_by, created_at)
+            VALUES (?, ?, ?, ?, datetime('now'))
+            """,
+            (project_id, cp_id, fc_id, created_by)
+        )
+        conn.commit()
+        assoc_id = cursor.lastrowid
+
+        return jsonify({"success": True, "id": assoc_id}), 201
+    except Exception as e:
+        return jsonify({"error": f"创建关联失败: {str(e)}"}), 500
+
+
+@api.route("/api/fc-cp-association", methods=["DELETE"])
+@login_required
+def delete_fc_cp_association():
+    """删除 FC-CP 关联"""
+    assoc_id = request.args.get("id", type=int)
+
+    if not assoc_id:
+        return jsonify({"error": "缺少关联 ID"}), 400
+
+    # 获取项目 ID 来确定数据库
+    project_id = request.args.get("project_id", type=int)
+    if not project_id:
+        return jsonify({"error": "缺少 project_id"}), 400
+
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+
+    if not project:
+        return jsonify({"error": "项目不存在"}), 404
+
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
+
+    cursor.execute("DELETE FROM fc_cp_association WHERE id=?", (assoc_id,))
+    conn.commit()
+
+    return jsonify({"success": True})
+
+
+@api.route("/api/fc-cp-association/import", methods=["POST"])
+@login_required
+def import_fc_cp_association():
+    """导入 FC-CP 关联 (CSV)"""
+    project_id = request.args.get("project_id", type=int)
+
+    if not project_id:
+        return jsonify({"error": "缺少 project_id"}), 400
+
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+
+    if not project:
+        return jsonify({"error": "项目不存在"}), 404
+
+    # 获取 CSV 数据
+    csv_data = request.json.get("csv_data", [])
+    if not csv_data or len(csv_data) < 2:
+        return jsonify({"error": "CSV 数据为空或格式错误"}), 400
+
+    headers = csv_data[0]
+    header_map = {}
+    for idx, header in enumerate(headers):
+        if header:
+            header_map[header.strip()] = idx
+
+    # 检查必填字段
+    required_fields = ["cp_feature", "cp_sub_feature", "cp_cover_point", "fc_covergroup", "fc_coverpoint", "fc_bin_name"]
+    for field in required_fields:
+        if field not in header_map:
+            return jsonify({"error": f"缺少必填字段: {field}"}), 400
+
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
+
+    imported = 0
+    errors = []
+    created_by = session.get(SESSION_USERNAME_KEY, "unknown")
+
+    for row_idx, row in enumerate(csv_data[1:], start=2):
+        try:
+            cp_feature = (
+                row[header_map.get("cp_feature", 0)]
+                if header_map.get("cp_feature", 0) < len(row)
+                else None
+            )
+            cp_sub_feature = (
+                row[header_map.get("cp_sub_feature", 1)]
+                if header_map.get("cp_sub_feature", 1) < len(row)
+                else None
+            )
+            cp_cover_point = (
+                row[header_map.get("cp_cover_point", 2)]
+                if header_map.get("cp_cover_point", 2) < len(row)
+                else None
+            )
+            fc_covergroup = (
+                row[header_map.get("fc_covergroup", 3)]
+                if header_map.get("fc_covergroup", 3) < len(row)
+                else None
+            )
+            fc_coverpoint = (
+                row[header_map.get("fc_coverpoint", 4)]
+                if header_map.get("fc_coverpoint", 4) < len(row)
+                else None
+            )
+            fc_bin_name = (
+                row[header_map.get("fc_bin_name", 5)]
+                if header_map.get("fc_bin_name", 5) < len(row)
+                else None
+            )
+
+            if not all([cp_feature, cp_cover_point, fc_covergroup, fc_coverpoint, fc_bin_name]):
+                errors.append(f"第{row_idx}行: 必填字段缺失")
+                continue
+
+            # 查找 CP ID (使用 feature + sub_feature + cover_point)
+            cursor.execute(
+                "SELECT id FROM cover_point WHERE feature=? AND sub_feature=? AND cover_point=?",
+                (cp_feature, cp_sub_feature or "", cp_cover_point)
+            )
+            cp_row = cursor.fetchone()
+            if not cp_row:
+                errors.append(f'第{row_idx}行: CP "{cp_feature}/{cp_sub_feature}/{cp_cover_point}" 不存在')
+                continue
+            cp_id = cp_row[0]
+
+            # 查找 FC ID (使用 covergroup + coverpoint + bin_name)
+            cursor.execute(
+                "SELECT id FROM functional_coverage WHERE covergroup=? AND coverpoint=? AND bin_name=?",
+                (fc_covergroup, fc_coverpoint, fc_bin_name)
+            )
+            fc_row = cursor.fetchone()
+            if not fc_row:
+                errors.append(f'第{row_idx}行: FC "{fc_covergroup}/{fc_coverpoint}/{fc_bin_name}" 不存在')
+                continue
+            fc_id = fc_row[0]
+
+            # 检查关联是否已存在
+            cursor.execute("SELECT id FROM fc_cp_association WHERE cp_id=? AND fc_id=?", (cp_id, fc_id))
+            if cursor.fetchone():
+                errors.append(f'第{row_idx}行: 关联已存在')
+                continue
+
+            cursor.execute(
+                """
+                INSERT INTO fc_cp_association (project_id, cp_id, fc_id, created_by, created_at)
+                VALUES (?, ?, ?, ?, datetime('now'))
+                """,
+                (project_id, cp_id, fc_id, created_by)
+            )
+
+            imported += 1
+        except Exception as e:
+            errors.append(f"第{row_idx}行: {str(e)}")
+
+    if imported > 0:
+        conn.commit()
+
+    return jsonify({"success": True, "imported": imported, "failed": len(errors), "errors": errors})
+
+
 # ============ 统计 ============
 
 
@@ -2752,18 +3271,21 @@ def import_cp(project, ws, headers, is_csv=False, csv_data=None):
                     errors.append(f"第{row_idx}行: 必填字段缺失")
                     continue
 
-                # 检查重名
-                cursor.execute("SELECT id FROM cover_point WHERE cover_point=?", (cover_point,))
-                if cursor.fetchone():
-                    errors.append(f'第{row_idx}行: Cover Point "{cover_point}" 已存在')
-                    continue
-
-                # 获取其他字段
+                # 获取 sub_feature 用于重名检查 (v0.11.0)
                 sub_feature = (
                     row[header_map.get("Sub-Feature", 1)]
                     if header_map.get("Sub-Feature", 1) < len(row)
                     else ""
                 )
+
+                # v0.11.0: 检查重名使用 feature + sub_feature + cover_point 组合
+                cursor.execute(
+                    "SELECT id FROM cover_point WHERE feature=? AND sub_feature=? AND cover_point=?",
+                    (feature, sub_feature, cover_point)
+                )
+                if cursor.fetchone():
+                    errors.append(f'第{row_idx}行: CP "{feature}/{sub_feature}/{cover_point}" 已存在')
+                    continue
                 cover_point_details = (
                     row[header_map.get("Cover Point Details", 3)]
                     if header_map.get("Cover Point Details", 3) < len(row)
@@ -2815,14 +3337,19 @@ def import_cp(project, ws, headers, is_csv=False, csv_data=None):
                     errors.append(f"第{row_idx}行: 必填字段缺失")
                     continue
 
-                # 检查重名
-                cursor.execute("SELECT id FROM cover_point WHERE cover_point=?", (cover_point,))
+                # 获取 sub_feature 用于重名检查 (v0.11.0)
+                sub_feature = ws.cell(row_idx, header_map.get("Sub-Feature", 0) + 1).value or ""
+
+                # v0.11.0: 检查重名使用 feature + sub_feature + cover_point 组合
+                cursor.execute(
+                    "SELECT id FROM cover_point WHERE feature=? AND sub_feature=? AND cover_point=?",
+                    (feature, sub_feature, cover_point)
+                )
                 if cursor.fetchone():
-                    errors.append(f'第{row_idx}行: Cover Point "{cover_point}" 已存在')
+                    errors.append(f'第{row_idx}行: CP "{feature}/{sub_feature}/{cover_point}" 已存在')
                     continue
 
                 # 获取其他字段
-                sub_feature = ws.cell(row_idx, header_map.get("Sub-Feature", 0) + 1).value or ""
                 cover_point_details = (
                     ws.cell(row_idx, header_map.get("Cover Point Details", 0) + 1).value or ""
                 )
@@ -2898,10 +3425,13 @@ def import_tc(project, ws, headers, is_csv=False, csv_data=None):
                     errors.append(f"第{row_idx}行: 必填字段缺失")
                     continue
 
-                # 检查重名
-                cursor.execute("SELECT id FROM test_case WHERE test_name=?", (test_name,))
+                # v0.11.0: 检查重名使用 testbench + test_name 组合
+                cursor.execute(
+                    "SELECT id FROM test_case WHERE testbench=? AND test_name=?",
+                    (testbench, test_name)
+                )
                 if cursor.fetchone():
-                    errors.append(f'第{row_idx}行: Test Name "{test_name}" 已存在')
+                    errors.append(f'第{row_idx}行: TC "{testbench}/{test_name}" 已存在')
                     continue
 
                 # 获取其他字段
@@ -2973,10 +3503,13 @@ def import_tc(project, ws, headers, is_csv=False, csv_data=None):
                     errors.append(f"第{row_idx}行: 必填字段缺失")
                     continue
 
-                # 检查重名
-                cursor.execute("SELECT id FROM test_case WHERE test_name=?", (test_name,))
+                # v0.11.0: 检查重名使用 testbench + test_name 组合
+                cursor.execute(
+                    "SELECT id FROM test_case WHERE testbench=? AND test_name=?",
+                    (testbench, test_name)
+                )
                 if cursor.fetchone():
-                    errors.append(f'第{row_idx}行: Test Name "{test_name}" 已存在')
+                    errors.append(f'第{row_idx}行: TC "{testbench}/{test_name}" 已存在')
                     continue
 
                 # 获取其他字段
