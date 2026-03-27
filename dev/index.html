@@ -1022,9 +1022,9 @@
         <div class="toolbar">
             <div class="toolbar-left">
                 <button class="btn btn-primary" onclick="openFCModal()">+ 添加 FC</button>
-                <button class="btn" onclick="openImportModal('fc')">📥 导入 FC</button>
+                <button class="btn" onclick="openFCImportModal()">📥 导入 FC</button>
                 <button class="btn" onclick="exportData('fc')">📤 导出 FC</button>
-                <button class="btn" onclick="openImportModal('fc-cp-assoc')">📥 导入 FC-CP 关联</button>
+                <button class="btn" onclick="openFC_CPAssocImportModal()">📥 导入 FC-CP 关联</button>
                 <input type="text" class="search-input" id="fcSearchInput" placeholder="搜索 Bin Name..." onkeyup="filterFC(this.value)">
                 <select id="fcCovergroupFilter" onchange="filterFCByCovergroup()"><option value="">全部 Covergroup</option></select>
                 <select id="fcCoverpointFilter" onchange="filterFCByCoverpoint()"><option value="">全部 Coverpoint</option></select>
@@ -1422,7 +1422,7 @@
             </div>
             <div class="form-actions">
                 <button type="button" class="btn" onclick="closeModal('importModal')">取消</button>
-                <button type="button" class="btn btn-primary" onclick="executeImport()">导入</button>
+                <button type="button" class="btn btn-primary" id="executeImportBtn" onclick="executeImport()">导入</button>
             </div>
         </div>
     </div>
@@ -1978,7 +1978,7 @@
                 const coverpoints = groups[covergroup];
                 const totalBins = Object.values(coverpoints).reduce((sum, bins) => sum + bins.length, 0);
                 const cpCount = Object.keys(coverpoints).length;
-                const isExpanded = fcExpandedGroups[covergroup] !== false; // 默认展开
+                const isExpanded = fcExpandedGroups[covergroup] === true; // 默认折叠
 
                 html += `<div class="fc-covergroup" style="margin-bottom: 8px; border: 1px solid #ddd; border-radius: 4px; overflow: hidden;">
                     <div class="fc-covergroup-header" onclick="toggleFCGroup('${escapeHtml(covergroup)}')" style="background: #f5f5f5; padding: 8px 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
@@ -2886,14 +2886,19 @@
         function openImportModal(type) {
             if (!currentProject) { alert('请先选择一个项目'); return; }
             importType = type;
-            document.getElementById('importModalTitle').textContent = type === 'cp' ? '导入 Cover Points' : '导入 Test Cases';
+            document.getElementById('importModalTitle').textContent =
+                type === 'cp' ? '导入 Cover Points' :
+                type === 'tc' ? '导入 Test Cases' :
+                type === 'fc' ? '导入 Functional Coverage' :
+                type === 'fc-cp-assoc' ? '导入 FC-CP 关联' : '导入';
             document.getElementById('downloadTemplateBtn').textContent = type === 'cp' ? '📥 下载 CP 模板' : '📥 下载 TC 模板';
             document.getElementById('importFile').value = '';
             document.getElementById('importPreview').style.display = 'none';
             document.getElementById('importResult').style.display = 'none';
+            document.getElementById('executeImportBtn').onclick = executeImport;
             document.getElementById('importModal').classList.add('active');
         }
-        
+
         async function downloadTemplate() {
             const type = importType;
             window.location.href = `${API_BASE}/import/template?type=${type}`;
@@ -2943,7 +2948,120 @@
             };
             reader.readAsDataURL(file);
         }
-        
+
+        // FC 专用导入函数 (v0.11.0)
+        function openFCImportModal() {
+            if (!currentProject) { alert('请先选择一个项目'); return; }
+            importType = 'fc';
+            document.getElementById('importModalTitle').textContent = '导入 Functional Coverage';
+            document.getElementById('downloadTemplateBtn').textContent = '📥 下载 FC 模板';
+            document.getElementById('importFile').value = '';
+            document.getElementById('importPreview').style.display = 'none';
+            document.getElementById('importResult').style.display = 'none';
+            document.getElementById('executeImportBtn').onclick = executeFCImport;
+            document.getElementById('importModal').classList.add('active');
+        }
+
+        // FC-CP 关联专用导入函数 (v0.11.0)
+        function openFC_CPAssocImportModal() {
+            if (!currentProject) { alert('请先选择一个项目'); return; }
+            importType = 'fc-cp-assoc';
+            document.getElementById('importModalTitle').textContent = '导入 FC-CP 关联';
+            document.getElementById('downloadTemplateBtn').textContent = '📥 下载 FC-CP 关联模板';
+            document.getElementById('importFile').value = '';
+            document.getElementById('importPreview').style.display = 'none';
+            document.getElementById('importResult').style.display = 'none';
+            document.getElementById('executeImportBtn').onclick = executeFC_CPAssocImport;
+            document.getElementById('importModal').classList.add('active');
+        }
+            document.getElementById('importPreview').style.display = 'none';
+            document.getElementById('importResult').style.display = 'none';
+            document.getElementById('importModal').classList.add('active');
+        }
+
+        // FC 专用执行函数 (v0.11.0)
+        async function executeFCImport() {
+            const fileInput = document.getElementById('importFile');
+            const file = fileInput.files[0];
+            if (!file) { alert('请选择要导入的文件'); return; }
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const base64Data = e.target.result.split(',')[1];
+                try {
+                    const res = await fetch(`${API_BASE}/fc/import`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            project_id: currentProject.id,
+                            file_data: base64Data
+                        })
+                    });
+                    const result = await res.json();
+                    const resultDiv = document.getElementById('importResult');
+                    resultDiv.style.display = 'block';
+                    if (result.success) {
+                        resultDiv.style.background = '#d4edda';
+                        resultDiv.style.color = '#155724';
+                        resultDiv.innerHTML = `✅ 导入成功！共导入 ${result.imported} 条记录`;
+                        setTimeout(async () => {
+                            closeModal('importModal');
+                            await loadFC();
+                            if (typeof loadFC_CPAssociation === 'function') await loadFC_CPAssociation();
+                        }, 1500);
+                    } else {
+                        resultDiv.style.background = '#f8d7da';
+                        resultDiv.style.color = '#721c24';
+                        resultDiv.innerHTML = `❌ 导入失败: ${result.error || '未知错误'}`;
+                    }
+                } catch (err) {
+                    alert('导入失败: ' + err);
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // FC-CP 关联专用执行函数 (v0.11.0)
+        async function executeFC_CPAssocImport() {
+            const fileInput = document.getElementById('importFile');
+            const file = fileInput.files[0];
+            if (!file) { alert('请选择要导入的文件'); return; }
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const base64Data = e.target.result.split(',')[1];
+                try {
+                    const res = await fetch(`${API_BASE}/fc-cp-association/import`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            project_id: currentProject.id,
+                            file_data: base64Data
+                        })
+                    });
+                    const result = await res.json();
+                    const resultDiv = document.getElementById('importResult');
+                    resultDiv.style.display = 'block';
+                    if (result.success) {
+                        resultDiv.style.background = '#d4edda';
+                        resultDiv.style.color = '#155724';
+                        resultDiv.innerHTML = `✅ 导入成功！共导入 ${result.imported} 条记录`;
+                        setTimeout(async () => {
+                            closeModal('importModal');
+                            if (typeof loadFC_CPAssociation === 'function') await loadFC_CPAssociation();
+                        }, 1500);
+                    } else {
+                        resultDiv.style.background = '#f8d7da';
+                        resultDiv.style.color = '#721c24';
+                        resultDiv.innerHTML = `❌ 导入失败: ${result.error || '未知错误'}`;
+                    }
+                } catch (err) {
+                    alert('导入失败: ' + err);
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+
         let exportType = 'cp';
         
         function exportData(type) {
