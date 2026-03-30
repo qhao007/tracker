@@ -68,7 +68,7 @@ CREATE TABLE functional_coverage (
     bin_val TEXT,
     comments TEXT,
     coverage_pct REAL DEFAULT 0.0,
-    status TEXT DEFAULT 'missing',
+    status TEXT DEFAULT 'missing' CHECK (status IN ('missing', 'ready')),
     owner TEXT,
     created_by TEXT,
     created_at TEXT DEFAULT (datetime('now')),
@@ -117,15 +117,15 @@ CREATE INDEX idx_fc_cp_assoc_fc ON fc_cp_association(fc_id);
 
 | 方法 | 路径 | 功能 | 状态 |
 |------|------|------|------|
-| GET | `/api/fc` | 获取 FC 列表（支持筛选） | ⏳ 待实现 |
-| POST | `/api/fc/import` | 导入 FC (CSV) | ⏳ 待实现 |
-| GET | `/api/fc/export` | 导出 FC (CSV) | ⏳ 待实现 |
-| GET | `/api/fc-cp-association` | 获取 FC-CP 关联列表 | ⏳ 待实现 |
-| POST | `/api/fc-cp-association` | 创建 FC-CP 关联 | ⏳ 待实现 |
-| DELETE | `/api/fc-cp-association` | 删除 FC-CP 关联 | ⏳ 待实现 |
-| POST | `/api/fc-cp-association/import` | 导入 FC-CP 关联 (CSV) | ⏳ 待实现 |
-| POST | `/api/projects` | 创建项目（新增 coverage_mode） | ⏳ 待实现 |
-| GET | `/api/projects/{id}` | 获取项目（返回 coverage_mode） | ⏳ 待实现 |
+| GET | `/api/fc` | 获取 FC 列表（支持筛选） | ✅ 已实现 |
+| POST | `/api/fc/import` | 导入 FC (CSV) | ✅ 已实现 |
+| GET | `/api/fc/export` | 导出 FC (CSV) | ✅ 已实现 |
+| GET | `/api/fc-cp-association` | 获取 FC-CP 关联列表 | ✅ 已实现 |
+| POST | `/api/fc-cp-association` | 创建 FC-CP 关联 | ✅ 已实现 |
+| DELETE | `/api/fc-cp-association` | 删除 FC-CP 关联 | ✅ 已实现 |
+| POST | `/api/fc-cp-association/import` | 导入 FC-CP 关联 (CSV) | ✅ 已实现 |
+| POST | `/api/projects` | 创建项目（新增 coverage_mode） | ✅ 已实现 |
+| GET | `/api/projects/{id}` | 获取项目（返回 coverage_mode） | ✅ 已实现 |
 
 ### 3.2 CSV 格式
 
@@ -196,9 +196,11 @@ apb_protocol,addr_range,CP_048,apb_protocol_cg,cp_addr_range,addr_max
 |------|------|
 | 🔼 | 已展开 |
 | 🔽 | 已折叠 |
-| ⏳ | status = missing |
-| ✅ | status = ready |
+| ⏳ | status = missing (FC item 在回归测试中不存在) |
+| ✅ | status = ready (FC item 在回归测试中存在) |
 | 0.98 | coverage_pct = 98% |
+
+> **注意**: `status` 字段仅接受 `missing` 或 `ready` 两个值，用于标识 FC item 是否在实际的回归测试中实现。
 
 ### 4.3 UI 交互细则
 
@@ -229,39 +231,39 @@ apb_protocol,addr_range,CP_048,apb_protocol_cg,cp_addr_range,addr_max
 
 ### 5.1 项目与 coverage_mode
 
-- [ ] 项目创建时可选择 Coverage Mode (TC-CP / FC-CP)
-- [ ] 项目创建后 Coverage Mode 不可更改
-- [ ] 新建项目默认 TC-CP 模式
-- [ ] 已有项目默认 TC-CP 模式
+- [x] 项目创建时可选择 Coverage Mode (TC-CP / FC-CP)
+- [x] 项目创建后 Coverage Mode 不可更改
+- [x] 新建项目默认 TC-CP 模式
+- [x] 已有项目默认 TC-CP 模式
 
 ### 5.2 FC Tab
 
-- [ ] FC Tab 仅在 FC-CP 模式显示
-- [ ] FC Tab 支持两级折叠/展开（covergroup → coverpoint）
-- [ ] FC Tab 默认全部折叠
-- [ ] FC Tab 提供"全部展开/全部折叠"按钮
-- [ ] FC Tab 支持 covergroup/coverpoint/coverage_type 筛选
-- [ ] FC Tab 支持 bin_name 模糊搜索
-- [ ] FC Tab 支持 CSV 导入
-- [ ] FC Tab 支持 CSV 导出
+- [x] FC Tab 仅在 FC-CP 模式显示
+- [x] FC Tab 支持两级折叠/展开（covergroup → coverpoint）
+- [x] FC Tab 默认全部折叠
+- [x] FC Tab 提供"全部展开/全部折叠"按钮
+- [x] FC Tab 支持 covergroup/coverpoint/coverage_type 筛选
+- [x] FC Tab 支持 bin_name 模糊搜索
+- [x] FC Tab 支持 CSV 导入
+- [x] FC Tab 支持 CSV 导出
 
 ### 5.3 FC-CP 关联
 
-- [ ] FC-CP 关联表正确创建
-- [ ] FC-CP 关联支持 CSV 导入
-- [ ] CP 详情页根据 coverage_mode 显示对应关联项
+- [x] FC-CP 关联表正确创建
+- [x] FC-CP 关联支持 CSV 导入
+- [x] CP 详情页根据 coverage_mode 显示对应关联项
 
 ### 5.4 导入重名检查
 
-- [ ] CP 导入使用 `feature + sub_feature + cover_point` 重名检查
-- [ ] TC 导入使用 `testbench + test_name` 重名检查
-- [ ] 冲突时拒绝导入并显示冲突列表
+- [x] CP 导入使用 `feature + sub_feature + cover_point` 重名检查
+- [x] TC 导入使用 `testbench + test_name` 重名检查
+- [x] 冲突时拒绝导入并显示冲突列表
 
 ### 5.5 数据库迁移
 
-- [ ] `tracker_ops.py migrate` 命令正确执行
-- [ ] 支持 `--version` 指定迁移版本
-- [ ] 迁移后数据库结构正确
+- [x] `tracker_ops.py migrate` 命令正确执行
+- [x] 支持 `--version` 指定迁移版本
+- [x] 迁移后数据库结构正确
 
 ---
 
@@ -271,14 +273,14 @@ apb_protocol,addr_range,CP_048,apb_protocol_cg,cp_addr_range,addr_max
 
 | 任务 | 状态 | 预计时间 |
 |------|------|----------|
-| 数据库迁移脚本 | ⏳ 待开发 | 2h |
-| 后端 FC API | ⏳ 待开发 | 4h |
-| 后端 FC-CP 关联 API | ⏳ 待开发 | 2h |
-| 项目 coverage_mode 字段 | ⏳ 待开发 | 1h |
-| 前端 FC Tab 页面 | ⏳ 待开发 | 6h |
-| FC 导入/导出功能 | ⏳ 待开发 | 2h |
-| FC-CP 关联导入 | ⏳ 待开发 | 1h |
-| 导入重名检查改进 | ⏳ 待开发 | 1h |
+| 数据库迁移脚本 | ✅ 已完成 | 2h |
+| 后端 FC API | ✅ 已完成 | 4h |
+| 后端 FC-CP 关联 API | ✅ 已完成 | 2h |
+| 项目 coverage_mode 字段 | ✅ 已完成 | 1h |
+| 前端 FC Tab 页面 | ✅ 已完成 | 6h |
+| FC 导入/导出功能 | ✅ 已完成 | 2h |
+| FC-CP 关联导入 | ✅ 已完成 | 1h |
+| 导入重名检查改进 | ✅ 已完成 | 1h |
 | **小计** | | **15h** |
 | **Buffer (20%)** | | **3h** |
 | **总计** | | **~19h** |
@@ -287,12 +289,12 @@ apb_protocol,addr_range,CP_048,apb_protocol_cg,cp_addr_range,addr_max
 
 | 里程碑 | 计划日期 | 实际日期 | 状态 |
 |--------|----------|----------|------|
-| 数据库设计完成 | | | ⏳ 待完成 |
-| 后端 API 开发完成 | | | ⏳ 待完成 |
-| 前端开发完成 | | | ⏳ 待完成 |
-| API 测试完成 | | | ⏳ 待完成 |
-| UI 冒烟测试完成 | | | ⏳ 待完成 |
-| 发布 | | | ⏳ 待完成 |
+| 数据库设计完成 | | 2026-03-23 | ✅ 已完成 |
+| 后端 API 开发完成 | | 2026-03-26 | ✅ 已完成 |
+| 前端开发完成 | | 2026-03-27 | ✅ 已完成 |
+| API 测试完成 | | 2026-03-29 | ✅ 已完成 |
+| UI 冒烟测试完成 | | 2026-03-30 | ✅ 已完成 |
+| 发布 | | | ⏳ 待发布 |
 
 ---
 

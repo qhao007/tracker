@@ -173,7 +173,7 @@ def init_project_db(project_name):
             bin_val TEXT,
             comments TEXT,
             coverage_pct REAL DEFAULT 0.0,
-            status TEXT DEFAULT 'missing',
+            status TEXT DEFAULT 'missing' CHECK (status IN ('missing', 'ready')),
             owner TEXT,
             created_by TEXT,
             created_at TEXT DEFAULT (datetime('now')),
@@ -2645,6 +2645,13 @@ def import_fc():
                 if header_map.get("Status", 6) < len(row)
                 else "missing"
             )
+            # 空字符串或无效值默认为 'missing'
+            if not status or status.strip() == '':
+                status = "missing"
+            # 校验 status 只能是 'missing' 或 'ready'
+            if status not in ('missing', 'ready'):
+                errors.append(f'第{row_idx}行: Status 必须是 "missing" 或 "ready"，当前值为 "{status}"')
+                continue
             comments = (
                 row[header_map.get("Comments", 7)]
                 if header_map.get("Comments", 7) < len(row)

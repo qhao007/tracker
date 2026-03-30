@@ -1025,7 +1025,7 @@
                 <button class="btn" onclick="openFCImportModal()">📥 导入 FC</button>
                 <button class="btn" onclick="exportData('fc')">📤 导出 FC</button>
                 <button class="btn" onclick="openFC_CPAssocImportModal()">📥 导入 FC-CP 关联</button>
-                <input type="text" class="search-input" id="fcSearchInput" placeholder="搜索 Bin Name..." onkeyup="filterFC(this.value)">
+                <input type="text" class="search-input" id="fcSearchInput" placeholder="搜索 Bin Name..." oninput="filterFC(this.value)">
                 <select id="fcCovergroupFilter" onchange="filterFCByCovergroup()"><option value="">全部 Covergroup</option></select>
                 <select id="fcCoverpointFilter" onchange="filterFCByCoverpoint()"><option value="">全部 Coverpoint</option></select>
                 <select id="fcCoverageTypeFilter" onchange="filterFCByCoverageType()"><option value="">全部 Type</option></select>
@@ -1909,6 +1909,10 @@
             if (!currentProject) return;
             try {
                 const res = await fetch(`${API_ENDPOINTS.FC}?project_id=${currentProject.id}`);
+                if (!res.ok) {
+                    console.error('加载 FC 失败:', res.status, res.statusText);
+                    return;
+                }
                 functionalCoverages = await res.json();
                 renderFC();
                 // 填充筛选下拉框
@@ -1924,7 +1928,28 @@
                     coverpointSelect.innerHTML = '<option value="">全部 Coverpoint</option>' +
                         coverpoints.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
                 }
+                const coverageTypes = [...new Set(functionalCoverages.map(fc => fc.coverage_type).filter(t => t))];
+                const coverageTypeSelect = document.getElementById('fcCoverageTypeFilter');
+                if (coverageTypeSelect) {
+                    coverageTypeSelect.innerHTML = '<option value="">全部 Type</option>' +
+                        coverageTypes.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+                }
             } catch (e) { console.error('加载 FC 失败:', e); }
+        }
+
+        // FC-CP 关联加载函数 (v0.11.0)
+        let fcCpAssociations = [];
+        async function loadFC_CPAssociation() {
+            if (!currentProject) return;
+            try {
+                const res = await fetch(`${API_ENDPOINTS.FC_CP_ASSOCIATION}?project_id=${currentProject.id}`);
+                if (!res.ok) {
+                    console.error('加载 FC-CP 关联失败:', res.status, res.statusText);
+                    return;
+                }
+                fcCpAssociations = await res.json();
+                console.log('FC-CP 关联已加载:', fcCpAssociations.length);
+            } catch (e) { console.error('加载 FC-CP 关联失败:', e); }
         }
 
         function renderFC() {
@@ -1940,7 +1965,6 @@
             }
 
             fcEmptyState.style.display = 'none';
-            fcCount.textContent = functionalCoverages.length;
 
             // 应用筛选
             const covergroupFilter = document.getElementById('fcCovergroupFilter')?.value || '';
@@ -1962,6 +1986,9 @@
                 filtered = filtered.filter(fc => fc.bin_name && fc.bin_name.toLowerCase().includes(searchFilter.toLowerCase()));
             }
 
+            // 更新筛选后的数量
+            fcCount.textContent = filtered.length;
+
             // 按 covergroup 分组
             const groups = {};
             filtered.forEach(fc => {
@@ -1978,7 +2005,7 @@
                 const coverpoints = groups[covergroup];
                 const totalBins = Object.values(coverpoints).reduce((sum, bins) => sum + bins.length, 0);
                 const cpCount = Object.keys(coverpoints).length;
-                const isExpanded = fcExpandedGroups[covergroup] === true; // 默认折叠
+                const isExpanded = fcExpandedGroups[covergroup] === true;
 
                 html += `<div class="fc-covergroup" style="margin-bottom: 8px; border: 1px solid #ddd; border-radius: 4px; overflow: hidden;">
                     <div class="fc-covergroup-header" onclick="toggleFCGroup('${escapeHtml(covergroup)}')" style="background: #f5f5f5; padding: 8px 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
@@ -1987,7 +2014,7 @@
                     <div class="fc-covergroup-content" style="display: ${isExpanded ? 'block' : 'none'}; padding: 8px;">
                         ${Object.keys(coverpoints).sort().map(coverpoint => {
                             const bins = coverpoints[coverpoint];
-                            const cpIsExpanded = fcExpandedCoverpoints[`${covergroup}|${coverpoint}`] !== false;
+                            const cpIsExpanded = fcExpandedCoverpoints[`${covergroup}|${coverpoint}`] === true;
                             return `<div class="fc-coverpoint" style="margin-left: 16px; margin-bottom: 8px;">
                                 <div class="fc-coverpoint-header" onclick="toggleFCCoverpoint('${escapeHtml(covergroup)}', '${escapeHtml(coverpoint)}')" style="cursor: pointer; padding: 4px 8px; background: #eee; border-radius: 3px; display: flex; justify-content: space-between; align-items: center;">
                                     <span>${cpIsExpanded ? '▼' : '▶'} ${escapeHtml(coverpoint)} (${bins.length} bins)</span>
@@ -2028,38 +2055,54 @@
         }
 
         function toggleFCGroup(covergroup) {
-            fcExpandedGroups[covergroup] = fcExpandedGroups[covergroup] === false ? true : false;
+            // 切换状态：true -> false (collapse), undefined/false -> true (expand)
+            fcExpandedGroups[covergroup] = fcExpandedGroups[covergroup] === true ? false : true;
             localStorage.setItem('tracker_fc_expanded_groups', JSON.stringify(fcExpandedGroups));
             renderFC();
         }
 
         function toggleFCCoverpoint(covergroup, coverpoint) {
             const key = `${covergroup}|${coverpoint}`;
-            fcExpandedCoverpoints[key] = fcExpandedCoverpoints[key] === false ? true : false;
+            // 切换状态：true -> false (collapse), undefined/false -> true (expand)
+            fcExpandedCoverpoints[key] = fcExpandedCoverpoints[key] === true ? false : true;
             localStorage.setItem('tracker_fc_expanded_coverpoints', JSON.stringify(fcExpandedCoverpoints));
             renderFC();
         }
 
         function toggleAllFC() {
-            const allExpanded = Object.values(fcExpandedGroups).every(v => v !== false);
+            // 获取所有 covergroup 的当前状态
+            const covergroups = [...new Set(functionalCoverages.map(fc => fc.covergroup))];
+            // 计算 allExpanded：如果所有分组都已展开，则为 true
+            const allExpanded = covergroups.length > 0 && covergroups.every(cg => fcExpandedGroups[cg] === true);
+
             if (allExpanded) {
-                // 全部折叠
-                fcExpandedGroups = {};
-                fcExpandedCoverpoints = {};
+                // 全部折叠 - 遍历所有 covergroup，设置为 false
+                covergroups.forEach(cg => {
+                    fcExpandedGroups[cg] = false;
+                    // 同时折叠该分组下所有 coverpoint
+                    functionalCoverages.filter(fc => fc.covergroup === cg).forEach(fc => {
+                        fcExpandedCoverpoints[`${fc.covergroup}|${fc.coverpoint}`] = false;
+                    });
+                });
             } else {
-                // 全部展开
-                fcExpandedGroups = {};
-                fcExpandedCoverpoints = {};
+                // 全部展开 - 遍历所有 covergroup，设置为 true
+                covergroups.forEach(cg => {
+                    fcExpandedGroups[cg] = true;
+                    // 同时展开该分组下所有 coverpoint
+                    functionalCoverages.filter(fc => fc.covergroup === cg).forEach(fc => {
+                        fcExpandedCoverpoints[`${fc.covergroup}|${fc.coverpoint}`] = true;
+                    });
+                });
             }
             localStorage.setItem('tracker_fc_expanded_groups', JSON.stringify(fcExpandedGroups));
             localStorage.setItem('tracker_fc_expanded_coverpoints', JSON.stringify(fcExpandedCoverpoints));
             renderFC();
-            // 更新按钮文字
+            // 更新按钮文字：折叠状态显示"全部展开"，展开状态显示"全部折叠"
             const btn = document.getElementById('toggleAllFCExpand');
-            if (btn) btn.textContent = allExpanded ? '全部折叠 ▲' : '全部展开 ▼';
+            if (btn) btn.textContent = allExpanded ? '全部展开 ▼' : '全部折叠 ▲';
         }
 
-        function filterFC(searchValue) {
+        function filterFC() {
             renderFC();
         }
 
@@ -2084,7 +2127,8 @@
         }
 
         function openFCModal() {
-            alert('FC 添加功能开发中');
+            // TODO: v0.11.0 FC 添加功能待实现 - 需要弹出 FC 添加表单（covergroup/coverpoint/coverage_type/bin_name 等字段）
+            console.log('FC 添加功能开发中');
         }
 
         // 更新 FC Tab 显示状态
@@ -2540,22 +2584,18 @@
                             <div class="cp-connected-tcs" id="cp-tcs-${cp.id}">
                                 <div style="padding: 8px; color: #666; font-size: 12px;">加载中...</div>
                             </div>
+                            <div class="cp-connected-fcs" id="cp-fcs-${cp.id}"></div>
                         </div>
                     </td>
                 </tr>
             `}).join('');
         }
 
-        function filterCP(value) { renderCP(value); }
-        function filterCPByFeature() { renderCP(); }
-        function filterCPByPriority() { renderCP(); }
-        function filterCPByLinked() { renderCP(); }
-        
         // CP 详情展开/收起
         async function toggleCPDetail(cpId) {
             const detailRow = document.getElementById(`cp-detail-${cpId}`);
             const btn = document.querySelector(`tr[data-cp-id="${cpId}"] .action-btn`);
-            
+
             if (detailRow.style.display === 'none') {
                 // 展开
                 detailRow.style.display = 'table-row';
@@ -2563,6 +2603,10 @@
                 btn.classList.add('active');
                 // 加载关联 TC
                 await loadCPTcConnections(cpId);
+                // v0.11.0: FC-CP 模式下加载关联的 FC
+                if (currentProject && currentProject.coverage_mode === 'fc_cp') {
+                    await loadCPFCConnections(cpId);
+                }
             } else {
                 // 收起
                 detailRow.style.display = 'none';
@@ -2601,13 +2645,60 @@
                 container.innerHTML = '<div style="padding: 8px; color: #f44336; font-size: 12px;">加载失败</div>';
             }
         }
-        
+
+        // v0.11.0: 加载 CP 关联的 FC (用于 CP 详情页)
+        async function loadCPFCConnections(cpId) {
+            const container = document.getElementById(`cp-fcs-${cpId}`);
+            if (!container) return;
+
+            try {
+                const projectId = document.getElementById('projectSelector')?.value;
+                const res = await fetch(`${API_BASE}/fc-cp-association?project_id=${projectId}&cp_id=${cpId}`);
+                const data = await res.json();
+
+                if (data && data.length > 0) {
+                    container.innerHTML = `
+                        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee;">
+                            <div style="font-size: 12px; font-weight: 500; color: #333; margin-bottom: 6px;">关联的 Functional Coverage:</div>
+                            <table style="width: 100%; font-size: 12px;">
+                                <thead>
+                                    <tr>
+                                        <th style="padding: 4px 8px; text-align: left; background: #f5f5f5;">Covergroup</th>
+                                        <th style="padding: 4px 8px; text-align: left; background: #f5f5f5;">Coverpoint</th>
+                                        <th style="padding: 4px 8px; text-align: left; background: #f5f5f5;">Bin Name</th>
+                                        <th style="padding: 4px 8px; text-align: left; background: #f5f5f5;">Coverage</th>
+                                        <th style="padding: 4px 8px; text-align: left; background: #f5f5f5;">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.map(fc => `
+                                        <tr>
+                                            <td style="padding: 4px 8px;">${escapeHtml(fc.fc_covergroup || '')}</td>
+                                            <td style="padding: 4px 8px;">${escapeHtml(fc.fc_coverpoint || '')}</td>
+                                            <td style="padding: 4px 8px;">${escapeHtml(fc.fc_bin_name || '')}</td>
+                                            <td style="padding: 4px 8px;">${fc.fc_coverage_pct !== null ? fc.fc_coverage_pct + '%' : '-'}</td>
+                                            <td style="padding: 4px 8px;"><span class="status-badge status-${fc.fc_status || 'missing'}">${fc.fc_status || 'missing'}</span></td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = '<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee;"></div>';
+                }
+            } catch (e) {
+                container.innerHTML = '<div style="padding: 8px; color: #f44336; font-size: 12px;">加载失败</div>';
+            }
+        }
+
         // 展开/收起所有 CP 详情
         async function toggleAllCPDetails() {
             const btn = document.getElementById('toggleAllCPDetails');
             const allDetails = document.querySelectorAll('.cp-detail-row');
             const isExpanded = btn.textContent.includes('收起');
-            
+            const isFCPMode = currentProject && currentProject.coverage_mode === 'fc_cp';
+
             if (isExpanded) {
                 // 收起所有
                 allDetails.forEach(row => row.style.display = 'none');
@@ -2617,11 +2708,15 @@
                 });
                 btn.textContent = '详情 ▼';
             } else {
-                // 展开所有 - 需要加载每个 CP 的关联 TC
+                // 展开所有 - 需要加载每个 CP 的关联 TC/FC
                 for (const row of allDetails) {
                     row.style.display = 'table-row';
                     const cpId = row.id.replace('cp-detail-', '');
                     await loadCPTcConnections(cpId);
+                    // v0.11.0: FC-CP 模式下加载关联的 FC
+                    if (isFCPMode) {
+                        await loadCPFCConnections(cpId);
+                    }
                     // 更新按钮状态
                     const actionBtn = document.querySelector(`tr[data-cp-id="${cpId}"] .action-btn`);
                     if (actionBtn) {
@@ -2974,10 +3069,6 @@
             document.getElementById('executeImportBtn').onclick = executeFC_CPAssocImport;
             document.getElementById('importModal').classList.add('active');
         }
-            document.getElementById('importPreview').style.display = 'none';
-            document.getElementById('importResult').style.display = 'none';
-            document.getElementById('importModal').classList.add('active');
-        }
 
         // FC 专用执行函数 (v0.11.0)
         async function executeFCImport() {
@@ -2989,7 +3080,7 @@
             reader.onload = async function(e) {
                 const base64Data = e.target.result.split(',')[1];
                 try {
-                    const res = await fetch(`${API_BASE}/fc/import`, {
+                    const res = await fetch(`${API_ENDPOINTS.FC}/import`, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({
@@ -3031,7 +3122,7 @@
             reader.onload = async function(e) {
                 const base64Data = e.target.result.split(',')[1];
                 try {
-                    const res = await fetch(`${API_BASE}/fc-cp-association/import`, {
+                    const res = await fetch(`${API_ENDPOINTS.FC_CP_ASSOCIATION}/import`, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({
@@ -3067,8 +3158,19 @@
         function exportData(type) {
             if (!currentProject) { alert('请先选择一个项目'); return; }
             exportType = type;
-            const data = type === 'cp' ? coverPoints : testCases;
-            document.getElementById('exportModalTitle').textContent = type === 'cp' ? '导出 Cover Points' : '导出 Test Cases';
+            let data;
+            let title;
+            if (type === 'cp') {
+                data = coverPoints;
+                title = '导出 Cover Points';
+            } else if (type === 'fc') {
+                data = functionalCoverages;
+                title = '导出 Functional Coverage';
+            } else {
+                data = testCases;
+                title = '导出 Test Cases';
+            }
+            document.getElementById('exportModalTitle').textContent = title;
             document.getElementById('exportProjectName').textContent = currentProject.project_name;
             document.getElementById('exportRecordCount').textContent = data.length;
             document.getElementById('exportModal').classList.add('active');
@@ -3076,8 +3178,32 @@
         
         function executeExport() {
             const format = document.querySelector('input[name="exportFormat"]:checked').value;
-            window.location.href = `${API_BASE}/export?project_id=${currentProject.id}&type=${exportType}&format=${format}`;
-            closeModal('exportModal');
+            if (exportType === 'fc') {
+                // FC export: call /api/fc/export which returns JSON with csv_data
+                fetch(`${API_BASE}/fc/export?project_id=${currentProject.id}`, {
+                    credentials: 'include'
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success && data.csv_data) {
+                        // Convert CSV data to downloadable file
+                        const csvContent = data.csv_data.map(row => row.join(',')).join('\n');
+                        const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${currentProject.project_name}_FC_${new Date().toISOString().split('T')[0]}.csv`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }
+                    closeModal('exportModal');
+                });
+            } else {
+                window.location.href = `${API_BASE}/export?project_id=${currentProject.id}&type=${exportType}&format=${format}`;
+                closeModal('exportModal');
+            }
         }
         
         /**
