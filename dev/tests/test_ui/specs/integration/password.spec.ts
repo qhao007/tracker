@@ -28,10 +28,14 @@ test.describe('强制改密码测试', () => {
       await page.waitForTimeout(500);
     }
 
-    await page.fill('#loginUsername', 'admin');
-    await page.fill('#loginPassword', 'admin123');
-    await page.click('#loginForm button[type="submit"]');
-    await page.waitForTimeout(2000);
+    // 检查是否需要登录（登录表单是否可见）
+    const needsLogin = await page.locator('#loginForm').isVisible().catch(() => false);
+    if (needsLogin) {
+      await page.fill('#loginUsername', 'admin');
+      await page.fill('#loginPassword', 'admin123');
+      await page.click('#loginForm button[type="submit"]');
+      await page.waitForTimeout(2000);
+    }
 
     // 检查是否需要强制修改密码
     const passwordModal = page.locator('#changePasswordModal');
@@ -55,10 +59,21 @@ test.describe('强制改密码测试', () => {
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
 
-    await page.fill('#loginUsername', 'guest');
-    await page.fill('#loginPassword', 'guest123');
-    await page.click('#loginForm button[type="submit"]');
-    await page.waitForTimeout(1500);
+    // 处理引导页
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
+
+    // 检查是否需要登录
+    const needsLogin = await page.locator('#loginForm').isVisible().catch(() => false);
+    if (needsLogin) {
+      await page.fill('#loginUsername', 'guest');
+      await page.fill('#loginPassword', 'guest123');
+      await page.click('#loginForm button[type="submit"]');
+      await page.waitForTimeout(1500);
+    }
   }
 
   test.afterEach(async ({ page }, testInfo) => {

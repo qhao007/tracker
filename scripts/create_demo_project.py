@@ -18,9 +18,23 @@ import random
 from datetime import datetime, timedelta
 
 
-# 项目配置
-PROJECT_NAME = "SOC_DV"
-PROJECT_DESC = "RISC-V SoC 芯片系统级验证项目"
+# 项目配置 - TC-CP 模式
+SOC_DV_CONFIG = {
+    "name": "SOC_DV",
+    "desc": "RISC-V SoC 芯片系统级验证项目",
+    "coverage_mode": "tc_cp",
+    "start_date": "2026-01-06",
+    "end_date": "2026-04-18",
+}
+
+# 项目配置 - FC-CP 模式
+FC_DV_CONFIG = {
+    "name": "FC_DV",
+    "desc": "RISC-V SoC 功能覆盖验证项目",
+    "coverage_mode": "fc_cp",
+    "start_date": "2026-01-06",
+    "end_date": "2026-04-18",
+}
 
 # 数据目录
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -38,10 +52,6 @@ DV_MILESTONE_PROGRESS = {
     "DV0.7": 0.7,
     "DV1.0": 1.0
 }
-
-# 项目周期 (15周)
-PROJECT_START = "2026-01-06"  # 第一周周一
-PROJECT_END = "2026-04-18"    # 15周后周五
 
 # 32 个 Cover Points
 COVER_POINTS = [
@@ -119,17 +129,78 @@ TC_TEMPLATES = [
     ("Reset Logic", "System", ["全系统复位"]),
 ]
 
+# FC 生成模板 (用于 FC-CP 模式)
+# (covergroup, coverpoint, coverage_type, bin_name, bin_val, coverage_pct, status)
+FC_TEMPLATES = [
+    # CPU Core FC (所有指令类型覆盖)
+    ("CPU Core", "instruction_rtype", "coverpoint", "rtype_add", "1", 95.5, "ready"),
+    ("CPU Core", "instruction_rtype", "coverpoint", "rtype_sub", "1", 88.2, "ready"),
+    ("CPU Core", "instruction_rtype", "coverpoint", "rtype_and", "1", 92.0, "ready"),
+    ("CPU Core", "instruction_rtype", "coverpoint", "rtype_or", "1", 87.5, "ready"),
+    ("CPU Core", "instruction_rtype", "coverpoint", "rtype_xor", "1", 78.3, "ready"),
+    ("CPU Core", "instruction_itype", "coverpoint", "itype_addi", "1", 91.0, "ready"),
+    ("CPU Core", "instruction_itype", "coverpoint", "itype_subi", "1", 85.5, "ready"),
+    ("CPU Core", "instruction_itype", "coverpoint", "itype_andi", "1", 82.0, "ready"),
+    ("CPU Core", "instruction_stype", "coverpoint", "stype_sw", "1", 89.0, "ready"),
+    ("CPU Core", "instruction_stype", "coverpoint", "stype_sh", "1", 65.0, "ready"),
+    ("CPU Core", "instruction_utype", "coverpoint", "utype_auipc", "1", 75.0, "ready"),
+    ("CPU Core", "instruction_utype", "coverpoint", "utype_lui", "1", 80.0, "ready"),
+    ("CPU Core", "instruction_jtype", "coverpoint", "jtype_jal", "1", 88.0, "ready"),
+    ("CPU Core", "instruction_jtype", "coverpoint", "jtype_jalr", "1", 85.0, "ready"),
+    ("CPU Core", "instruction_btype", "coverpoint", "btype_beq", "1", 90.0, "ready"),
+    ("CPU Core", "instruction_btype", "coverpoint", "btype_bne", "1", 87.0, "ready"),
+    ("CPU Core", "cache_coherency", "coverpoint", "mesi_states", "1", 100.0, "ready"),
+    ("CPU Core", "cache_coherency", "coverpoint", "bus_transaction", "1", 78.0, "ready"),
+    ("CPU Core", "exception", "coverpoint", "ecall", "1", 95.0, "ready"),
+    ("CPU Core", "exception", "coverpoint", "ebreak", "1", 88.0, "ready"),
+    ("CPU Core", "privilege", "coverpoint", "mode_switch", "1", 72.0, "ready"),
+    # L2 Cache FC
+    ("L2 Cache", "miss_rate", "coverpoint", "read_miss", "1", 45.0, "ready"),
+    ("L2 Cache", "miss_rate", "coverpoint", "write_miss", "1", 52.0, "ready"),
+    ("L2 Cache", "coherency", "coverpoint", "mesi_protocol", "1", 88.0, "ready"),
+    ("L2 Cache", "coherency", "coverpoint", "snoops", "1", 75.0, "ready"),
+    ("L2 Cache", "eviction", "coverpoint", "lru_replace", "1", 60.0, "ready"),
+    # DDR Controller FC
+    ("DDR Controller", "read_timing", "coverpoint", "read_latency", "1", 92.0, "ready"),
+    ("DDR Controller", "write_timing", "coverpoint", "write_latency", "1", 89.0, "ready"),
+    ("DDR Controller", "mode_switch", "coverpoint", "precharge", "1", 55.0, "ready"),
+    ("DDR Controller", "mode_switch", "coverpoint", "refresh", "1", 78.0, "ready"),
+    # PCIe Controller FC
+    ("PCIe Controller", "config_space", "coverpoint", "cfg_read", "1", 85.0, "ready"),
+    ("PCIe Controller", "config_space", "coverpoint", "cfg_write", "1", 80.0, "ready"),
+    ("PCIe Controller", "transaction", "coverpoint", "mem_read", "1", 92.0, "ready"),
+    ("PCIe Controller", "transaction", "coverpoint", "mem_write", "1", 88.0, "ready"),
+    ("PCIe Controller", "msi", "coverpoint", "msi_x", "1", 45.0, "ready"),
+    # GPIO FC
+    ("GPIO", "interrupt", "coverpoint", "int_enable", "1", 78.0, "ready"),
+    ("GPIO", "interrupt", "coverpoint", "int_pending", "1", 65.0, "ready"),
+    ("GPIO", "edge", "coverpoint", "rising_edge", "1", 82.0, "ready"),
+    ("GPIO", "edge", "coverpoint", "falling_edge", "1", 75.0, "ready"),
+    # Clock Manager FC
+    ("Clock Manager", "gating", "coverpoint", "clk_gated", "1", 90.0, "ready"),
+    ("Clock Manager", "sync", "coverpoint", "cdc_path", "1", 68.0, "ready"),
+    ("Clock Manager", "pll", "coverpoint", "pll_lock", "1", 95.0, "ready"),
+    # Reset Logic FC
+    ("Reset Logic", "power_on", "coverpoint", "reset_seq", "1", 100.0, "ready"),
+    ("Reset Logic", "watchdog", "coverpoint", "wd_timeout", "1", 55.0, "ready"),
+]
+
 
 def get_db_path(project_name):
     """获取项目数据库路径"""
     return os.path.join(DATA_DIR, f"{project_name}.db")
 
 
-def init_db(db_path):
-    """初始化数据库"""
+def init_db(db_path, coverage_mode="tc_cp"):
+    """初始化数据库
+
+    Args:
+        db_path: 数据库路径
+        coverage_mode: "tc_cp" 或 "fc_cp"
+    """
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
+
     # 创建 cover_point 表
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS cover_point (
@@ -144,7 +215,7 @@ def init_db(db_path):
             created_at TEXT
         )
     """)
-    
+
     # 创建 test_case 表
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS test_case (
@@ -169,7 +240,7 @@ def init_db(db_path):
             target_date TEXT
         )
     """)
-    
+
     # 创建关联表
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS tc_cp_connections (
@@ -178,7 +249,7 @@ def init_db(db_path):
             cp_id INTEGER
         )
     """)
-    
+
     # 创建 tracker_version 表（兼容）
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS tracker_version (
@@ -186,9 +257,51 @@ def init_db(db_path):
             migrated_at TEXT
         )
     """)
-    cursor.execute("INSERT OR IGNORE INTO tracker_version VALUES (?, ?)", 
+    cursor.execute("INSERT OR IGNORE INTO tracker_version VALUES (?, ?)",
                    ("v0.8.0", datetime.now().strftime("%Y-%m-%d")))
-    
+
+    # FC-CP 模式需要的功能覆盖表 (v0.11.0)
+    if coverage_mode == "fc_cp":
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS functional_coverage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER,
+                covergroup TEXT NOT NULL,
+                coverpoint TEXT NOT NULL,
+                coverage_type TEXT NOT NULL,
+                bin_name TEXT NOT NULL,
+                bin_val TEXT,
+                comments TEXT,
+                coverage_pct REAL DEFAULT 0.0,
+                status TEXT DEFAULT 'missing' CHECK (status IN ('missing', 'ready')),
+                owner TEXT,
+                created_by TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                UNIQUE (project_id, covergroup, coverpoint, bin_name)
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS fc_cp_association (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER,
+                cp_id INTEGER,
+                fc_id INTEGER,
+                created_by TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                UNIQUE (cp_id, fc_id),
+                FOREIGN KEY (cp_id) REFERENCES cover_point(id),
+                FOREIGN KEY (fc_id) REFERENCES functional_coverage(id)
+            )
+        """)
+
+        # 创建索引
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_fc_covergroup ON functional_coverage(covergroup)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_fc_coverpoint ON functional_coverage(coverpoint)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_fc_cp_assoc_cp ON fc_cp_association(cp_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_fc_cp_assoc_fc ON fc_cp_association(fc_id)")
+
     conn.commit()
     return conn
 
@@ -207,48 +320,53 @@ def save_projects(projects):
         json.dump(projects, f, indent=2)
 
 
-def cleanup():
-    """清理旧项目"""
-    print(f"\n🧹 清理旧项目...")
-    
+def cleanup_project(project_name):
+    """清理指定旧项目"""
     # 删除数据库文件
-    db_path = get_db_path(PROJECT_NAME)
+    db_path = get_db_path(project_name)
     if os.path.exists(db_path):
         os.remove(db_path)
         print(f"   ✅ 删除数据库: {db_path}")
-    
+
     # 从 projects.json 移除
     projects = load_projects()
-    projects = [p for p in projects if p.get("name") != PROJECT_NAME]
+    projects = [p for p in projects if p.get("name") != project_name]
     save_projects(projects)
-    print(f"   ✅ 从项目列表移除")
 
 
-def create_project_record(project_id):
-    """创建项目记录"""
+def create_project_record(project_id, config):
+    """创建项目记录
+
+    Args:
+        project_id: 项目ID
+        config: 项目配置字典
+    """
+    project_name = config["name"]
     projects = load_projects()
-    
+
     # 检查是否已存在
-    existing = [p for p in projects if p.get("name") == PROJECT_NAME]
+    existing = [p for p in projects if p.get("name") == project_name]
     if existing:
         # 更新
         for p in projects:
-            if p.get("name") == PROJECT_NAME:
+            if p.get("name") == project_name:
                 p["id"] = project_id
-                p["start_date"] = PROJECT_START
-                p["end_date"] = PROJECT_END
+                p["start_date"] = config["start_date"]
+                p["end_date"] = config["end_date"]
+                p["coverage_mode"] = config.get("coverage_mode", "tc_cp")
     else:
         # 新增
         projects.append({
             "id": project_id,
-            "name": PROJECT_NAME,
+            "name": project_name,
             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "version": "dev",
             "is_archived": False,
-            "start_date": PROJECT_START,
-            "end_date": PROJECT_END
+            "start_date": config["start_date"],
+            "end_date": config["end_date"],
+            "coverage_mode": config.get("coverage_mode", "tc_cp")
         })
-    
+
     save_projects(projects)
     print(f"   ✅ 项目记录已保存")
 
@@ -287,21 +405,31 @@ def calculate_target_date(dv_milestone, project_start, project_end):
     return target_date.strftime("%Y-%m-%d")
 
 
-def generate_test_cases(conn, project_id, cp_ids):
-    """生成 Test Cases"""
+def generate_test_cases(conn, project_id, cp_ids, config):
+    """生成 Test Cases
+
+    Args:
+        conn: 数据库连接
+        project_id: 项目ID
+        cp_ids: CP ID列表
+        config: 项目配置字典
+    """
+    project_start = config["start_date"]
+    project_end = config["end_date"]
+
     print(f"\n📋 生成 Test Cases ({sum(TC_STATUS.values())} 个)...")
-    
+
     cursor = conn.cursor()
     created_at = datetime.now().strftime("%Y-%m-%d")
-    
+
     tc_ids = []
     tc_statuses = []
     for status, count in TC_STATUS.items():
         tc_statuses.extend([status] * count)
-    
+
     # 打乱顺序
     random.shuffle(tc_statuses)
-    
+
     # 按 Feature 分组 CP
     cp_by_feature = {}
     cursor.execute("SELECT id, feature FROM cover_point WHERE project_id = ?", (project_id,))
@@ -310,25 +438,25 @@ def generate_test_cases(conn, project_id, cp_ids):
         if feature not in cp_by_feature:
             cp_by_feature[feature] = []
         cp_by_feature[feature].append(cp_id)
-    
+
     # 生成 TC
     tc_index = 0
     for dv_milestone in DV_MILESTONES:
         for feature, category, scenarios in TC_TEMPLATES:
             if tc_index >= len(tc_statuses):
                 break
-            
+
             status = tc_statuses[tc_index]
             tc_index += 1
-            
+
             scenario = random.choice(scenarios)
             testbench = f"tb_{feature.lower().replace(' ', '_')}"
             test_name = f"{dv_milestone}_{feature}_{category}_{tc_index:03d}"
             owner = random.choice(["zhangsan", "lisi", "wangwu", "zhaoliu"])
-            
+
             # 目标日期
-            target_date = calculate_target_date(dv_milestone, PROJECT_START, PROJECT_END)
-            
+            target_date = calculate_target_date(dv_milestone, project_start, project_end)
+
             # 状态日期
             status_date = None
             if status == "PASS":
@@ -337,21 +465,21 @@ def generate_test_cases(conn, project_id, cp_ids):
                 status_date = target_date
             elif status == "CODED":
                 status_date = target_date
-            
+
             cursor.execute("""
-                INSERT INTO test_case 
+                INSERT INTO test_case
                 (project_id, dv_milestone, testbench, category, owner, test_name,
                  scenario_details, priority, status, created_at, target_date, pass_date, fail_date, coded_date)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (project_id, dv_milestone, testbench, category, owner, test_name,
-                  scenario, "P0", status, created_at, target_date, 
+                  scenario, "P0", status, created_at, target_date,
                   status_date if status == "PASS" else None,
                   status_date if status == "FAIL" else None,
                   status_date if status == "CODED" else None))
-            
+
             tc_id = cursor.lastrowid
             tc_ids.append(tc_id)
-            
+
             # 建立 TC-CP 关联 (PASS 状态的 TC 必须关联 CP)
             if feature in cp_by_feature:
                 num_connections = random.randint(1, min(3, len(cp_by_feature[feature])))
@@ -361,10 +489,179 @@ def generate_test_cases(conn, project_id, cp_ids):
                         INSERT INTO tc_cp_connections (tc_id, cp_id)
                         VALUES (?, ?)
                     """, (tc_id, cp_id))
-    
+
     conn.commit()
     print(f"   ✅ 已创建 {len(tc_ids)} 个 TC")
     return tc_ids
+
+
+def generate_functional_coverage(conn, project_id, config):
+    """生成 Functional Coverage 数据 (FC-CP 模式)
+
+    Args:
+        conn: 数据库连接
+        project_id: 项目ID
+        config: 项目配置字典
+    """
+    print(f"\n📋 生成 Functional Coverage ({len(FC_TEMPLATES)} 个)...")
+
+    cursor = conn.cursor()
+    created_at = datetime.now().strftime("%Y-%m-%d")
+
+    fc_ids = []
+    for covergroup, coverpoint, coverage_type, bin_name, bin_val, coverage_pct, status in FC_TEMPLATES:
+        cursor.execute("""
+            INSERT INTO functional_coverage
+            (project_id, covergroup, coverpoint, coverage_type, bin_name, bin_val,
+             coverage_pct, status, created_by, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (project_id, covergroup, coverpoint, coverage_type, bin_name, bin_val,
+              coverage_pct, status, "admin", created_at))
+        fc_ids.append(cursor.lastrowid)
+
+    conn.commit()
+    print(f"   ✅ 已创建 {len(fc_ids)} 个 FC")
+    return fc_ids
+
+
+def generate_fc_cp_associations(conn, project_id, fc_ids, config):
+    """生成 FC-CP 关联
+
+    Args:
+        conn: 数据库连接
+        project_id: 项目ID
+        fc_ids: FC ID列表
+        config: 项目配置字典
+
+    策略：根据 FC coverpoint 名称智能匹配对应的 CP
+    - instruction_rtype -> R-Type
+    - instruction_itype -> I-Type
+    - instruction_stype -> S-Type
+    - instruction_utype -> U-Type
+    - instruction_jtype -> J-Type
+    - instruction_btype -> B-Type
+    - miss_rate -> Miss Rate
+    - coherency -> Coherency
+    - eviction -> Eviction
+    - read_timing -> Read
+    - write_timing -> Write
+    - config_space -> Config
+    - transaction -> Transaction
+    - msi -> MSI
+    - interrupt -> Interrupt
+    - edge -> Edge
+    - gating -> Gating
+    - sync -> Sync
+    - pll -> PLL
+    - power_on / power_on_reset -> PowerOn
+    - watchdog -> Watchdog
+    - sw_reset / software_reset -> SW Reset
+    """
+    cursor = conn.cursor()
+    created_at = datetime.now().strftime("%Y-%m-%d")
+
+    # 获取所有 CP
+    all_cps = []
+    cursor.execute("SELECT id, feature, sub_feature, cover_point FROM cover_point WHERE project_id = ?", (project_id,))
+    for row in cursor.fetchall():
+        cp_id, feature, sub_feature, cover_point = row
+        all_cps.append({
+            'id': cp_id,
+            'feature': feature,
+            'sub_feature': sub_feature,
+            'cover_point': cover_point
+        })
+
+    # 建立 FC-CP 关联
+    assoc_count = 0
+
+    # 关键词到 CP 匹配规则的映射
+    keyword_rules = [
+        # 指令类型 -> 匹配 R/I/S/U/J/B-Type
+        ('instruction_rtype', 'R-Type'),
+        ('instruction_itype', 'I-Type'),
+        ('instruction_stype', 'S-Type'),
+        ('instruction_utype', 'U-Type'),
+        ('instruction_jtype', 'J-Type'),
+        ('instruction_btype', 'B-Type'),
+        # CPU Core 其他
+        ('cache_coherency', '缓存一致性协议'),
+        ('exception', '异常场景覆盖'),
+        ('privilege', '特权模式切换'),
+        # L2 Cache
+        ('miss_rate', '缓存未命中统计'),
+        ('coherency', '缓存一致性 MESI'),
+        ('eviction', '缓存行替换策略'),
+        # DDR Controller
+        ('read_timing', '读事务覆盖'),
+        ('write_timing', '写事务覆盖'),
+        ('mode_switch', 'DDR 模式切换'),
+        # PCIe Controller
+        ('config_space', '配置空间访问'),
+        ('transaction', '事务层覆盖'),
+        ('msi', 'MSI 中断传输'),
+        ('power', '功耗状态转换'),
+        # GPIO
+        ('interrupt', '中断触发'),
+        ('edge', '边沿检测'),
+        ('debounce', '防抖处理'),
+        # Clock Manager
+        ('gating', '时钟门控'),
+        ('sync', '跨时钟域同步'),
+        ('pll', 'PLL 锁定时间'),
+        # Reset Logic
+        ('power_on', '上电复位序列'),
+        ('watchdog', '看门狗复位'),
+        ('sw_reset', '软件复位'),
+    ]
+
+    for fc_id, fc_data in zip(fc_ids, FC_TEMPLATES):
+        covergroup = fc_data[0]
+        coverpoint = fc_data[1]  # fc_data: (covergroup, coverpoint, coverage_type, bin_name, bin_val, coverage_pct, status)
+
+        # 根据 coverpoint 关键词查找匹配的 CP
+        matched_cp = None
+        for keyword, target_name in keyword_rules:
+            if keyword in coverpoint.lower():
+                # 找到匹配的 CP：feature 相同且 cover_point 或 sub_feature 包含目标名称
+                for cp in all_cps:
+                    if cp['feature'] == covergroup:
+                        cp_name = cp['cover_point'] or ''
+                        sub_feat = cp['sub_feature'] or ''
+                        if target_name in cp_name or target_name in sub_feat:
+                            matched_cp = cp
+                            break
+                if matched_cp:
+                    break
+
+        if matched_cp:
+            # 智能匹配：直接关联到对应的 CP
+            try:
+                cursor.execute("""
+                    INSERT INTO fc_cp_association (project_id, cp_id, fc_id, created_by, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (project_id, matched_cp['id'], fc_id, "admin", created_at))
+                assoc_count += 1
+            except sqlite3.IntegrityError:
+                pass
+        else:
+            # 回退策略：同一 feature 下随机关联 1 个 CP
+            feature_cps = [cp for cp in all_cps if cp['feature'] == covergroup]
+            if feature_cps:
+                cp = random.choice(feature_cps)
+                try:
+                    cursor.execute("""
+                        INSERT INTO fc_cp_association (project_id, cp_id, fc_id, created_by, created_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (project_id, cp['id'], fc_id, "admin", created_at))
+                    assoc_count += 1
+                except sqlite3.IntegrityError:
+                    # 忽略重复关联
+                    pass
+
+    conn.commit()
+    print(f"   ✅ 已创建 {assoc_count} 个 FC-CP 关联")
+    return assoc_count
 
 
 # Demo 快照数据 - 模拟项目进行中的实际进度
@@ -537,16 +834,21 @@ def calculate_priority_coverage(week_date):
     return result
 
 
-def generate_snapshots(conn, project_id):
+def generate_snapshots(conn, project_id, config):
     """生成 Demo 快照 - 根据实际计划曲线动态生成匹配的快照数据
-    
+
     v0.10.0: 扩展支持各 Priority 覆盖率计算
+
+    Args:
+        conn: 数据库连接
+        project_id: 项目ID
+        config: 项目配置字典
     """
-    
+
     # 项目周期
-    project_start = "2026-01-06"
-    project_end = "2026-04-18"
-    
+    project_start = config["start_date"]
+    project_end = config["end_date"]
+
     # 先计算实际计划曲线
     print(f"\n📸 计算实际计划曲线...")
     planned = calculate_planned_coverage_from_db(conn, project_start, project_end)
@@ -661,68 +963,104 @@ def generate_snapshots(conn, project_id):
     print(f"   📊 Priority 覆盖率已计算并保存")
 
 
-def main():
-    parser = argparse.ArgumentParser(description="创建 SOC_DV 示例项目")
-    parser.add_argument("--force", "-f", action="store_true", 
-                        help="重新创建（带清理）")
-    args = parser.parse_args()
-    
-    print("=" * 60)
-    print("🎯 SOC_DV 示例项目生成器")
-    print("=" * 60)
-    
-    # 检查数据目录
-    if not os.path.exists(DATA_DIR):
-        print(f"❌ 错误: 数据目录不存在: {DATA_DIR}")
-        sys.exit(1)
-    
+def create_demo_project(config):
+    """创建单个演示项目
+
+    Args:
+        config: 项目配置字典
+    """
+    project_name = config["name"]
+    coverage_mode = config.get("coverage_mode", "tc_cp")
+
+    print(f"\n{'=' * 60}")
+    print(f"🎯 创建项目: {project_name} ({coverage_mode})")
+    print(f"{'=' * 60}")
+
     # 清理旧项目
-    if args.force:
-        cleanup()
-    
+    cleanup_project(project_name)
+
     # 检查项目是否已存在
     projects = load_projects()
-    existing = [p for p in projects if p.get("name") == PROJECT_NAME]
-    if existing and not args.force:
-        print(f"\n⚠️ 项目 '{PROJECT_NAME}' 已存在")
-        print(f"   使用 --force 重新创建")
-        sys.exit(0)
-    
+    existing = [p for p in projects if p.get("name") == project_name]
+
     # 创建数据库
-    db_path = get_db_path(PROJECT_NAME)
+    db_path = get_db_path(project_name)
     print(f"\n📦 创建数据库: {db_path}")
-    conn = init_db(db_path)
+    conn = init_db(db_path, coverage_mode)
     print(f"   ✅ 数据库初始化完成")
-    
+
     # 获取项目 ID
     project_id = 1
     if projects:
         max_id = max(p.get("id", 0) for p in projects)
         project_id = max_id + 1
-    
+
     # 创建项目记录
-    create_project_record(project_id)
-    
-    # 生成 CP
+    create_project_record(project_id, config)
+
+    # 生成 CP (共用 COVER_POINTS)
     cp_ids = generate_cover_points(conn, project_id)
-    
-    # 生成 TC
-    tc_ids = generate_test_cases(conn, project_id, cp_ids)
-    
-    # 生成 Demo 快照
-    generate_snapshots(conn, project_id)
-    
+
+    if coverage_mode == "fc_cp":
+        # FC-CP 模式: 生成 FC 和 FC-CP 关联
+        fc_ids = generate_functional_coverage(conn, project_id, config)
+        generate_fc_cp_associations(conn, project_id, fc_ids, config)
+        # FC-CP 模式也需要快照
+        generate_snapshots(conn, project_id, config)
+    else:
+        # TC-CP 模式: 生成 TC 和 TC-CP 关联
+        tc_ids = generate_test_cases(conn, project_id, cp_ids, config)
+        # 生成 Demo 快照
+        generate_snapshots(conn, project_id, config)
+
     conn.close()
-    
-    print("\n" + "=" * 60)
-    print("✅ 示例项目创建完成!")
-    print("=" * 60)
-    print(f"\n📁 项目: {PROJECT_NAME}")
-    print(f"📅 周期: {PROJECT_START} ~ {PROJECT_END} (15 周)")
+
+    print(f"\n📁 项目: {project_name}")
+    print(f"📅 周期: {config['start_date']} ~ {config['end_date']}")
     print(f"📋 CP 数量: {len(cp_ids)}")
-    print(f"📋 TC 数量: {len(tc_ids)}")
+    if coverage_mode == "fc_cp":
+        print(f"📊 FC-CP 模式")
+    else:
+        print(f"📋 TC 模式")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="创建演示项目")
+    parser.add_argument("--force", "-f", action="store_true",
+                        help="重新创建（带清理）")
+    parser.add_argument("--project", "-p", choices=["soc_dv", "fc_dv", "all"],
+                        default="all", help="指定要创建的项目")
+    args = parser.parse_args()
+
+    print("=" * 60)
+    print("🎯 Tracker 演示项目生成器")
+    print("=" * 60)
+
+    # 检查数据目录
+    if not os.path.exists(DATA_DIR):
+        print(f"❌ 错误: 数据目录不存在: {DATA_DIR}")
+        sys.exit(1)
+
+    # 清理旧项目
+    if args.force:
+        print("\n🧹 清理旧项目...")
+        if args.project in ["soc_dv", "all"]:
+            cleanup_project(SOC_DV_CONFIG["name"])
+        if args.project in ["fc_dv", "all"]:
+            cleanup_project(FC_DV_CONFIG["name"])
+
+    # 创建项目
+    if args.project in ["soc_dv", "all"]:
+        create_demo_project(SOC_DV_CONFIG)
+
+    if args.project in ["fc_dv", "all"]:
+        create_demo_project(FC_DV_CONFIG)
+
+    print("\n" + "=" * 60)
+    print("✅ 所有演示项目创建完成!")
+    print("=" * 60)
     print(f"\n💡 访问: http://localhost:8081")
-    print(f"   选择项目: {PROJECT_NAME}")
+    print(f"   选择项目: SOC_DV (TC-CP) 或 FC_DV (FC-CP)")
 
 
 if __name__ == "__main__":

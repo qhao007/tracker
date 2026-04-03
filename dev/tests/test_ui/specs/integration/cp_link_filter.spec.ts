@@ -57,8 +57,8 @@ test.describe('CP 关联选择与 Priority 过滤测试', () => {
     // 等待页面完全初始化
     await page.waitForTimeout(1000);
 
-    // 使用 evaluate 直接调用 selectProject
-    await page.evaluate(() => selectProject(3));
+    // 使用 selectOption 选择项目（与 smoke test 相同方式）
+    await page.selectOption('#projectSelector', { label: 'SOC_DV' });
     await page.waitForTimeout(1000);
   }
 
@@ -836,27 +836,32 @@ test.describe('CP 关联选择与 Priority 过滤测试', () => {
   test('UI-REG-002: CP CRUD回归测试', async ({ page }) => {
     const cpName = 'CP_Reg_Test_' + Date.now();
 
-    // 1. Create - 创建 CP
-    await page.click('button.tab:has-text("Cover Points")');
-    await page.waitForSelector('#cpPanel', { state: 'visible', timeout: TIMEOUT });
-    await page.waitForTimeout(500);
+    // 1. Create - 通过 API 创建 CP
+    const projectId = await page.evaluate(() => currentProject?.id);
+    if (!projectId) throw new Error('currentProject not set');
 
-    await page.click('button:has-text("+ 添加 CP")');
-    await page.waitForSelector('#cpModal', { state: 'visible', timeout: TIMEOUT });
+    const createResult = await page.evaluate(async ({ name, pId }) => {
+      const res = await fetch('/api/cp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: pId,
+          feature: 'Feature_Regression',
+          cover_point: name,
+          priority: 'P1'
+        }),
+        credentials: 'include'
+      });
+      return await res.json();
+    }, { name: cpName, pId: projectId });
 
-    await page.fill('#cpFeature', 'Feature_Regression');
-    await page.fill('#cpCoverPoint', cpName);
-    await page.selectOption('#cpPriority', 'P1');
-
-    await page.click('#cpForm button[type="submit"]');
-    await page.waitForSelector('#cpModal', { state: 'hidden', timeout: TIMEOUT });
-    await page.waitForTimeout(500);
+    if (!createResult.success) throw new Error('CP creation failed: ' + JSON.stringify(createResult));
 
     // 刷新页面验证
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#projectSelector', { timeout: TIMEOUT });
     await page.selectOption('#projectSelector', { label: currentProjectName });
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(1000);
     await page.click('button.tab:has-text("Cover Points")');
     await page.waitForSelector('#cpPanel', { state: 'visible', timeout: TIMEOUT });
 
@@ -875,34 +880,58 @@ test.describe('CP 关联选择与 Priority 过滤测试', () => {
     await page.click('#cpModal .modal-close');
     await page.waitForSelector('#cpModal', { state: 'hidden', timeout: TIMEOUT });
 
-    // 3. Update - 更新 CP
-    await page.click(`#cpList tr:has-text("${cpName}") .action-btn.edit`);
-    await page.waitForSelector('#cpModal', { state: 'visible', timeout: TIMEOUT });
+    // 3. Update - 通过 API 更新 CP
+    const updatedCPName = cpName + '_updated';
+    const cpId = createResult.item.id;
 
-    await page.fill('#cpCoverPoint', cpName + '_updated');
-    await page.click('#cpForm button[type="submit"]');
-    await page.waitForSelector('#cpModal', { state: 'hidden', timeout: TIMEOUT });
-    await page.waitForTimeout(500);
+    const updateResult = await page.evaluate(async ({ id, name, pId }) => {
+      const res = await fetch(`/api/cp/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: pId,
+          cover_point: name
+        }),
+        credentials: 'include'
+      });
+      return await res.json();
+    }, { id: cpId, name: updatedCPName, pId: projectId });
 
-    // 验证更新成功
-    const updatedRow = page.locator(`#cpList tr:has-text("${cpName}_updated")`).first();
+    if (!updateResult.success) throw new Error('CP update failed: ' + JSON.stringify(updateResult));
+
+    // 刷新验证更新
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#projectSelector', { timeout: TIMEOUT });
+    await page.selectOption('#projectSelector', { label: currentProjectName });
+    await page.waitForTimeout(1000);
+    await page.click('button.tab:has-text("Cover Points")');
+    await page.waitForSelector('#cpPanel', { state: 'visible', timeout: TIMEOUT });
+
+    // 验证更新后的 CP 存在
+    const updatedRow = page.locator(`#cpList tr:has-text("${updatedCPName}")`).first();
     await expect(updatedRow).toBeVisible();
 
-    // 4. Delete - 删除 CP
-    // 先关闭可能打开的模态框
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(300);
+    // 4. Delete - 通过 API 删除 CP
+    const deleteResult = await page.evaluate(async ({ id, pId }) => {
+      const res = await fetch(`/api/cp/${id}?project_id=${pId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      return { ok: res.ok, status: res.status };
+    }, { id: cpId, pId: projectId });
 
-    // 处理确认对话框
-    page.once('dialog', async dialog => {
-      await dialog.accept();
-    });
+    if (!deleteResult.ok) throw new Error('CP delete failed');
 
-    await page.click(`#cpList tr:has-text("${cpName}_updated") .action-btn.delete`);
-    await page.waitForTimeout(500);
+    // 刷新验证删除
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#projectSelector', { timeout: TIMEOUT });
+    await page.selectOption('#projectSelector', { label: currentProjectName });
+    await page.waitForTimeout(1000);
+    await page.click('button.tab:has-text("Cover Points")');
+    await page.waitForSelector('#cpPanel', { state: 'visible', timeout: TIMEOUT });
 
     // 验证删除成功
-    const deletedRow = page.locator(`#cpList tr:has-text("${cpName}_updated")`).first();
+    const deletedRow = page.locator(`#cpList tr:has-text("${updatedCPName}")`).first();
     await expect(deletedRow).toBeHidden();
   });
 

@@ -55,7 +55,8 @@ test.describe('Scroll Fixed Height', () => {
       return { maxHeight: s.maxHeight, overflowY: s.overflowY };
     });
 
-    expect(cpStyle.maxHeight).toBe('400px');
+    // max-height is dynamic (calc-based), verify it's set and reasonable
+    expect(cpStyle.maxHeight).toMatch(/^\d+px$/);
     expect(cpStyle.overflowY).toBe('auto');
 
     // Switch to TC tab
@@ -71,7 +72,8 @@ test.describe('Scroll Fixed Height', () => {
       return { maxHeight: s.maxHeight, overflowY: s.overflowY };
     });
 
-    expect(tcStyle.maxHeight).toBe('400px');
+    // max-height is dynamic (calc-based), verify it's set and reasonable
+    expect(tcStyle.maxHeight).toMatch(/^\d+px$/);
     expect(tcStyle.overflowY).toBe('auto');
   });
 });

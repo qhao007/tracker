@@ -75,7 +75,21 @@
         .project-info { display: flex; flex-direction: column; }
         .project-name { font-weight: bold; }
         .project-meta { font-size: 11px; color: #666; }
-        
+
+        /* FC/CP 高亮样式 - v0.11.0 supplement */
+        .fc-highlight, .cp-highlight {
+            background-color: #fff3cd !important;
+            transition: background-color 0.3s ease;
+        }
+
+        /* FC comment 截断 - v0.11.0 supplement */
+        .fc-comment-cell {
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
         /* 登录模态框样式 - v0.9.0 紫色主题 */
         .login-overlay { 
             display: none; 
@@ -903,6 +917,8 @@
     <div class="container">
         <div class="stats-bar">
             <div class="stat-item"><span class="stat-value" id="statCP">0</span><span class="stat-label">CP</span></div>
+            <div class="stat-divider" id="statDividerFC" style="display:none;"></div>
+            <div class="stat-item" id="statFCItem" style="display:none;"><span class="stat-value" id="statFC">0</span><span class="stat-label">FC</span></div>
             <div class="stat-divider"></div>
             <div class="stat-item"><span class="stat-value" id="statTC">0</span><span class="stat-label">TC</span></div>
             <div class="stat-divider"></div>
@@ -917,7 +933,7 @@
             <button class="tab active" onclick="switchTab('cp', event)">Cover Points</button>
             <button class="tab" onclick="switchTab('tc', event)">Test Cases</button>
             <button class="tab" onclick="switchTab('progress', event)">Progress Charts</button>
-            <button class="tab" id="fcTab" onclick="switchTab('fc', event)" style="display: none;">FC</button>
+            <button class="tab" id="fcTab" onclick="switchTab('fc', event)" style="display: none;">Functional Coverage</button>
         </div>
         <div id="cpPanel">
             <div class="toolbar">
@@ -1021,10 +1037,9 @@
     <div id="fcPanel" style="display: none;">
         <div class="toolbar">
             <div class="toolbar-left">
-                <button class="btn btn-primary" onclick="openFCModal()">+ 添加 FC</button>
                 <button class="btn" onclick="openFCImportModal()">📥 导入 FC</button>
-                <button class="btn" onclick="exportData('fc')">📤 导出 FC</button>
                 <button class="btn" onclick="openFC_CPAssocImportModal()">📥 导入 FC-CP 关联</button>
+                <button class="btn" onclick="exportData('fc')">📤 导出 FC</button>
                 <input type="text" class="search-input" id="fcSearchInput" placeholder="搜索 Bin Name..." oninput="filterFC(this.value)">
                 <select id="fcCovergroupFilter" onchange="filterFCByCovergroup()"><option value="">全部 Covergroup</option></select>
                 <select id="fcCoverpointFilter" onchange="filterFCByCoverpoint()"><option value="">全部 Coverpoint</option></select>
@@ -1846,9 +1861,14 @@
         
         async function loadData() {
             if (!currentProject) return;
-            // 先并行加载 CP 和 TC
-            await Promise.all([loadCP(), loadTC(), loadStats()]);
-            // 加载完成后统一渲染（确保 testCases 已加载）
+            // 先并行加载 CP、TC 和 FC（FC-CP 模式需要 FC 数据来确定 CP 关联状态）
+            const isFCPMode = currentProject && currentProject.coverage_mode === 'fc_cp';
+            const loadPromises = [loadCP(), loadTC(), loadStats()];
+            if (isFCPMode) {
+                loadPromises.push(loadFC());
+            }
+            await Promise.all(loadPromises);
+            // 加载完成后统一渲染（确保 testCases 和 functionalCoverages 已加载）
             renderCP();
             renderTC();
         }
@@ -1897,6 +1917,19 @@
                 document.getElementById('statFAIL').textContent = stats.fail_tc;
                 document.getElementById('statPASS').textContent = stats.pass_tc;
                 document.getElementById('statCoverage').textContent = stats.coverage;
+
+                // v0.11.0: FC-CP 模式下显示 FC 统计
+                const isFCPMode = currentProject && currentProject.coverage_mode === 'fc_cp';
+                const statFCItem = document.getElementById('statFCItem');
+                const statDividerFC = document.getElementById('statDividerFC');
+                if (isFCPMode) {
+                    statFCItem.style.display = '';
+                    statDividerFC.style.display = '';
+                    document.getElementById('statFC').textContent = stats.total_fc;
+                } else {
+                    statFCItem.style.display = 'none';
+                    statDividerFC.style.display = 'none';
+                }
             } catch (e) { console.error('加载统计失败:', e); }
         }
 
@@ -2021,18 +2054,21 @@
                                 </div>
                                 <div class="fc-coverpoint-content" style="display: ${cpIsExpanded ? 'block' : 'none'}; padding: 8px 0;">
                                     <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                                        <thead><tr style="background: #fafafa;"><th style="text-align: left; padding: 4px;">Bin Name</th><th style="text-align: left; padding: 4px;">Bin Value</th><th style="text-align: left; padding: 4px;">Type</th><th style="text-align: center; padding: 4px;">Coverage</th><th style="text-align: center; padding: 4px;">Status</th><th style="text-align: left; padding: 4px;">Comments</th></tr></thead>
+                                        <thead><tr style="background: #fafafa;"><th style="text-align: left; padding: 4px;">Bin Name</th><th style="text-align: left; padding: 4px;">Bin Value</th><th style="text-align: left; padding: 4px;">Type</th><th style="text-align: center; padding: 4px;">Coverage</th><th style="text-align: center; padding: 4px;">Status</th><th style="text-align: left; padding: 4px;">CP IDs</th><th style="text-align: left; padding: 4px;">Comments</th></tr></thead>
                                         <tbody>
-                                            ${bins.map(bin => `
-                                                <tr style="border-bottom: 1px solid #eee;">
-                                                    <td style="padding: 4px;">${escapeHtml(bin.bin_name || '')}</td>
+                                            ${bins.map(bin => {
+                                                const hasNoCPs = !bin.cp_ids || bin.cp_ids.length === 0;
+                                                return `
+                                                <tr style="border-bottom: 1px solid #eee; ${hasNoCPs ? 'background-color: #fff3cd;' : ''}" data-fc-id="${bin.id}">
+                                                    <td style="padding: 4px; ${hasNoCPs ? 'color: #cc0000;' : ''}">${hasNoCPs ? '<span class="unlinked">' : ''}${escapeHtml(bin.bin_name || '')}${hasNoCPs ? '</span>' : ''}</td>
                                                     <td style="padding: 4px; font-family: monospace;">${escapeHtml(bin.bin_val || '')}</td>
                                                     <td style="padding: 4px;">${escapeHtml(bin.coverage_type || '')}</td>
                                                     <td style="padding: 4px; text-align: center;">${(bin.coverage_pct || 0).toFixed(1)}%</td>
                                                     <td style="padding: 4px; text-align: center;">${getFCStatusIcon(bin.status)}</td>
-                                                    <td style="padding: 4px;">${escapeHtml(bin.comments || '')}</td>
+                                                    <td style="padding: 4px;">${bin.cp_ids && bin.cp_ids.length > 0 ? bin.cp_ids.map(cpId => `<a href="#" onclick="jumpToCPItem(${cpId}); return false;" style="color: #0066cc; text-decoration: underline;">CP_${cpId}</a>`).join(', ') : '-'}</td>
+                                                    <td class="fc-comment-cell" title="${escapeHtml(bin.comments || '')}">${escapeHtml(bin.comments || '')}</td>
                                                 </tr>
-                                            `).join('')}
+                                            `}).join('')}
                                         </tbody>
                                     </table>
                                 </div>
@@ -2148,6 +2184,60 @@
                     document.querySelector('.tab').classList.add('active');
                 }
             }
+        }
+
+        // v0.11.0 supplement: 跳转到 FC Item 并高亮
+        function jumpToFCItem(fcId) {
+            switchTab('fc', null);
+
+            // 1. 查找 FC item
+            const fc = functionalCoverages.find(f => f.id === fcId);
+            if (!fc) {
+                console.error('FC item not found:', fcId);
+                return;
+            }
+
+            // 2. 展开 covergroup（如果未展开）
+            if (!fcExpandedGroups[fc.covergroup]) {
+                fcExpandedGroups[fc.covergroup] = true;
+            }
+
+            // 3. 展开 coverpoint（如果未展开）
+            const cpKey = `${fc.covergroup}|${fc.coverpoint}`;
+            if (!fcExpandedCoverpoints[cpKey]) {
+                fcExpandedCoverpoints[cpKey] = true;
+            }
+
+            // 4. 重新渲染 FC 表格
+            renderFC();
+
+            // 5. 高亮并滚动到视图（延迟确保 DOM 已渲染）
+            setTimeout(() => {
+                const el = document.querySelector(`tr[data-fc-id="${fcId}"]`);
+                if (el) {
+                    el.classList.add('fc-highlight');
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    setTimeout(() => el.classList.remove('fc-highlight'), 3000);
+                }
+            }, 100);
+        }
+
+        // v0.11.0 supplement: 跳转到 CP Item 并高亮
+        function jumpToCPItem(cpId) {
+            switchTab('cp', null);
+
+            // 1. 展开 CP 详情（如果未展开）
+            toggleCPDetail(cpId);
+
+            // 2. 高亮 CP 行（延迟确保 DOM 已渲染）
+            setTimeout(() => {
+                const el = document.querySelector(`tr[data-cp-id="${cpId}"]`);
+                if (el) {
+                    el.classList.add('cp-highlight');
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    setTimeout(() => el.classList.remove('cp-highlight'), 3000);
+                }
+            }, 100);
         }
 
         // Progress Charts (v0.8.0)
@@ -2534,12 +2624,25 @@
 
             // REQ-002: 计算每个CP的关联状态
             const linkedCPIds = new Set();
-            if (testCases && testCases.length > 0) {
-                testCases.forEach(tc => {
-                    if (tc.connected_cps && Array.isArray(tc.connected_cps)) {
-                        tc.connected_cps.forEach(cpId => linkedCPIds.add(cpId));
-                    }
-                });
+            const isFCPMode = currentProject && currentProject.coverage_mode === 'fc_cp';
+            if (isFCPMode) {
+                // FC-CP 模式：根据 FC 关联判断
+                if (functionalCoverages && functionalCoverages.length > 0) {
+                    functionalCoverages.forEach(fc => {
+                        if (fc.cp_ids && Array.isArray(fc.cp_ids)) {
+                            fc.cp_ids.forEach(cpId => linkedCPIds.add(cpId));
+                        }
+                    });
+                }
+            } else {
+                // TC-CP 模式：根据 TC 关联判断
+                if (testCases && testCases.length > 0) {
+                    testCases.forEach(tc => {
+                        if (tc.connected_cps && Array.isArray(tc.connected_cps)) {
+                            tc.connected_cps.forEach(cpId => linkedCPIds.add(cpId));
+                        }
+                    });
+                }
             }
 
             // 文本搜索过滤
@@ -2675,7 +2778,7 @@
                                         <tr>
                                             <td style="padding: 4px 8px;">${escapeHtml(fc.fc_covergroup || '')}</td>
                                             <td style="padding: 4px 8px;">${escapeHtml(fc.fc_coverpoint || '')}</td>
-                                            <td style="padding: 4px 8px;">${escapeHtml(fc.fc_bin_name || '')}</td>
+                                            <td style="padding: 4px 8px;"><a href="#" onclick="jumpToFCItem(${fc.fc_id}); return false;" style="color: #0066cc; text-decoration: underline;">${escapeHtml(fc.fc_bin_name || '')}</a></td>
                                             <td style="padding: 4px 8px;">${fc.fc_coverage_pct !== null ? fc.fc_coverage_pct + '%' : '-'}</td>
                                             <td style="padding: 4px 8px;"><span class="status-badge status-${fc.fc_status || 'missing'}">${fc.fc_status || 'missing'}</span></td>
                                         </tr>
@@ -2829,8 +2932,9 @@
                 const statusDate = statusDateMap[tc.status] || '';
                 // 状态日期显示逻辑
                 const statusDateDisplay = statusDate ? statusDate : '-';
-                // REQ-003: 判断TC是否未关联CP
-                const isUnlinked = !tc.connected_cps || tc.connected_cps.length === 0;
+                // REQ-003: 判断TC是否未关联CP（仅在 TC-CP 模式下高亮）
+                const tcIsFCPMode = currentProject && currentProject.coverage_mode === 'fc_cp';
+                const isUnlinked = !tcIsFCPMode && (!tc.connected_cps || tc.connected_cps.length === 0);
                 const testNameHtml = isUnlinked ? `<span class="unlinked">${escapeHtml(tc.test_name)}</span>` : escapeHtml(tc.test_name);
                 return `<tr><td><input type="checkbox" class="tc-select" value="${tc.id}" onchange="getSelectedTCs()"></td><td>${tc.id}</td><td>${tc.dv_milestone || '-'}</td><td>${escapeHtml(tc.testbench)}</td><td>${escapeHtml(tc.category || '')}</td><td>${escapeHtml(tc.owner || '')}</td><td><strong>${testNameHtml}</strong></td><td>${tc.target_date || '-'}</td><td><select class="status-select status-${tc.status}" onchange="updateTCStatus(${tc.id}, this.value)"><option value="OPEN" ${tc.status === 'OPEN' ? 'selected' : ''}>OPEN</option><option value="CODED" ${tc.status === 'CODED' ? 'selected' : ''}>CODED</option><option value="FAIL" ${tc.status === 'FAIL' ? 'selected' : ''}>FAIL</option><option value="PASS" ${tc.status === 'PASS' ? 'selected' : ''}>PASS</option><option value="REMOVED" ${tc.status === 'REMOVED' ? 'selected' : ''}>REMOVED</option></select></td><td>${statusDateDisplay}</td><td><div class="action-btns"><button class="action-btn" onclick="toggleTCDetails(${tc.id})">详情</button><button class="action-btn edit" onclick="editTC(${tc.id})">编辑</button><button class="action-btn delete" onclick="deleteTC(${tc.id})">删除</button></div></td></tr>${hasDetails ? `<tr class="tc-detail-row" id="${detailsId}"><td colspan="11" style="padding: 0;"><div class="details-content">${tc.scenario_details ? `<div class="detail-row"><span class="detail-label">Scenario:</span><span class="detail-value">${escapeHtml(tc.scenario_details)}</span></div>` : ''}${tc.checker_details ? `<div class="detail-row"><span class="detail-label">Checker:</span><span class="detail-value">${escapeHtml(tc.checker_details)}</span></div>` : ''}${tc.coverage_details ? `<div class="detail-row"><span class="detail-label">Coverage:</span><span class="detail-value">${escapeHtml(tc.coverage_details)}</span></div>` : ''}${tc.comments ? `<div class="detail-row"><span class="detail-label">Comments:</span><span class="detail-value">${escapeHtml(tc.comments)}</span></div>` : ''}</div></td></tr>` : ''}`;
             }).join('');
@@ -2852,6 +2956,7 @@
         function filterCP(value) { renderCP(value); }
         function filterCPByFeature() { renderCP(); }
         function filterCPByPriority() { renderCP(); }
+        function filterCPByLinked() { renderCP(); }
         function resetCPFilter() {
             const featureSelect = document.getElementById('cpFeatureFilter');
             const prioritySelect = document.getElementById('cpPriorityFilter');
@@ -3099,6 +3204,7 @@
                             closeModal('importModal');
                             await loadFC();
                             if (typeof loadFC_CPAssociation === 'function') await loadFC_CPAssociation();
+                            renderCP();  // 刷新 CP 列表的关联状态显示
                         }, 1500);
                     } else {
                         resultDiv.style.background = '#f8d7da';
@@ -3139,7 +3245,10 @@
                         resultDiv.innerHTML = `✅ 导入成功！共导入 ${result.imported} 条记录`;
                         setTimeout(async () => {
                             closeModal('importModal');
-                            if (typeof loadFC_CPAssociation === 'function') await loadFC_CPAssociation();
+                            // 重新加载 FC（包含 cp_ids）和 FC-CP 关联
+                            await loadFC();
+                            await loadFC_CPAssociation();
+                            renderCP();  // 刷新 CP 列表的关联状态显示
                         }, 1500);
                     } else {
                         resultDiv.style.background = '#f8d7da';
@@ -3151,6 +3260,32 @@
                 }
             };
             reader.readAsDataURL(file);
+        }
+
+        // 批量更新 FC items (v0.11.0)
+        async function batchUpdateFC(items) {
+            if (!currentProject) {
+                return {success: false, updated: 0, failed: 0, errors: [{id: null, error: "No project selected"}]};
+            }
+            if (!items || items.length === 0) {
+                return {success: true, updated: 0, failed: 0, errors: []};
+            }
+            try {
+                const res = await fetch(`${API_ENDPOINTS.FC}/batch`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        project_id: currentProject.id,
+                        items: items
+                    })
+                });
+                const result = await res.json();
+                return result;
+            } catch (err) {
+                console.error('批量更新 FC 失败:', err);
+                return {success: false, updated: 0, failed: items.length, errors: [{id: null, error: err.message}]};
+            }
         }
 
         let exportType = 'cp';
@@ -3601,7 +3736,18 @@
                 const isActive = currentProject && currentProject.id === p.id;
                 const deleteBtn = isAdmin ? `<button class="action-btn delete" onclick="event.stopPropagation(); showDeleteProjectConfirm(${p.id}, '${escapeHtml(p.name)}')" title="删除项目">🗑️ 删除</button>` : '';
                 const editBtn = isAdmin ? `<button class="action-btn edit" onclick="event.stopPropagation(); showEditProjectDate(${p.id}, '${escapeHtml(p.name)}', '${p.start_date || ''}', '${p.end_date || ''}')" title="编辑项目日期">✏️ 编辑</button>` : '';
-                return `<div class="project-item ${isActive ? 'active' : ''}" onclick="selectProject(${p.id}); closeModal('projectModal');"><div class="project-info"><span class="project-name">${p.name}</span><span class="project-meta">CP: ${p.cp_count} | TC: ${p.tc_count}${p.start_date ? ' | ' + p.start_date + ' ~ ' + p.end_date : ''}</span></div><div class="action-btns">${editBtn}${deleteBtn}</div></div>`;
+                // v0.11.0 supplement: 根据 coverage_mode 显示不同信息
+                const metaParts = [`CP: ${p.cp_count}`];
+                if (p.coverage_mode === 'fc_cp') {
+                    metaParts.push(`FC: ${p.fc_count || 0}`);
+                } else {
+                    metaParts.push(`TC: ${p.tc_count}`);
+                }
+                metaParts.push(p.coverage_mode === 'fc_cp' ? 'FC-CP' : 'TC-CP');
+                if (p.start_date) {
+                    metaParts.push(`${p.start_date} ~ ${p.end_date}`);
+                }
+                return `<div class="project-item ${isActive ? 'active' : ''}" onclick="selectProject(${p.id}); closeModal('projectModal');"><div class="project-info"><span class="project-name">${p.name}</span><span class="project-meta">${metaParts.join(' | ')}</span></div><div class="action-btns">${editBtn}${deleteBtn}</div></div>`;
             }).join('');
             document.getElementById('projectModal').classList.add('active');
         }

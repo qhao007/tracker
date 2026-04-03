@@ -153,6 +153,93 @@ class TestFCCPAssociationList:
         data = json.loads(response.data)
         assert data == []
 
+    def test_get_fc_cp_associations_filter_by_cp_id(self, admin_client, test_project):
+        """API-FC-CP-005: 按 cp_id 过滤 FC-CP 关联 (BUG-130 回归测试)
+
+        验证 get_fc_cp_associations API 支持 cp_id 参数过滤
+        """
+        # 创建两个测试 CP
+        cp1_resp = admin_client.post('/api/cp',
+            data=json.dumps({
+                'project_id': test_project['id'],
+                'feature': 'FilterTestFeature',
+                'sub_feature': 'FilterTestSub1',
+                'cover_point': 'FilterTestCP1',
+                'priority': 'P1'
+            }),
+            content_type='application/json')
+        if cp1_resp.status_code != 200:
+            pytest.skip("无法创建测试 CP1")
+        cp1_id = json.loads(cp1_resp.data).get('item', {}).get('id')
+
+        cp2_resp = admin_client.post('/api/cp',
+            data=json.dumps({
+                'project_id': test_project['id'],
+                'feature': 'FilterTestFeature',
+                'sub_feature': 'FilterTestSub2',
+                'cover_point': 'FilterTestCP2',
+                'priority': 'P1'
+            }),
+            content_type='application/json')
+        if cp2_resp.status_code != 200:
+            pytest.skip("无法创建测试 CP2")
+        cp2_id = json.loads(cp2_resp.data).get('item', {}).get('id')
+
+        # 创建两个 FC
+        fc_csv = [
+            ["Covergroup", "Coverpoint", "Type", "Bin_Name", "Bin_Value", "Coverage_Pct", "Status", "Comments"],
+            ["FilterTestCG", "FilterTestCP_1", "cover", "filter_bin_1", "1", "60.0", "ready", "Test1"],
+            ["FilterTestCG", "FilterTestCP_2", "cover", "filter_bin_2", "1", "70.0", "ready", "Test2"]
+        ]
+        admin_client.post(f'/api/fc/import?project_id={test_project["id"]}',
+            data=json.dumps({'csv_data': fc_csv}),
+            content_type='application/json')
+
+        fc_list_resp = admin_client.get(f'/api/fc?project_id={test_project["id"]}')
+        fc_list = json.loads(fc_list_resp.data)
+        fc1 = next((f for f in fc_list if f['bin_name'] == 'filter_bin_1'), None)
+        fc2 = next((f for f in fc_list if f['bin_name'] == 'filter_bin_2'), None)
+        if not fc1 or not fc2:
+            pytest.skip("无法创建测试 FC")
+
+        # CP1 关联 FC1，CP2 关联 FC2
+        admin_client.post('/api/fc-cp-association',
+            data=json.dumps({
+                'project_id': test_project['id'],
+                'cp_id': cp1_id,
+                'fc_id': fc1['id']
+            }),
+            content_type='application/json')
+
+        admin_client.post('/api/fc-cp-association',
+            data=json.dumps({
+                'project_id': test_project['id'],
+                'cp_id': cp2_id,
+                'fc_id': fc2['id']
+            }),
+            content_type='application/json')
+
+        # 测试不过滤时返回 2 条关联
+        response_all = admin_client.get(f'/api/fc-cp-association?project_id={test_project["id"]}')
+        data_all = json.loads(response_all.data)
+        assocs_for_project = [a for a in data_all if a.get('cp_id') in (cp1_id, cp2_id)]
+        assert len(assocs_for_project) == 2, f"期望 2 条关联，实际 {len(assocs_for_project)} 条"
+
+        # 测试按 cp1_id 过滤只返回 1 条关联
+        response_cp1 = admin_client.get(f'/api/fc-cp-association?project_id={test_project["id"]}&cp_id={cp1_id}')
+        data_cp1 = json.loads(response_cp1.data)
+        assert isinstance(data_cp1, list), "返回数据应为列表"
+        assert len(data_cp1) == 1, f"按 cp_id={cp1_id} 过滤后期望 1 条关联，实际 {len(data_cp1)} 条"
+        assert data_cp1[0]['cp_id'] == cp1_id, f"过滤结果 cp_id 应为 {cp1_id}"
+        assert data_cp1[0]['fc_id'] == fc1['id'], f"过滤结果 fc_id 应为 {fc1['id']}"
+
+        # 测试按 cp2_id 过滤只返回 1 条关联
+        response_cp2 = admin_client.get(f'/api/fc-cp-association?project_id={test_project["id"]}&cp_id={cp2_id}')
+        data_cp2 = json.loads(response_cp2.data)
+        assert len(data_cp2) == 1, f"按 cp_id={cp2_id} 过滤后期望 1 条关联，实际 {len(data_cp2)} 条"
+        assert data_cp2[0]['cp_id'] == cp2_id
+        assert data_cp2[0]['fc_id'] == fc2['id']
+
 
 class TestFCCPAssociationCreate:
     """FC-CP 关联创建 API 测试"""
