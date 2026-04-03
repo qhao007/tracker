@@ -373,6 +373,7 @@ cd /projects/management/tracker/dev && PYTHONPATH=. pytest tests/test_api/test_a
 
 > 本阶段配置与 tracker_code_development_workflow 的 Subagent D 一致
 > **重要**: 增加现有代码参考环节，必须先确认正确的选择器
+> **强制**: 必须激活 `playwright-debug` 技能进行测试调试
 
 ## 调用方式
 
@@ -383,6 +384,20 @@ cd /projects/management/tracker/dev && PYTHONPATH=. pytest tests/test_api/test_a
 - description: "Tracker Playwright UI测试开发"
 - max_turns: 5  # 增加重试次数，允许自修复
 ```
+
+## 必须激活的技能
+
+**⚠️ 在开始测试开发前，必须先激活 `playwright-debug` 技能！**
+
+使用 Skill 工具激活：
+```
+skill: "playwright-debug"
+```
+
+**playwright-debug 技能提供**:
+- Playwright 测试调试最佳实践
+- Tracker 项目特有的沙箱环境问题处理
+- Firefox 启动失败、loginOverlay 覆盖层等常见问题解决方案
 
 ## 必须阅读的文档
 
@@ -402,6 +417,12 @@ cd /projects/management/tracker/dev && PYTHONPATH=. pytest tests/test_api/test_a
 - **项目类型**: Flask + SQLite Web 应用
 - **测试环境**: 8081 端口
 - **测试框架**: Playwright
+
+## ⚠️ 必须激活的技能
+在开始测试开发前，必须先激活 `playwright-debug` 技能：
+```
+skill: "playwright-debug"
+```
 
 ## 测试命令
 ```bash
@@ -503,8 +524,11 @@ cd /projects/management/tracker/dev && npx playwright test tests/test_ui/specs/i
 
 ## 必须激活的技能
 
-1. **agent-browser-usage** - 命令行浏览器自动化（必须激活，获取完整使用指南）
-2. **Bash** - 辅助命令
+1. **playwright-debug** - Playwright 测试调试技能（必须激活）
+   - 用于调试 UI 测试失败、分析元素定位问题
+   - 包含 Tracker 项目特有的沙箱环境问题处理
+2. **agent-browser** - 命令行浏览器自动化
+3. **Bash** - 辅助命令
 
 ## 必须阅读的文档
 

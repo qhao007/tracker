@@ -11,9 +11,9 @@
 - max_retries: 2
 
 ### 必须激活的技能
-1. **agent-browser** - 命令行浏览器自动化
-2. **Bash** - 辅助命令
-3. **mcp__plugin_playwright_playwright** - 备用浏览器工具
+1. **playwright-debug** - Playwright调试最佳实践（必须激活，获取Trace Viewer、超时问题、元素定位等调试指南）
+2. **agent-browser** - 命令行浏览器自动化
+3. **Bash** - 辅助命令
 
 ### 必须阅读的文档
 1. `/projects/management/tracker/CLAUDE.md` - 测试命令

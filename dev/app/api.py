@@ -161,6 +161,49 @@ def init_project_db(project_name):
         )
     """)
 
+    # 创建 Functional Coverage 表 (v0.11.0)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS functional_coverage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER,
+            covergroup TEXT NOT NULL,
+            coverpoint TEXT NOT NULL,
+            coverage_type TEXT NOT NULL,
+            bin_name TEXT NOT NULL,
+            bin_val TEXT,
+            comments TEXT,
+            coverage_pct REAL DEFAULT 0.0,
+            status TEXT DEFAULT 'missing' CHECK (status IN ('missing', 'ready')),
+            owner TEXT,
+            created_by TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now')),
+            UNIQUE (project_id, covergroup, coverpoint, bin_name)
+        )
+    """)
+
+    # 创建 FC-CP 关联表 (v0.11.0)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS fc_cp_association (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER,
+            cp_id INTEGER,
+            fc_id INTEGER,
+            created_by TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            UNIQUE (cp_id, fc_id),
+            FOREIGN KEY (cp_id) REFERENCES cover_point(id),
+            FOREIGN KEY (fc_id) REFERENCES functional_coverage(id)
+        )
+    """)
+
+    # 创建索引 (v0.11.0)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_fc_covergroup ON functional_coverage(covergroup)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_fc_coverpoint ON functional_coverage(coverpoint)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_fc_coverage_type ON functional_coverage(coverage_type)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_fc_cp_assoc_cp ON fc_cp_association(cp_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_fc_cp_assoc_fc ON fc_cp_association(fc_id)")
+
     conn.commit()
     conn.close()
 
@@ -228,9 +271,12 @@ def get_projects():
             cp_count = cursor.fetchone()[0]
             cursor.execute("SELECT COUNT(*) FROM test_case")
             tc_count = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM functional_coverage")
+            fc_count = cursor.fetchone()[0]
         except (sqlite3.Error, KeyError):
             cp_count = 0
             tc_count = 0
+            fc_count = 0
 
         result.append(
             {
@@ -241,8 +287,10 @@ def get_projects():
                 "version": p.get("version", "stable"),
                 "start_date": p.get("start_date", ""),
                 "end_date": p.get("end_date", ""),
+                "coverage_mode": p.get("coverage_mode", "tc_cp"),  # v0.11.0
                 "cp_count": cp_count,
                 "tc_count": tc_count,
+                "fc_count": fc_count,
             }
         )
 
@@ -289,6 +337,7 @@ def get_project(project_id):
             "version": project.get("version", "stable"),
             "start_date": project.get("start_date", ""),
             "end_date": project.get("end_date", ""),
+            "coverage_mode": project.get("coverage_mode", "tc_cp"),  # v0.11.0
             "cp_count": cp_count,
             "tc_count": tc_count,
             "pass_count": pass_count,
@@ -306,6 +355,8 @@ def create_project():
     start_date = data.get("start_date", "").strip()
     end_date = data.get("end_date", "").strip()
     create_test_user = data.get("create_test_user", False)  # v0.8.3: 自动创建测试用户
+    # v0.11.0: coverage_mode - 'tc_cp' 或 'fc_cp'
+    coverage_mode = data.get("coverage_mode", "tc_cp").strip()
 
     if not name:
         return jsonify({"error": "项目名称不能为空"}), 400
@@ -342,6 +393,7 @@ def create_project():
         "version": "stable",
         "start_date": start_date,
         "end_date": end_date,
+        "coverage_mode": coverage_mode,  # v0.11.0
     }
     projects.append(project)
     save_projects(projects)
@@ -820,48 +872,59 @@ def calculate_planned_coverage(project_name, start_date, end_date, priority_filt
         if week_end > end:
             week_end = end
 
-        # 计算覆盖率：target_date <= week_end 且 status = 'Pass' 的 TC 关联的 CP 覆盖率
-        # 支持 priority 过滤 (v0.10.0)
+        # v0.11.0: 新算法 - 对每个 CP 的覆盖率求平均
+        # 分子：target_date <= 当前周 的 TC（假设 PASS）
+        # 分母：该 CP 关联的所有 TC（包括 target_date 为 NULL 的）
         if priority_condition:
             cursor.execute(f"""
-                WITH pass_tcs AS (
-                    SELECT DISTINCT tc.id
-                    FROM test_case tc
-                    WHERE tc.project_id = ?
-                    AND tc.target_date IS NOT NULL
-                    AND tc.target_date <= ?
-                    AND tc.status != 'REMOVED'
-                ),
-                covered_cps AS (
-                    SELECT DISTINCT cp.id
-                    FROM tc_cp_connections tcc
-                    INNER JOIN pass_tcs pt ON tcc.tc_id = pt.id
-                    INNER JOIN cover_point cp ON tcc.cp_id = cp.id
-                    WHERE 1=1 {priority_condition}
-                )
-                SELECT COUNT(*) FROM covered_cps
-            """, [project_id, week_end.isoformat()] + priority_params)
+                SELECT cp.id
+                FROM cover_point cp
+                WHERE cp.project_id = ? {priority_condition}
+            """, [project_id] + priority_params)
         else:
             cursor.execute("""
-                WITH pass_tcs AS (
-                    SELECT DISTINCT tc.id
+                SELECT id FROM cover_point WHERE project_id = ?
+            """, (project_id,))
+
+        cp_ids = [row[0] for row in cursor.fetchall()]
+        total_cp = len(cp_ids)
+
+        if total_cp == 0:
+            planned.append({
+                'week': current.isoformat(),
+                'coverage': 0
+            })
+            current = week_end + timedelta(days=1)
+            continue
+
+        total_coverage_rate = 0.0
+
+        for cp_id in cp_ids:
+            # 分母：该 CP 关联的所有 TC（包括 target_date 为 NULL 的）
+            cursor.execute("""
+                SELECT COUNT(*) FROM tc_cp_connections WHERE cp_id = ?
+            """, (cp_id,))
+            total_tcs = cursor.fetchone()[0]
+
+            if total_tcs == 0:
+                cp_rate = 0.0
+            else:
+                # 分子：该 CP 关联的、target_date <= 当前周 且 status != 'REMOVED' 的 TC
+                cursor.execute("""
+                    SELECT COUNT(*)
                     FROM test_case tc
-                    WHERE tc.project_id = ?
+                    INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+                    WHERE tcc.cp_id = ?
                     AND tc.target_date IS NOT NULL
                     AND tc.target_date <= ?
                     AND tc.status != 'REMOVED'
-                ),
-                covered_cps AS (
-                    SELECT DISTINCT cp.id
-                    FROM tc_cp_connections tcc
-                    INNER JOIN pass_tcs pt ON tcc.tc_id = pt.id
-                    INNER JOIN cover_point cp ON tcc.cp_id = cp.id
-                )
-                SELECT COUNT(*) FROM covered_cps
-            """, (project_id, week_end.isoformat()))
+                """, (cp_id, week_end.isoformat()))
+                passed_tcs = cursor.fetchone()[0]
+                cp_rate = (passed_tcs / total_tcs) * 100
 
-        covered_cp = cursor.fetchone()[0]
-        coverage = round((covered_cp / total_cp) * 100, 1)
+            total_coverage_rate += cp_rate
+
+        coverage = round(total_coverage_rate / total_cp, 1)
 
         planned.append({
             'week': current.isoformat(),  # 使用周一的日期作为标识
@@ -1133,45 +1196,73 @@ def calculate_current_coverage(project_name):
     cursor.execute("SELECT COUNT(*) FROM test_case")
     tc_total = cursor.fetchone()[0]
 
-    # 获取 Pass TC 关联的 CP（去重）
-    cursor.execute("""
-        SELECT DISTINCT cp.id
-        FROM test_case tc
-        INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
-        INNER JOIN cover_point cp ON tcc.cp_id = cp.id
-        WHERE tc.status != 'REMOVED'
-    """)
-    results = cursor.fetchall()
-    covered_cps = len(results) if results else 0
+    # v0.11.0: 新逻辑 - 对每个 CP 的覆盖率求平均
+    # 先获取所有 CP
+    cursor.execute("SELECT id FROM cover_point")
+    all_cp_ids = [row[0] for row in cursor.fetchall()]
 
-    coverage = round((covered_cps / total_cp) * 100, 1) if total_cp > 0 else 0
+    total_coverage_rate = 0.0
+    covered_cps = 0  # 有至少一个 PASS TC 的 CP 数
 
-    # v0.10.0: 计算各 Priority 的覆盖率
+    for cp_id in all_cp_ids:
+        cursor.execute("""
+            SELECT tc.status FROM test_case tc
+            INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+            WHERE tcc.cp_id = ?
+        """, (cp_id,))
+        connected_tcs = cursor.fetchall()
+
+        total_tc = len(connected_tcs)
+        if total_tc == 0:
+            cp_rate = 0.0
+        else:
+            pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
+            cp_rate = (pass_tc / total_tc) * 100
+            if pass_tc > 0:
+                covered_cps += 1
+
+        total_coverage_rate += cp_rate
+
+    coverage = round(total_coverage_rate / total_cp, 1) if total_cp > 0 else 0
+
+    # v0.11.0: 计算各 Priority 的覆盖率（新逻辑：对每个 CP 的覆盖率求平均）
     priority_coverages = {}
     for priority in ['P0', 'P1', 'P2', 'P3']:
         # 获取该 Priority 的总 CP 数
         cursor.execute(
-            "SELECT COUNT(*) FROM cover_point WHERE priority = ?",
+            "SELECT id FROM cover_point WHERE priority = ?",
             (priority,)
         )
-        priority_total = cursor.fetchone()[0]
+        priority_cp_ids = [row[0] for row in cursor.fetchall()]
+        priority_total = len(priority_cp_ids)
 
         if priority_total == 0:
             priority_coverages[f'{priority.lower()}_coverage'] = 0
             continue
 
-        # 获取该 Priority 下被 Pass TC 覆盖的 CP 数
-        cursor.execute("""
-            SELECT DISTINCT cp.id
-            FROM test_case tc
-            INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
-            INNER JOIN cover_point cp ON tcc.cp_id = cp.id
-            WHERE tc.status != 'REMOVED' AND cp.priority = ?
-        """, (priority,))
-        results = cursor.fetchall()
-        priority_covered = len(results) if results else 0
+        p_total_coverage = 0.0
+        p_covered = 0
 
-        priority_coverage = round((priority_covered / priority_total) * 100, 1) if priority_total > 0 else 0
+        for cp_id in priority_cp_ids:
+            cursor.execute("""
+                SELECT tc.status FROM test_case tc
+                INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+                WHERE tcc.cp_id = ?
+            """, (cp_id,))
+            connected_tcs = cursor.fetchall()
+
+            total_tc = len(connected_tcs)
+            if total_tc == 0:
+                cp_rate = 0.0
+            else:
+                pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
+                cp_rate = (pass_tc / total_tc) * 100
+                if pass_tc > 0:
+                    p_covered += 1
+
+            p_total_coverage += cp_rate
+
+        priority_coverage = round(p_total_coverage / priority_total, 1) if priority_total > 0 else 0
         priority_coverages[f'{priority.lower()}_coverage'] = priority_coverage
 
     return {
@@ -1277,13 +1368,18 @@ def create_snapshot(project_id):
     row = cursor.fetchone()
     snapshot = {
         'id': row[0],
+        'project_id': row[1],
         'snapshot_date': row[2],
         'actual_coverage': row[3],
-        'tc_pass_count': row[4],
-        'tc_total': row[5],
-        'cp_covered': row[6],
-        'cp_total': row[7],
-        'created_at': row[8]
+        'p0_coverage': row[4],
+        'p1_coverage': row[5],
+        'p2_coverage': row[6],
+        'p3_coverage': row[7],
+        'tc_pass_count': row[8],
+        'tc_total': row[9],
+        'cp_covered': row[10],
+        'cp_total': row[11],
+        'created_at': row[12]
     }
     
     return jsonify({
@@ -1409,63 +1505,86 @@ def export_progress(project_id):
 
 
 # v0.8.2: 定时任务接口（需要 API Token）
+# v0.11.0: 修复 Token 验证方式、添加 Priority 覆盖率、改进响应格式
 @api.route("/api/cron/progress-snapshot", methods=["POST"])
 def cron_progress_snapshot():
-    """定时任务：批量创建所有项目的快照"""
+    """定时任务：批量创建所有项目的快照（Token 认证）"""
     # 验证 API Token
     token = request.headers.get('X-API-Token')
-    expected_token = current_app.config.get('CRON_API_TOKEN')
-    
-    if not token or token != expected_token:
-        return jsonify({"error": "Unauthorized"}), 401
-    
+    expected_token = os.environ.get('CRON_API_TOKEN')
+
     if not expected_token:
-        return jsonify({"error": "Cron not configured"}), 500
-    
+        return jsonify({
+            "error": "Cron not configured",
+            "message": "CRON_API_TOKEN environment variable is not set"
+        }), 500
+
+    if not token or token != expected_token:
+        return jsonify({
+            "error": "Unauthorized",
+            "message": "Invalid or missing X-API-Token"
+        }), 401
+
     projects = load_projects()
     created_count = 0
+    skipped_count = 0
+    errors = []
     today = datetime.now().strftime('%Y-%m-%d')
-    
+
     for project in projects:
         if project.get('is_archived'):
+            skipped_count += 1
             continue
-        
+
         project_name = project["name"]
         project_id = project["id"]
-        
+
         # 检查项目是否有日期
         if not project.get('start_date') or not project.get('end_date'):
+            skipped_count += 1
             continue
-        
+
         # 确保表存在
         try:
             ensure_progress_table_exists(project_name)
-        except Exception:
+        except Exception as e:
+            errors.append({"project_id": project_id, "error": str(e)})
             continue
-        
+
         # 计算覆盖率
-        coverage_data = calculate_current_coverage(project_name)
-        if coverage_data is None:
+        try:
+            coverage_data = calculate_current_coverage(project_name)
+        except Exception as e:
+            errors.append({"project_id": project_id, "error": str(e)})
             continue
-        
+
+        if coverage_data is None:
+            skipped_count += 1
+            continue
+
         # 检查是否已存在当周快照
         conn = get_db(project_name)
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id FROM project_progress 
+            SELECT id FROM project_progress
             WHERE project_id = ? AND snapshot_date = ?
         """, (project_id, today))
-        
+
         if not cursor.fetchone():
             cursor.execute("""
                 INSERT INTO project_progress (
                     project_id, snapshot_date, actual_coverage,
+                    p0_coverage, p1_coverage, p2_coverage, p3_coverage,
                     tc_pass_count, tc_total, cp_covered, cp_total
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 project_id,
                 today,
                 coverage_data['actual_coverage'],
+                coverage_data.get('p0_coverage', 0),
+                coverage_data.get('p1_coverage', 0),
+                coverage_data.get('p2_coverage', 0),
+                coverage_data.get('p3_coverage', 0),
                 coverage_data['tc_pass_count'],
                 coverage_data['tc_total'],
                 coverage_data['cp_covered'],
@@ -1473,11 +1592,15 @@ def cron_progress_snapshot():
             ))
             conn.commit()
             created_count += 1
-    
+        else:
+            skipped_count += 1
+
     return jsonify({
         "success": True,
-        "message": "Snapshots created",
-        "count": created_count
+        "created_count": created_count,
+        "skipped_count": skipped_count,
+        "errors": errors,
+        "timestamp": datetime.now().isoformat()
     })
 
 
@@ -1502,6 +1625,10 @@ def get_coverpoints():
     conn = get_db(project["name"])
     cursor = conn.cursor()
 
+    # v0.11.0: 检查 coverage_mode
+    coverage_mode = project.get("coverage_mode", "tc_cp")
+    is_fc_cp_mode = coverage_mode == "fc_cp"
+
     # 构建过滤查询
     query = "SELECT * FROM cover_point WHERE 1=1"
     params = []
@@ -1524,8 +1651,12 @@ def get_coverpoints():
     # REQ-005: 如果需要过滤未关联的CP，先获取所有已关联的CP ID
     linked_cp_ids = set()
     if link_filter == "unlinked":
-        cursor.execute("SELECT DISTINCT cp_id FROM tc_cp_connections")
-        linked_cp_ids = {row["cp_id"] for row in cursor.fetchall()}
+        if is_fc_cp_mode:
+            cursor.execute("SELECT DISTINCT cp_id FROM fc_cp_association")
+            linked_cp_ids = {row["cp_id"] for row in cursor.fetchall()}
+        else:
+            cursor.execute("SELECT DISTINCT cp_id FROM tc_cp_connections")
+            linked_cp_ids = {row["cp_id"] for row in cursor.fetchall()}
         # 重新执行原始查询
         cursor.execute(query, params)
 
@@ -1533,25 +1664,46 @@ def get_coverpoints():
     for row in cursor.fetchall():
         cp_id = row["id"]
 
-        # 计算覆盖率：统计关联 TC 中 PASS 的比例
-        cursor.execute(
-            """
-            SELECT tc.status FROM test_case tc
-            INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
-            WHERE tcc.cp_id = ?
-        """,
-            (cp_id,),
-        )
+        # v0.11.0: 根据 coverage_mode 计算覆盖率
+        if is_fc_cp_mode:
+            # FC-CP 模式: 使用 fc_cp_associations 和 FC 的 coverage_pct
+            cursor.execute(
+                """
+                SELECT fc.coverage_pct FROM functional_coverage fc
+                INNER JOIN fc_cp_association fcca ON fc.id = fcca.fc_id
+                WHERE fcca.cp_id = ?
+            """,
+                (cp_id,),
+            )
+            fc_rows = cursor.fetchall()
+            total = len(fc_rows)
+            # FC-CP 模式: coverage 直接来自 FC 的 coverage_pct，取平均值
+            coverage = round(sum(fc["coverage_pct"] for fc in fc_rows) / total, 1) if total > 0 else 0.0
 
-        connected_tcs = cursor.fetchall()
-        total = len(connected_tcs)
-        passed = sum(1 for tc in connected_tcs if tc["status"] == "PASS")
+            # 判断是否关联
+            is_linked = cp_id in linked_cp_ids or (total > 0)
+            passed = coverage  # FC-CP 模式用 coverage_pct 作为 passed
+        else:
+            # TC-CP 模式: 使用 tc_cp_connections (原有逻辑)
+            cursor.execute(
+                """
+                SELECT tc.status FROM test_case tc
+                INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+                WHERE tcc.cp_id = ?
+            """,
+                (cp_id,),
+            )
 
-        # 计算覆盖率
-        coverage = round(passed / total * 100, 1) if total > 0 else 0.0
+            connected_tcs = cursor.fetchall()
+            total = len(connected_tcs)
+            passed = sum(1 for tc in connected_tcs if tc["status"] == "PASS")
 
-        # REQ-005: 判断是否关联
-        is_linked = cp_id in linked_cp_ids or (total > 0)
+            # 计算覆盖率
+            coverage = round(passed / total * 100, 1) if total > 0 else 0.0
+
+            # REQ-005: 判断是否关联
+            is_linked = cp_id in linked_cp_ids or (total > 0)
+
         if link_filter == "unlinked" and is_linked:
             continue  # 跳过已关联的CP
 
@@ -1568,7 +1720,7 @@ def get_coverpoints():
                 "created_at": row["created_at"],
                 "created_by": dict(row).get("created_by", ""),
                 "coverage": coverage,
-                "coverage_detail": f"{passed}/{total}",
+                "coverage_detail": f"{passed}/{total}" if not is_fc_cp_mode else f"{coverage}",
                 "linked": is_linked,
             }
         )
@@ -2447,6 +2599,697 @@ def batch_update_cp_priority():
     return jsonify({"success": success_count, "failed": len(cp_ids) - success_count})
 
 
+# ============ Functional Coverage (FC) API - v0.11.0 ============
+
+
+@api.route("/api/fc", methods=["GET"])
+@login_required
+def get_fc_list():
+    """获取 FC 列表（支持筛选）"""
+    project_id = request.args.get("project_id", type=int)
+    covergroup_filter = request.args.get("covergroup")
+    coverpoint_filter = request.args.get("coverpoint")
+    coverage_type_filter = request.args.get("coverage_type")
+    bin_name_search = request.args.get("bin_name")  # 模糊搜索
+
+    if not project_id:
+        return jsonify([])
+
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+
+    if not project:
+        return jsonify([])
+
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
+
+    # 构建过滤查询（包含 cp_ids）
+    query = """SELECT fc.*, GROUP_CONCAT(fca.cp_id) as cp_ids
+               FROM functional_coverage fc
+               LEFT JOIN fc_cp_association fca ON fc.id = fca.fc_id
+               WHERE 1=1"""
+    params = []
+
+    if covergroup_filter:
+        groups = [g.strip() for g in covergroup_filter.split(",")]
+        placeholders = ",".join(["?"] * len(groups))
+        query += f" AND fc.covergroup IN ({placeholders})"
+        params.extend(groups)
+
+    if coverpoint_filter:
+        points = [p.strip() for p in coverpoint_filter.split(",")]
+        placeholders = ",".join(["?"] * len(points))
+        query += f" AND fc.coverpoint IN ({placeholders})"
+        params.extend(points)
+
+    if coverage_type_filter:
+        types = [t.strip() for t in coverage_type_filter.split(",")]
+        placeholders = ",".join(["?"] * len(types))
+        query += f" AND fc.coverage_type IN ({placeholders})"
+        params.extend(types)
+
+    if bin_name_search:
+        query += " AND fc.bin_name LIKE ?"
+        params.append(f"%{bin_name_search}%")
+
+    query += " GROUP BY fc.id ORDER BY fc.covergroup, fc.coverpoint, fc.bin_name"
+    cursor.execute(query, params)
+
+    fc_list = []
+    for row in cursor.fetchall():
+        fc_item = dict(row)
+        # 将 cp_ids 字符串转换为列表
+        if fc_item.get("cp_ids"):
+            fc_item["cp_ids"] = [int(cp_id) for cp_id in fc_item["cp_ids"].split(",")]
+        else:
+            fc_item["cp_ids"] = []
+        fc_list.append(fc_item)
+    return jsonify(fc_list)
+
+
+@api.route("/api/fc/batch", methods=["PUT"])
+@login_required
+def batch_update_fc():
+    """批量更新 FC items 的 coverage_pct 和 status"""
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"success": False, "error": "Invalid JSON"}), 400
+
+    items = data.get("items", [])
+
+    # 空数组处理
+    if not items:
+        return jsonify({"success": True, "updated": 0, "failed": 0, "errors": []})
+
+    project_id = data.get("project_id")
+    if not project_id:
+        return jsonify({"success": False, "error": "缺少 project_id"}), 400
+
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+
+    if not project:
+        return jsonify({"success": False, "error": "项目不存在"}), 404
+
+    # 检查是否为 FC-CP 模式
+    if project.get("coverage_mode") != "fc_cp":
+        return jsonify({"success": False, "error": "Not in FC-CP mode"}), 400
+
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
+
+    updated = 0
+    failed = 0
+    errors = []
+    validation_errors = []
+
+    # 先检查 coverage_pct 范围
+    for item in items:
+        fc_id = item.get("id")
+        coverage_pct = item.get("coverage_pct")
+        if coverage_pct is not None and (coverage_pct < 0 or coverage_pct > 100):
+            validation_errors.append({
+                "id": fc_id,
+                "coverage_pct": coverage_pct,
+                "error": "Value must be between 0 and 100"
+            })
+
+    if validation_errors:
+        return jsonify({
+            "success": False,
+            "error": "Invalid coverage_pct value",
+            "details": validation_errors
+        }), 400
+
+    # 逐个更新
+    for item in items:
+        fc_id = item.get("id")
+        coverage_pct = item.get("coverage_pct")
+        status = item.get("status")
+
+        if not fc_id:
+            failed += 1
+            errors.append({"id": None, "error": "Missing id"})
+            continue
+
+        # 至少需要提供 coverage_pct 或 status 之一
+        if coverage_pct is None and status is None:
+            failed += 1
+            errors.append({"id": fc_id, "error": "Must provide coverage_pct or status"})
+            continue
+
+        # 验证 status 值
+        if status is not None and status not in ("missing", "ready"):
+            failed += 1
+            errors.append({"id": fc_id, "error": f"Invalid status: {status}"})
+            continue
+
+        # 检查 FC item 是否存在
+        cursor.execute("SELECT id FROM functional_coverage WHERE id = ?", (fc_id,))
+        if not cursor.fetchone():
+            failed += 1
+            errors.append({"id": fc_id, "error": "FC item not found"})
+            continue
+
+        # 构建更新语句
+        update_fields = []
+        update_values = []
+        if coverage_pct is not None:
+            update_fields.append("coverage_pct = ?")
+            update_values.append(coverage_pct)
+        if status is not None:
+            update_fields.append("status = ?")
+            update_values.append(status)
+
+        if update_fields:
+            update_values.append(fc_id)
+            try:
+                cursor.execute(
+                    f"UPDATE functional_coverage SET {', '.join(update_fields)} WHERE id = ?",
+                    update_values
+                )
+                conn.commit()
+                updated += 1
+            except sqlite3.Error as e:
+                failed += 1
+                errors.append({"id": fc_id, "error": str(e)})
+
+    success = failed == 0
+    return jsonify({
+        "success": success,
+        "updated": updated,
+        "failed": failed,
+        "errors": errors
+    })
+
+
+@api.route("/api/fc/import", methods=["POST"])
+@login_required
+def import_fc():
+    """导入 FC (CSV) - 支持 file_data (base64) 或 csv_data (2D数组)"""
+    # 支持从 body 或 query 获得 project_id
+    project_id = request.json.get("project_id") if request.json else None
+    if not project_id:
+        project_id = request.args.get("project_id", type=int)
+
+    if not project_id:
+        return jsonify({"error": "缺少 project_id"}), 400
+
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+
+    if not project:
+        return jsonify({"error": "项目不存在"}), 404
+
+    # 获取 CSV 数据 - 支持两种格式:
+    # 1. file_data: base64 编码的 CSV 文件内容
+    # 2. csv_data: 2D 数组 (遗留格式)
+    csv_data = None
+    if request.json:
+        # 优先使用 file_data (base64)
+        file_data = request.json.get("file_data")
+        if file_data:
+            try:
+                import base64
+                import csv as csv_module
+                import io
+                file_content = base64.b64decode(file_data)
+                csv_reader = csv_module.reader(io.StringIO(file_content.decode("utf-8")))
+                csv_data = list(csv_reader)
+            except Exception as e:
+                return jsonify({"error": f"CSV 解析失败: {str(e)}"}), 400
+        else:
+            csv_data = request.json.get("csv_data", [])
+
+    if not csv_data or len(csv_data) < 2:
+        return jsonify({"error": "CSV 数据为空或格式错误"}), 400
+
+    headers = csv_data[0]
+    header_map = {}
+    for idx, header in enumerate(headers):
+        if header:
+            header_map[header.strip()] = idx
+
+    # 检查必填字段
+    required_fields = ["Covergroup", "Coverpoint", "Type", "Bin_Name"]
+    for field in required_fields:
+        if field not in header_map:
+            return jsonify({"error": f"缺少必填字段: {field}"}), 400
+
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
+
+    imported = 0
+    errors = []
+    created_by = session.get(SESSION_USERNAME_KEY, "unknown")
+
+    for row_idx, row in enumerate(csv_data[1:], start=2):
+        try:
+            covergroup = (
+                row[header_map.get("Covergroup", 0)]
+                if header_map.get("Covergroup", 0) < len(row)
+                else None
+            )
+            coverpoint = (
+                row[header_map.get("Coverpoint", 1)]
+                if header_map.get("Coverpoint", 1) < len(row)
+                else None
+            )
+            coverage_type = (
+                row[header_map.get("Type", 2)]
+                if header_map.get("Type", 2) < len(row)
+                else None
+            )
+            bin_name = (
+                row[header_map.get("Bin_Name", 3)]
+                if header_map.get("Bin_Name", 3) < len(row)
+                else None
+            )
+
+            if not all([covergroup, coverpoint, coverage_type, bin_name]):
+                errors.append(f"第{row_idx}行: 必填字段缺失")
+                continue
+
+            # 检查重名 (project_id + covergroup + coverpoint + bin_name)
+            cursor.execute(
+                "SELECT id FROM functional_coverage WHERE project_id=? AND covergroup=? AND coverpoint=? AND bin_name=?",
+                (project["id"], covergroup, coverpoint, bin_name)
+            )
+            if cursor.fetchone():
+                errors.append(f'第{row_idx}行: FC "{covergroup}/{coverpoint}/{bin_name}" 已存在')
+                continue
+
+            # 获取可选字段
+            bin_val = (
+                row[header_map.get("Bin_Value", 4)]
+                if header_map.get("Bin_Value", 4) < len(row)
+                else None
+            )
+            coverage_pct = 0.0
+            if header_map.get("Coverage_Pct", 5) < len(row):
+                try:
+                    coverage_pct = float(row[header_map.get("Coverage_Pct", 5)] or 0)
+                except (ValueError, TypeError):
+                    coverage_pct = 0.0
+            status = (
+                row[header_map.get("Status", 6)]
+                if header_map.get("Status", 6) < len(row)
+                else "missing"
+            )
+            # 空字符串或无效值默认为 'missing'
+            if not status or status.strip() == '':
+                status = "missing"
+            # 校验 status 只能是 'missing' 或 'ready'
+            if status not in ('missing', 'ready'):
+                errors.append(f'第{row_idx}行: Status 必须是 "missing" 或 "ready"，当前值为 "{status}"')
+                continue
+            comments = (
+                row[header_map.get("Comments", 7)]
+                if header_map.get("Comments", 7) < len(row)
+                else None
+            )
+
+            cursor.execute(
+                """
+                INSERT INTO functional_coverage (project_id, covergroup, coverpoint, coverage_type, bin_name, bin_val, coverage_pct, status, comments, created_by, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                """,
+                (project["id"], covergroup, coverpoint, coverage_type, bin_name, bin_val, coverage_pct, status, comments, created_by)
+            )
+
+            imported += 1
+        except Exception as e:
+            errors.append(f"第{row_idx}行: {str(e)}")
+
+    if imported > 0:
+        conn.commit()
+
+    return jsonify({"success": True, "imported": imported, "failed": len(errors), "errors": errors})
+
+
+@api.route("/api/fc/export", methods=["GET"])
+@login_required
+def export_fc():
+    """导出 FC (CSV)"""
+    project_id = request.args.get("project_id", type=int)
+
+    if not project_id:
+        return jsonify({"error": "缺少 project_id"}), 400
+
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+
+    if not project:
+        return jsonify({"error": "项目不存在"}), 404
+
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM functional_coverage ORDER BY covergroup, coverpoint, bin_name")
+    fc_list = [dict(row) for row in cursor.fetchall()]
+
+    # 生成 CSV
+    headers = ["Covergroup", "Coverpoint", "Type", "Bin_Name", "Bin_Value", "Coverage_Pct", "Status", "Comments"]
+    csv_data = [headers]
+
+    for fc in fc_list:
+        csv_data.append([
+            fc.get("covergroup", ""),
+            fc.get("coverpoint", ""),
+            fc.get("coverage_type", ""),
+            fc.get("bin_name", ""),
+            fc.get("bin_val", ""),
+            str(fc.get("coverage_pct", 0.0)),
+            fc.get("status", "missing"),
+            fc.get("comments", "") or ""
+        ])
+
+    return jsonify({"success": True, "csv_data": csv_data})
+
+
+# ============ FC-CP 关联 API - v0.11.0 ============
+
+
+@api.route("/api/fc-cp-association", methods=["GET"])
+@login_required
+def get_fc_cp_associations():
+    """获取 FC-CP 关联列表"""
+    project_id = request.args.get("project_id", type=int)
+    cp_id = request.args.get("cp_id", type=int)  # 可选：按 CP ID 过滤
+
+    if not project_id:
+        return jsonify([])
+
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+
+    if not project:
+        return jsonify([])
+
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
+
+    # 构建查询，支持按 cp_id 过滤
+    query = """
+        SELECT fcca.*,
+               cp.feature as cp_feature, cp.sub_feature as cp_sub_feature, cp.cover_point as cp_cover_point,
+               fc.covergroup as fc_covergroup, fc.coverpoint as fc_coverpoint, fc.bin_name as fc_bin_name,
+               fc.coverage_pct as fc_coverage_pct, fc.status as fc_status
+        FROM fc_cp_association fcca
+        LEFT JOIN cover_point cp ON fcca.cp_id = cp.id
+        LEFT JOIN functional_coverage fc ON fcca.fc_id = fc.id
+    """
+    params = []
+    if cp_id:
+        query += " WHERE fcca.cp_id = ?"
+        params.append(cp_id)
+    query += " ORDER BY cp.feature, cp.sub_feature, cp.cover_point"
+
+    cursor.execute(query, params)
+
+    associations = []
+    for row in cursor.fetchall():
+        assoc = dict(row)
+        # 添加 CP 和 FC 的详细信息
+        associations.append({
+            "id": assoc["id"],
+            "project_id": assoc["project_id"],
+            "cp_id": assoc["cp_id"],
+            "fc_id": assoc["fc_id"],
+            "created_by": assoc.get("created_by"),
+            "created_at": assoc.get("created_at"),
+            "cp_feature": assoc.get("cp_feature"),
+            "cp_sub_feature": assoc.get("cp_sub_feature"),
+            "cp_cover_point": assoc.get("cp_cover_point"),
+            "fc_covergroup": assoc.get("fc_covergroup"),
+            "fc_coverpoint": assoc.get("fc_coverpoint"),
+            "fc_bin_name": assoc.get("fc_bin_name"),
+            "fc_coverage_pct": assoc.get("fc_coverage_pct"),
+            "fc_status": assoc.get("fc_status")
+        })
+
+    return jsonify(associations)
+
+
+@api.route("/api/fc-cp-association", methods=["POST"])
+@login_required
+def create_fc_cp_association():
+    """创建 FC-CP 关联"""
+    project_id = request.json.get("project_id")
+    cp_id = request.json.get("cp_id")
+    fc_id = request.json.get("fc_id")
+
+    if not all([project_id, cp_id, fc_id]):
+        return jsonify({"error": "缺少必要参数"}), 400
+
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+
+    if not project:
+        return jsonify({"error": "项目不存在"}), 404
+
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
+
+    # 检查 CP 是否存在
+    cursor.execute("SELECT id FROM cover_point WHERE id=?", (cp_id,))
+    if not cursor.fetchone():
+        return jsonify({"error": "CP 不存在"}), 404
+
+    # 检查 FC 是否存在
+    cursor.execute("SELECT id FROM functional_coverage WHERE id=?", (fc_id,))
+    if not cursor.fetchone():
+        return jsonify({"error": "FC 不存在"}), 404
+
+    # 检查关联是否已存在
+    cursor.execute("SELECT id FROM fc_cp_association WHERE cp_id=? AND fc_id=?", (cp_id, fc_id))
+    if cursor.fetchone():
+        return jsonify({"error": "关联已存在"}), 400
+
+    created_by = session.get(SESSION_USERNAME_KEY, "unknown")
+
+    try:
+        cursor.execute(
+            """
+            INSERT INTO fc_cp_association (project_id, cp_id, fc_id, created_by, created_at)
+            VALUES (?, ?, ?, ?, datetime('now'))
+            """,
+            (project_id, cp_id, fc_id, created_by)
+        )
+        conn.commit()
+        assoc_id = cursor.lastrowid
+
+        return jsonify({"success": True, "id": assoc_id}), 201
+    except Exception as e:
+        return jsonify({"error": f"创建关联失败: {str(e)}"}), 500
+
+
+@api.route("/api/fc-cp-association", methods=["DELETE"])
+@login_required
+def delete_fc_cp_association():
+    """删除 FC-CP 关联"""
+    # 支持两种格式:
+    # 1. Query params: ?id=<assoc_id>&project_id=<project_id>
+    # 2. JSON body: {"cp_id": <cp_id>, "fc_id": <fc_id>, "project_id": <project_id>}
+    assoc_id = request.args.get("id", type=int)
+    project_id = request.args.get("project_id", type=int)
+
+    # 使用 get_json(silent=True) 避免没有 body 时报错
+    json_data = request.get_json(silent=True)
+
+    # 如果 query params 中没有 project_id，尝试从 JSON body 获取
+    if not project_id and json_data:
+        project_id = json_data.get("project_id")
+
+    # 如果没有 assoc_id 但有 cp_id 和 fc_id，从数据库查询关联 ID
+    if not assoc_id and json_data:
+        cp_id = json_data.get("cp_id")
+        fc_id = json_data.get("fc_id")
+        if not project_id:
+            return jsonify({"error": "缺少 project_id"}), 400
+        if not cp_id or not fc_id:
+            return jsonify({"error": "缺少关联 ID"}), 400
+
+        projects = load_projects()
+        project = next((p for p in projects if p["id"] == project_id), None)
+        if not project:
+            return jsonify({"error": "项目不存在"}), 404
+
+        conn = get_db(project["name"])
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id FROM fc_cp_association WHERE cp_id=? AND fc_id=?",
+            (cp_id, fc_id)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"error": "关联不存在"}), 404
+        assoc_id = row["id"]
+    elif not assoc_id:
+        return jsonify({"error": "缺少关联 ID"}), 400
+    elif not project_id:
+        return jsonify({"error": "缺少 project_id"}), 400
+
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+
+    if not project:
+        return jsonify({"error": "项目不存在"}), 404
+
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
+
+    cursor.execute("DELETE FROM fc_cp_association WHERE id=?", (assoc_id,))
+    conn.commit()
+
+    return jsonify({"success": True})
+
+
+@api.route("/api/fc-cp-association/import", methods=["POST"])
+@login_required
+def import_fc_cp_association():
+    """导入 FC-CP 关联 (CSV)"""
+    # 支持从 body 或 query 获得 project_id
+    project_id = request.json.get("project_id") if request.json else None
+    if not project_id:
+        project_id = request.args.get("project_id", type=int)
+
+    if not project_id:
+        return jsonify({"error": "缺少 project_id"}), 400
+
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+
+    if not project:
+        return jsonify({"error": "项目不存在"}), 404
+
+    # 获取 CSV 数据 - 支持两种格式:
+    # 1. file_data: base64 编码的 CSV 文件内容
+    # 2. csv_data: 2D 数组 (遗留格式)
+    csv_data = None
+    if request.json:
+        # 优先使用 file_data (base64)
+        file_data = request.json.get("file_data")
+        if file_data:
+            try:
+                import base64
+                import csv as csv_module
+                import io
+                file_content = base64.b64decode(file_data)
+                csv_reader = csv_module.reader(io.StringIO(file_content.decode("utf-8")))
+                csv_data = list(csv_reader)
+            except Exception as e:
+                return jsonify({"error": f"CSV 解析失败: {str(e)}"}), 400
+        else:
+            csv_data = request.json.get("csv_data", [])
+
+    if not csv_data or len(csv_data) < 2:
+        return jsonify({"error": "CSV 数据为空或格式错误"}), 400
+
+    headers = csv_data[0]
+    header_map = {}
+    for idx, header in enumerate(headers):
+        if header:
+            header_map[header.strip()] = idx
+
+    # 检查必填字段
+    required_fields = ["cp_feature", "cp_sub_feature", "cp_cover_point", "fc_covergroup", "fc_coverpoint", "fc_bin_name"]
+    for field in required_fields:
+        if field not in header_map:
+            return jsonify({"error": f"缺少必填字段: {field}"}), 400
+
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
+
+    imported = 0
+    errors = []
+    created_by = session.get(SESSION_USERNAME_KEY, "unknown")
+
+    for row_idx, row in enumerate(csv_data[1:], start=2):
+        try:
+            cp_feature = (
+                row[header_map.get("cp_feature", 0)]
+                if header_map.get("cp_feature", 0) < len(row)
+                else None
+            )
+            cp_sub_feature = (
+                row[header_map.get("cp_sub_feature", 1)]
+                if header_map.get("cp_sub_feature", 1) < len(row)
+                else None
+            )
+            cp_cover_point = (
+                row[header_map.get("cp_cover_point", 2)]
+                if header_map.get("cp_cover_point", 2) < len(row)
+                else None
+            )
+            fc_covergroup = (
+                row[header_map.get("fc_covergroup", 3)]
+                if header_map.get("fc_covergroup", 3) < len(row)
+                else None
+            )
+            fc_coverpoint = (
+                row[header_map.get("fc_coverpoint", 4)]
+                if header_map.get("fc_coverpoint", 4) < len(row)
+                else None
+            )
+            fc_bin_name = (
+                row[header_map.get("fc_bin_name", 5)]
+                if header_map.get("fc_bin_name", 5) < len(row)
+                else None
+            )
+
+            if not all([cp_feature, cp_cover_point, fc_covergroup, fc_coverpoint, fc_bin_name]):
+                errors.append(f"第{row_idx}行: 必填字段缺失")
+                continue
+
+            # 查找 CP ID (使用 feature + sub_feature + cover_point)
+            cursor.execute(
+                "SELECT id FROM cover_point WHERE feature=? AND sub_feature=? AND cover_point=?",
+                (cp_feature, cp_sub_feature or "", cp_cover_point)
+            )
+            cp_row = cursor.fetchone()
+            if not cp_row:
+                errors.append(f'第{row_idx}行: CP "{cp_feature}/{cp_sub_feature}/{cp_cover_point}" 不存在')
+                continue
+            cp_id = cp_row[0]
+
+            # 查找 FC ID (使用 covergroup + coverpoint + bin_name)
+            cursor.execute(
+                "SELECT id FROM functional_coverage WHERE covergroup=? AND coverpoint=? AND bin_name=?",
+                (fc_covergroup, fc_coverpoint, fc_bin_name)
+            )
+            fc_row = cursor.fetchone()
+            if not fc_row:
+                errors.append(f'第{row_idx}行: FC "{fc_covergroup}/{fc_coverpoint}/{fc_bin_name}" 不存在')
+                continue
+            fc_id = fc_row[0]
+
+            # 检查关联是否已存在
+            cursor.execute("SELECT id FROM fc_cp_association WHERE cp_id=? AND fc_id=?", (cp_id, fc_id))
+            if cursor.fetchone():
+                errors.append(f'第{row_idx}行: 关联已存在')
+                continue
+
+            cursor.execute(
+                """
+                INSERT INTO fc_cp_association (project_id, cp_id, fc_id, created_by, created_at)
+                VALUES (?, ?, ?, ?, datetime('now'))
+                """,
+                (project_id, cp_id, fc_id, created_by)
+            )
+
+            imported += 1
+        except Exception as e:
+            errors.append(f"第{row_idx}行: {str(e)}")
+
+    if imported > 0:
+        conn.commit()
+
+    return jsonify({"success": True, "imported": imported, "failed": len(errors), "errors": errors})
+
+
 # ============ 统计 ============
 
 
@@ -2459,6 +3302,7 @@ def get_stats():
         return jsonify(
             {
                 "total_cp": 0,
+                "total_fc": 0,
                 "total_tc": 0,
                 "open_tc": 0,
                 "coded_tc": 0,
@@ -2475,6 +3319,7 @@ def get_stats():
         return jsonify(
             {
                 "total_cp": 0,
+                "total_fc": 0,
                 "total_tc": 0,
                 "open_tc": 0,
                 "coded_tc": 0,
@@ -2495,6 +3340,7 @@ def get_stats():
         return jsonify(
             {
                 "total_cp": 0,
+                "total_fc": 0,
                 "total_tc": 0,
                 "open_tc": 0,
                 "coded_tc": 0,
@@ -2504,9 +3350,19 @@ def get_stats():
             }
         )
 
+    # v0.11.0: 检查 coverage_mode
+    coverage_mode = project.get("coverage_mode", "tc_cp")
+    is_fc_cp_mode = coverage_mode == "fc_cp"
+
     # CP 统计
     cursor.execute("SELECT COUNT(*) FROM cover_point")
     total_cp = cursor.fetchone()[0]
+
+    # FC 统计 (FC-CP 模式)
+    total_fc = 0
+    if is_fc_cp_mode and "functional_coverage" in tables:
+        cursor.execute("SELECT COUNT(*) FROM functional_coverage")
+        total_fc = cursor.fetchone()[0]
 
     # TC 统计（REMOVED 不计入 Total）
     cursor.execute('SELECT COUNT(*) FROM test_case WHERE status != "REMOVED"')
@@ -2529,31 +3385,61 @@ def get_stats():
     if total_tc > 0:
         pass_rate = round(pass_tc / total_tc * 100, 1)
 
-    # 计算覆盖率（只统计非 REMOVED 的 TC）
+    # 计算覆盖率
     coverage = 0
     if total_cp > 0:
-        cursor.execute("SELECT id FROM cover_point")
-        cp_ids = [row[0] for row in cursor.fetchall()]
+        if is_fc_cp_mode:
+            # FC-CP 模式: 使用 FC-CP 关联计算覆盖率
+            # 每个 CP 的覆盖率 = 关联 FC 的平均 coverage_pct
+            # 总体覆盖率 = 所有 CP 覆盖率的平均值
+            if "fc_cp_association" in tables and "functional_coverage" in tables:
+                cursor.execute("SELECT id FROM cover_point")
+                cp_ids = [row[0] for row in cursor.fetchall()]
 
-        total_progress = 0
-        for cp_id in cp_ids:
-            cursor.execute("SELECT tc_id FROM tc_cp_connections WHERE cp_id=?", (cp_id,))
-            tc_ids = [r[0] for r in cursor.fetchall()]
+                total_progress = 0
+                linked_cp_count = 0
+                for cp_id in cp_ids:
+                    cursor.execute(
+                        """
+                        SELECT fc.coverage_pct FROM functional_coverage fc
+                        INNER JOIN fc_cp_association fcca ON fc.id = fcca.fc_id
+                        WHERE fcca.cp_id = ?
+                    """,
+                        (cp_id,),
+                    )
+                    fc_rows = cursor.fetchall()
+                    if fc_rows:
+                        avg_coverage = sum(fc["coverage_pct"] for fc in fc_rows) / len(fc_rows)
+                        total_progress += avg_coverage
+                        linked_cp_count += 1
 
-            if tc_ids:
-                placeholders = ",".join(["?"] * len(tc_ids))
-                cursor.execute(
-                    f'SELECT COUNT(*) FROM test_case WHERE id IN ({placeholders}) AND status="PASS"',
-                    tc_ids,
-                )
-                passed = cursor.fetchone()[0]
-                total_progress += (passed / len(tc_ids)) * 100
+                if linked_cp_count > 0:
+                    coverage = round(total_progress / total_cp, 1)
+        else:
+            # TC-CP 模式: 使用 TC-CP 连接计算覆盖率
+            cursor.execute("SELECT id FROM cover_point")
+            cp_ids = [row[0] for row in cursor.fetchall()]
 
-        coverage = round(total_progress / total_cp, 1)
+            total_progress = 0
+            for cp_id in cp_ids:
+                cursor.execute("SELECT tc_id FROM tc_cp_connections WHERE cp_id=?", (cp_id,))
+                tc_ids = [r[0] for r in cursor.fetchall()]
+
+                if tc_ids:
+                    placeholders = ",".join(["?"] * len(tc_ids))
+                    cursor.execute(
+                        f'SELECT COUNT(*) FROM test_case WHERE id IN ({placeholders}) AND status="PASS"',
+                        tc_ids,
+                    )
+                    passed = cursor.fetchone()[0]
+                    total_progress += (passed / len(tc_ids)) * 100
+
+            coverage = round(total_progress / total_cp, 1)
 
     return jsonify(
         {
             "total_cp": total_cp,
+            "total_fc": total_fc,
             "total_tc": total_tc,
             "open_tc": open_tc,
             "coded_tc": coded_tc,
@@ -2752,18 +3638,21 @@ def import_cp(project, ws, headers, is_csv=False, csv_data=None):
                     errors.append(f"第{row_idx}行: 必填字段缺失")
                     continue
 
-                # 检查重名
-                cursor.execute("SELECT id FROM cover_point WHERE cover_point=?", (cover_point,))
-                if cursor.fetchone():
-                    errors.append(f'第{row_idx}行: Cover Point "{cover_point}" 已存在')
-                    continue
-
-                # 获取其他字段
+                # 获取 sub_feature 用于重名检查 (v0.11.0)
                 sub_feature = (
                     row[header_map.get("Sub-Feature", 1)]
                     if header_map.get("Sub-Feature", 1) < len(row)
                     else ""
                 )
+
+                # v0.11.0: 检查重名使用 feature + sub_feature + cover_point 组合
+                cursor.execute(
+                    "SELECT id FROM cover_point WHERE feature=? AND sub_feature=? AND cover_point=?",
+                    (feature, sub_feature, cover_point)
+                )
+                if cursor.fetchone():
+                    errors.append(f'第{row_idx}行: CP "{feature}/{sub_feature}/{cover_point}" 已存在')
+                    continue
                 cover_point_details = (
                     row[header_map.get("Cover Point Details", 3)]
                     if header_map.get("Cover Point Details", 3) < len(row)
@@ -2815,14 +3704,19 @@ def import_cp(project, ws, headers, is_csv=False, csv_data=None):
                     errors.append(f"第{row_idx}行: 必填字段缺失")
                     continue
 
-                # 检查重名
-                cursor.execute("SELECT id FROM cover_point WHERE cover_point=?", (cover_point,))
+                # 获取 sub_feature 用于重名检查 (v0.11.0)
+                sub_feature = ws.cell(row_idx, header_map.get("Sub-Feature", 0) + 1).value or ""
+
+                # v0.11.0: 检查重名使用 feature + sub_feature + cover_point 组合
+                cursor.execute(
+                    "SELECT id FROM cover_point WHERE feature=? AND sub_feature=? AND cover_point=?",
+                    (feature, sub_feature, cover_point)
+                )
                 if cursor.fetchone():
-                    errors.append(f'第{row_idx}行: Cover Point "{cover_point}" 已存在')
+                    errors.append(f'第{row_idx}行: CP "{feature}/{sub_feature}/{cover_point}" 已存在')
                     continue
 
                 # 获取其他字段
-                sub_feature = ws.cell(row_idx, header_map.get("Sub-Feature", 0) + 1).value or ""
                 cover_point_details = (
                     ws.cell(row_idx, header_map.get("Cover Point Details", 0) + 1).value or ""
                 )
@@ -2898,10 +3792,13 @@ def import_tc(project, ws, headers, is_csv=False, csv_data=None):
                     errors.append(f"第{row_idx}行: 必填字段缺失")
                     continue
 
-                # 检查重名
-                cursor.execute("SELECT id FROM test_case WHERE test_name=?", (test_name,))
+                # v0.11.0: 检查重名使用 testbench + test_name 组合
+                cursor.execute(
+                    "SELECT id FROM test_case WHERE testbench=? AND test_name=?",
+                    (testbench, test_name)
+                )
                 if cursor.fetchone():
-                    errors.append(f'第{row_idx}行: Test Name "{test_name}" 已存在')
+                    errors.append(f'第{row_idx}行: TC "{testbench}/{test_name}" 已存在')
                     continue
 
                 # 获取其他字段
@@ -2973,10 +3870,13 @@ def import_tc(project, ws, headers, is_csv=False, csv_data=None):
                     errors.append(f"第{row_idx}行: 必填字段缺失")
                     continue
 
-                # 检查重名
-                cursor.execute("SELECT id FROM test_case WHERE test_name=?", (test_name,))
+                # v0.11.0: 检查重名使用 testbench + test_name 组合
+                cursor.execute(
+                    "SELECT id FROM test_case WHERE testbench=? AND test_name=?",
+                    (testbench, test_name)
+                )
                 if cursor.fetchone():
-                    errors.append(f'第{row_idx}行: Test Name "{test_name}" 已存在')
+                    errors.append(f'第{row_idx}行: TC "{testbench}/{test_name}" 已存在')
                     continue
 
                 # 获取其他字段
@@ -3708,6 +4608,251 @@ def submit_feedback():
         "message": "反馈提交成功",
         "data": feedback_data
     })
+
+
+# ============ Dashboard API (v0.11.0) ============
+
+
+@api.route('/api/dashboard/stats', methods=['GET'])
+@login_required
+def get_dashboard_stats():
+    """获取 Dashboard 统计数据"""
+    project_id = request.args.get('project_id', type=int)
+
+    if not project_id:
+        return jsonify({'success': False, 'error': 'project_id is required'}), 400
+
+    # 验证项目存在
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    if not project:
+        return jsonify({'success': False, 'error': 'Project not found', 'code': 'PROJECT_NOT_FOUND'}), 404
+
+    project_name = project['name']
+    conn = get_db(project_name)
+    cursor = conn.cursor()
+
+    try:
+        # 1. 概览统计
+        # 新逻辑：先计算每个 CP 的覆盖率（PASS TC数 / 关联 TC总数），再对所有 CP 求平均
+        cursor.execute("SELECT id, priority, feature FROM cover_point WHERE project_id = ?", (project_id,))
+        all_cps = cursor.fetchall()
+
+        total_cp = len(all_cps)
+        unlinked_cp = 0
+        total_coverage_rate = 0.0  # 所有 CP 的覆盖率累加，用于计算平均
+
+        # 获取所有 CP 及其关联的 TC
+        for cp_row in all_cps:
+            cp_id = cp_row[0]
+            cursor.execute("""
+                SELECT tc.status FROM test_case tc
+                INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+                WHERE tcc.cp_id = ?
+            """, (cp_id,))
+            connected_tcs = cursor.fetchall()
+
+            total_tc = len(connected_tcs)
+            if total_tc == 0:
+                unlinked_cp += 1
+                cp_rate = 0.0
+            else:
+                pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
+                cp_rate = (pass_tc / total_tc) * 100
+
+            total_coverage_rate += cp_rate
+
+        # 覆盖率 = 所有 CP 覆盖率的平均值
+        coverage_rate = round(total_coverage_rate / total_cp, 1) if total_cp > 0 else 0
+        # covered_cp = 有至少一个 PASS TC 的 CP 数量
+        covered_cp = sum(1 for cp in all_cps if any(
+            tc[0] == 'PASS' for tc in
+            cursor.execute("""
+                SELECT tc.status FROM test_case tc
+                INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+                WHERE tcc.cp_id = ?
+            """, (cp[0],)).fetchall()
+        ))
+
+        # 2. 按 Feature 统计
+        # 新逻辑：对同一 feature 下所有 CP 的覆盖率求平均
+        cursor.execute("""
+            SELECT feature, COUNT(*) as cnt
+            FROM cover_point
+            WHERE project_id = ? AND feature IS NOT NULL AND feature != ''
+            GROUP BY feature
+        """, (project_id,))
+        feature_stats = cursor.fetchall()
+
+        by_feature = []
+        for stat in feature_stats:
+            feature_name = stat[0]
+            feature_total = stat[1]
+
+            # 获取该 feature 下所有 CP 的覆盖率
+            cursor.execute("""
+                SELECT cp.id FROM cover_point cp
+                WHERE cp.project_id = ? AND cp.feature = ?
+            """, (project_id, feature_name))
+            feature_cp_ids = [row[0] for row in cursor.fetchall()]
+
+            feature_total_coverage = 0.0
+            feature_covered = 0
+
+            for cp_id in feature_cp_ids:
+                cursor.execute("""
+                    SELECT tc.status FROM test_case tc
+                    INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+                    WHERE tcc.cp_id = ?
+                """, (cp_id,))
+                connected_tcs = cursor.fetchall()
+
+                total_tc = len(connected_tcs)
+                if total_tc == 0:
+                    cp_rate = 0.0
+                else:
+                    pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
+                    cp_rate = (pass_tc / total_tc) * 100
+                    if pass_tc > 0:
+                        feature_covered += 1
+
+                feature_total_coverage += cp_rate
+
+            # 该 feature 的覆盖率 = 属下所有 CP 覆盖率的平均值
+            rate = round(feature_total_coverage / feature_total, 1) if feature_total > 0 else 0
+            by_feature.append({
+                'feature': feature_name,
+                'total': feature_total,
+                'covered': feature_covered,
+                'rate': rate
+            })
+
+        # 按覆盖率降序排列
+        by_feature.sort(key=lambda x: x['rate'], reverse=True)
+
+        # 3. 按 Priority 统计
+        # 新逻辑：对同一 priority 下所有 CP 的覆盖率求平均
+        by_priority = {}
+        for p in ['P0', 'P1', 'P2']:
+            cursor.execute("""
+                SELECT id FROM cover_point
+                WHERE project_id = ? AND priority = ?
+            """, (project_id, p))
+            p_cp_ids = [row[0] for row in cursor.fetchall()]
+            p_total = len(p_cp_ids)
+
+            p_total_coverage = 0.0
+            p_covered = 0
+
+            for cp_id in p_cp_ids:
+                cursor.execute("""
+                    SELECT tc.status FROM test_case tc
+                    INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+                    WHERE tcc.cp_id = ?
+                """, (cp_id,))
+                connected_tcs = cursor.fetchall()
+
+                total_tc = len(connected_tcs)
+                if total_tc == 0:
+                    cp_rate = 0.0
+                else:
+                    pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
+                    cp_rate = (pass_tc / total_tc) * 100
+                    if pass_tc > 0:
+                        p_covered += 1
+
+                p_total_coverage += cp_rate
+
+            p_rate = round(p_total_coverage / p_total, 1) if p_total > 0 else 0
+            by_priority[p] = {'total': p_total, 'covered': p_covered, 'rate': p_rate}
+
+        # 4. 趋势数据 (从 project_progress 表，如果表不存在则返回空)
+        try:
+            cursor.execute("""
+                SELECT snapshot_date, actual_coverage
+                FROM project_progress
+                WHERE project_id = ?
+                ORDER BY snapshot_date DESC
+                LIMIT 7
+            """, (project_id,))
+            progress_records = cursor.fetchall()
+            progress_records = list(reversed(progress_records))  # 旧到新
+            trend = [{'date': r[0], 'rate': r[1] if r[1] is not None else 0} for r in progress_records]
+        except Exception:
+            # 表不存在时返回空趋势数据
+            trend = []
+
+        # 5. Top 5 未覆盖 CP (未关联 TC 的 CP，按 priority 排序)
+        cursor.execute("""
+            SELECT cp.id, cp.cover_point, cp.priority, cp.feature
+            FROM cover_point cp
+            LEFT JOIN tc_cp_connections tcc ON cp.id = tcc.cp_id
+            WHERE cp.project_id = ? AND tcc.id IS NULL
+            ORDER BY
+                CASE cp.priority
+                    WHEN 'P0' THEN 1
+                    WHEN 'P1' THEN 2
+                    WHEN 'P2' THEN 3
+                    ELSE 4
+                END,
+                cp.created_at DESC
+            LIMIT 5
+        """, (project_id,))
+        uncovered_rows = cursor.fetchall()
+
+        top_uncovered = []
+        for row in uncovered_rows:
+            cp_name = row[1][:50] if row[1] else ''
+            top_uncovered.append({
+                'id': row[0],
+                'name': cp_name,
+                'priority': row[2] or 'P0',
+                'feature': row[3] or ''
+            })
+
+        # 6. Recent Activity (从最近7天的 CP 创建记录推算)
+        from datetime import datetime, timedelta
+        week_ago = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
+
+        cursor.execute("""
+            SELECT COUNT(*) FROM cover_point
+            WHERE project_id = ? AND created_at >= ?
+        """, (project_id, week_ago))
+        recent_cp_count = cursor.fetchone()[0] or 0
+
+        recent_activity = []
+        if recent_cp_count > 0:
+            cursor.execute("""
+                SELECT created_at FROM cover_point
+                WHERE project_id = ? AND created_at >= ?
+                ORDER BY created_at DESC LIMIT 1
+            """, (project_id, week_ago))
+            last_cp_time = cursor.fetchone()
+            recent_activity.append({
+                'type': 'cp_added',
+                'count': recent_cp_count,
+                'timestamp': last_cp_time[0] if last_cp_time else datetime.now().isoformat()
+            })
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'overview': {
+                    'total_cp': total_cp,
+                    'covered_cp': covered_cp,
+                    'coverage_rate': coverage_rate,
+                    'unlinked_cp': unlinked_cp
+                },
+                'by_feature': by_feature,
+                'by_priority': by_priority,
+                'trend': trend,
+                'top_uncovered': top_uncovered,
+                'recent_activity': recent_activity
+            }
+        })
+
+    except sqlite3.Error as e:
+        return jsonify({'success': False, 'error': f'Database error: {str(e)}'}), 500
 
 
 # ============ 静态文件路由 - 必须放在所有 API 路由之后 ============

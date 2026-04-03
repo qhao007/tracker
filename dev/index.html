@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>芯片验证 Tracker</title>
     <link rel="stylesheet" href="/static/css/design-system.css">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: Microsoft YaHei, -apple-system, sans-serif; background: #f5f5f5; font-size: 13px; color: #333; }
@@ -75,7 +76,21 @@
         .project-info { display: flex; flex-direction: column; }
         .project-name { font-weight: bold; }
         .project-meta { font-size: 11px; color: #666; }
-        
+
+        /* FC/CP 高亮样式 - v0.11.0 supplement */
+        .fc-highlight, .cp-highlight {
+            background-color: #fff3cd !important;
+            transition: background-color 0.3s ease;
+        }
+
+        /* FC comment 截断 - v0.11.0 supplement */
+        .fc-comment-cell {
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
         /* 登录模态框样式 - v0.9.0 紫色主题 */
         .login-overlay { 
             display: none; 
@@ -903,6 +918,8 @@
     <div class="container">
         <div class="stats-bar">
             <div class="stat-item"><span class="stat-value" id="statCP">0</span><span class="stat-label">CP</span></div>
+            <div class="stat-divider" id="statDividerFC" style="display:none;"></div>
+            <div class="stat-item" id="statFCItem" style="display:none;"><span class="stat-value" id="statFC">0</span><span class="stat-label">FC</span></div>
             <div class="stat-divider"></div>
             <div class="stat-item"><span class="stat-value" id="statTC">0</span><span class="stat-label">TC</span></div>
             <div class="stat-divider"></div>
@@ -917,6 +934,8 @@
             <button class="tab active" onclick="switchTab('cp', event)">Cover Points</button>
             <button class="tab" onclick="switchTab('tc', event)">Test Cases</button>
             <button class="tab" onclick="switchTab('progress', event)">Progress Charts</button>
+            <button class="tab" id="fcTab" onclick="switchTab('fc', event)" style="display: none;">Functional Coverage</button>
+            <button class="tab" id="dashboardTab" onclick="switchTab('dashboard', event)">Dashboard</button>
         </div>
         <div id="cpPanel">
             <div class="toolbar">
@@ -1012,6 +1031,79 @@
                     <p style="font-size: 12px;">提示：需要为项目设置起止日期</p>
                 </div>
                 <canvas id="progressChart" style="display: none; max-height: 400px;"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- FC Panel (v0.11.0) - 仅在 FC-CP 模式下显示 -->
+    <div id="fcPanel" style="display: none;">
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <button class="btn" onclick="openFCImportModal()">📥 导入 FC</button>
+                <button class="btn" onclick="openFC_CPAssocImportModal()">📥 导入 FC-CP 关联</button>
+                <button class="btn" onclick="exportData('fc')">📤 导出 FC</button>
+                <input type="text" class="search-input" id="fcSearchInput" placeholder="搜索 Bin Name..." oninput="filterFC(this.value)">
+                <select id="fcCovergroupFilter" onchange="filterFCByCovergroup()"><option value="">全部 Covergroup</option></select>
+                <select id="fcCoverpointFilter" onchange="filterFCByCoverpoint()"><option value="">全部 Coverpoint</option></select>
+                <select id="fcCoverageTypeFilter" onchange="filterFCByCoverageType()"><option value="">全部 Type</option></select>
+                <button class="btn" onclick="resetFCFilter()" style="padding: 4px 8px; font-size: 12px;">重置</button>
+            </div>
+            <div class="toolbar-right">
+                <span style="color: #666; font-size: 12px;">共 <span id="fcCount">0</span> 条</span>
+                <button class="btn" id="toggleAllFCExpand" onclick="toggleAllFC()" style="padding: 4px 8px; font-size: 12px;">全部展开 ▼</button>
+            </div>
+        </div>
+        <div id="fcContainer" style="padding: 10px; max-height: calc(100vh - 220px); overflow-y: auto;">
+            <div id="fcEmptyState" style="text-align: center; padding: 50px; color: #999;">
+                <p>暂无 Functional Coverage 数据</p>
+                <p style="font-size: 12px;">点击"导入 FC"按钮导入数据</p>
+            </div>
+            <div id="fcList"></div>
+        </div>
+    </div>
+
+    <!-- Dashboard Content (v0.11.0) -->
+    <div id="dashboard-content" style="display: none;">
+        <div class="dashboard">
+            <!-- Overview Cards -->
+            <div id="dashboard-overview" class="dashboard-overview">
+                <!-- JS dynamic render -->
+            </div>
+
+            <!-- Charts Row -->
+            <div class="dashboard-charts">
+                <!-- Feature Coverage Chart -->
+                <div class="chart-card">
+                    <div class="chart-title">Feature Coverage Distribution</div>
+                    <div id="feature-chart"></div>
+                </div>
+
+                <!-- Priority Distribution -->
+                <div class="chart-card">
+                    <div class="chart-title">Priority Distribution</div>
+                    <div id="priority-cards" class="priority-cards"></div>
+                </div>
+            </div>
+
+            <!-- Trend Chart -->
+            <div class="trend-card">
+                <div class="chart-title">Coverage Trend</div>
+                <div id="trend-chart"></div>
+            </div>
+
+            <!-- Lists Row -->
+            <div class="dashboard-lists">
+                <!-- Top 5 Uncovered -->
+                <div class="list-card">
+                    <div class="chart-title">Top 5 Uncovered CPs</div>
+                    <div id="top-uncovered"></div>
+                </div>
+
+                <!-- Recent Activity -->
+                <div class="list-card">
+                    <div class="chart-title">Recent Activity</div>
+                    <div id="recent-activity"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -1118,6 +1210,15 @@
                     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
                         <input type="date" class="form-control" id="newProjectStartDate" placeholder="开始日期 *" required>
                         <input type="date" class="form-control" id="newProjectEndDate" placeholder="结束日期 *" required>
+                    </div>
+                    <!-- v0.11.0: Coverage Mode 选择 -->
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: block; margin-bottom: 4px; font-weight: bold; font-size: 12px;">Coverage Mode</label>
+                        <select class="form-control" id="newProjectCoverageMode">
+                            <option value="tc_cp" selected>TC-CP 模式</option>
+                            <option value="fc_cp">FC-CP 模式</option>
+                        </select>
+                        <small style="color: #666; font-size: 11px;">创建后不可更改</small>
                     </div>
                     <div style="margin-bottom: 10px;">
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
@@ -1384,7 +1485,7 @@
             </div>
             <div class="form-actions">
                 <button type="button" class="btn" onclick="closeModal('importModal')">取消</button>
-                <button type="button" class="btn btn-primary" onclick="executeImport()">导入</button>
+                <button type="button" class="btn btn-primary" id="executeImportBtn" onclick="executeImport()">导入</button>
             </div>
         </div>
     </div>
@@ -1430,7 +1531,10 @@
             AUTH_LOGIN: `${API_BASE}/auth/login`,
             AUTH_LOGOUT: `${API_BASE}/auth/logout`,
             AUTH_ME: `${API_BASE}/auth/me`,
-            FEEDBACK: `${API_BASE}/feedback`
+            FEEDBACK: `${API_BASE}/feedback`,
+            // FC - v0.11.0
+            FC: `${API_BASE}/fc`,
+            FC_CP_ASSOCIATION: `${API_BASE}/fc-cp-association`
         });
         
         // 全局 fetch 包装，确保所有请求发送 credentials
@@ -1798,15 +1902,21 @@
             if (currentProject) {
                 localStorage.setItem('tracker_last_project_id', projectId);
                 updateProjectSelector();
+                updateFCTabVisibility();  // v0.11.0: 更新 FC Tab 显示状态
                 await loadData();
             }
         }
         
         async function loadData() {
             if (!currentProject) return;
-            // 先并行加载 CP 和 TC
-            await Promise.all([loadCP(), loadTC(), loadStats()]);
-            // 加载完成后统一渲染（确保 testCases 已加载）
+            // 先并行加载 CP、TC 和 FC（FC-CP 模式需要 FC 数据来确定 CP 关联状态）
+            const isFCPMode = currentProject && currentProject.coverage_mode === 'fc_cp';
+            const loadPromises = [loadCP(), loadTC(), loadStats()];
+            if (isFCPMode) {
+                loadPromises.push(loadFC());
+            }
+            await Promise.all(loadPromises);
+            // 加载完成后统一渲染（确保 testCases 和 functionalCoverages 已加载）
             renderCP();
             renderTC();
         }
@@ -1855,9 +1965,329 @@
                 document.getElementById('statFAIL').textContent = stats.fail_tc;
                 document.getElementById('statPASS').textContent = stats.pass_tc;
                 document.getElementById('statCoverage').textContent = stats.coverage;
+
+                // v0.11.0: FC-CP 模式下显示 FC 统计
+                const isFCPMode = currentProject && currentProject.coverage_mode === 'fc_cp';
+                const statFCItem = document.getElementById('statFCItem');
+                const statDividerFC = document.getElementById('statDividerFC');
+                if (isFCPMode) {
+                    statFCItem.style.display = '';
+                    statDividerFC.style.display = '';
+                    document.getElementById('statFC').textContent = stats.total_fc;
+                } else {
+                    statFCItem.style.display = 'none';
+                    statDividerFC.style.display = 'none';
+                }
             } catch (e) { console.error('加载统计失败:', e); }
         }
-        
+
+        // ============ Functional Coverage (FC) - v0.11.0 ============
+        let functionalCoverages = [];
+        let fcExpandedGroups = JSON.parse(localStorage.getItem('tracker_fc_expanded_groups') || '{}');
+        let fcExpandedCoverpoints = JSON.parse(localStorage.getItem('tracker_fc_expanded_coverpoints') || '{}');
+
+        async function loadFC() {
+            if (!currentProject) return;
+            try {
+                const res = await fetch(`${API_ENDPOINTS.FC}?project_id=${currentProject.id}`);
+                if (!res.ok) {
+                    console.error('加载 FC 失败:', res.status, res.statusText);
+                    return;
+                }
+                functionalCoverages = await res.json();
+                renderFC();
+                // 填充筛选下拉框
+                const covergroups = [...new Set(functionalCoverages.map(fc => fc.covergroup).filter(g => g))];
+                const coverpoints = [...new Set(functionalCoverages.map(fc => fc.coverpoint).filter(p => p))];
+                const covergroupSelect = document.getElementById('fcCovergroupFilter');
+                if (covergroupSelect) {
+                    covergroupSelect.innerHTML = '<option value="">全部 Covergroup</option>' +
+                        covergroups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+                }
+                const coverpointSelect = document.getElementById('fcCoverpointFilter');
+                if (coverpointSelect) {
+                    coverpointSelect.innerHTML = '<option value="">全部 Coverpoint</option>' +
+                        coverpoints.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
+                }
+                const coverageTypes = [...new Set(functionalCoverages.map(fc => fc.coverage_type).filter(t => t))];
+                const coverageTypeSelect = document.getElementById('fcCoverageTypeFilter');
+                if (coverageTypeSelect) {
+                    coverageTypeSelect.innerHTML = '<option value="">全部 Type</option>' +
+                        coverageTypes.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+                }
+            } catch (e) { console.error('加载 FC 失败:', e); }
+        }
+
+        // FC-CP 关联加载函数 (v0.11.0)
+        let fcCpAssociations = [];
+        async function loadFC_CPAssociation() {
+            if (!currentProject) return;
+            try {
+                const res = await fetch(`${API_ENDPOINTS.FC_CP_ASSOCIATION}?project_id=${currentProject.id}`);
+                if (!res.ok) {
+                    console.error('加载 FC-CP 关联失败:', res.status, res.statusText);
+                    return;
+                }
+                fcCpAssociations = await res.json();
+                console.log('FC-CP 关联已加载:', fcCpAssociations.length);
+            } catch (e) { console.error('加载 FC-CP 关联失败:', e); }
+        }
+
+        function renderFC() {
+            const fcList = document.getElementById('fcList');
+            const fcEmptyState = document.getElementById('fcEmptyState');
+            const fcCount = document.getElementById('fcCount');
+
+            if (!functionalCoverages.length) {
+                fcList.innerHTML = '';
+                fcEmptyState.style.display = 'block';
+                fcCount.textContent = '0';
+                return;
+            }
+
+            fcEmptyState.style.display = 'none';
+
+            // 应用筛选
+            const covergroupFilter = document.getElementById('fcCovergroupFilter')?.value || '';
+            const coverpointFilter = document.getElementById('fcCoverpointFilter')?.value || '';
+            const coverageTypeFilter = document.getElementById('fcCoverageTypeFilter')?.value || '';
+            const searchFilter = document.getElementById('fcSearchInput')?.value || '';
+
+            let filtered = functionalCoverages;
+            if (covergroupFilter) {
+                filtered = filtered.filter(fc => fc.covergroup === covergroupFilter);
+            }
+            if (coverpointFilter) {
+                filtered = filtered.filter(fc => fc.coverpoint === coverpointFilter);
+            }
+            if (coverageTypeFilter) {
+                filtered = filtered.filter(fc => fc.coverage_type === coverageTypeFilter);
+            }
+            if (searchFilter) {
+                filtered = filtered.filter(fc => fc.bin_name && fc.bin_name.toLowerCase().includes(searchFilter.toLowerCase()));
+            }
+
+            // 更新筛选后的数量
+            fcCount.textContent = filtered.length;
+
+            // 按 covergroup 分组
+            const groups = {};
+            filtered.forEach(fc => {
+                const cg = fc.covergroup || 'Unknown';
+                if (!groups[cg]) groups[cg] = {};
+                const cp = fc.coverpoint || 'Unknown';
+                if (!groups[cg][cp]) groups[cg][cp] = [];
+                groups[cg][cp].push(fc);
+            });
+
+            // 渲染
+            let html = '';
+            Object.keys(groups).sort().forEach(covergroup => {
+                const coverpoints = groups[covergroup];
+                const totalBins = Object.values(coverpoints).reduce((sum, bins) => sum + bins.length, 0);
+                const cpCount = Object.keys(coverpoints).length;
+                const isExpanded = fcExpandedGroups[covergroup] === true;
+
+                html += `<div class="fc-covergroup" style="margin-bottom: 8px; border: 1px solid #ddd; border-radius: 4px; overflow: hidden;">
+                    <div class="fc-covergroup-header" onclick="toggleFCGroup('${escapeHtml(covergroup)}')" style="background: #f5f5f5; padding: 8px 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: bold;">${isExpanded ? '▼' : '▶'} ${escapeHtml(covergroup)} (${cpCount} coverpoints, ${totalBins} bins)</span>
+                    </div>
+                    <div class="fc-covergroup-content" style="display: ${isExpanded ? 'block' : 'none'}; padding: 8px;">
+                        ${Object.keys(coverpoints).sort().map(coverpoint => {
+                            const bins = coverpoints[coverpoint];
+                            const cpIsExpanded = fcExpandedCoverpoints[`${covergroup}|${coverpoint}`] === true;
+                            return `<div class="fc-coverpoint" style="margin-left: 16px; margin-bottom: 8px;">
+                                <div class="fc-coverpoint-header" onclick="toggleFCCoverpoint('${escapeHtml(covergroup)}', '${escapeHtml(coverpoint)}')" style="cursor: pointer; padding: 4px 8px; background: #eee; border-radius: 3px; display: flex; justify-content: space-between; align-items: center;">
+                                    <span>${cpIsExpanded ? '▼' : '▶'} ${escapeHtml(coverpoint)} (${bins.length} bins)</span>
+                                </div>
+                                <div class="fc-coverpoint-content" style="display: ${cpIsExpanded ? 'block' : 'none'}; padding: 8px 0;">
+                                    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                                        <thead><tr style="background: #fafafa;"><th style="text-align: left; padding: 4px;">Bin Name</th><th style="text-align: left; padding: 4px;">Bin Value</th><th style="text-align: left; padding: 4px;">Type</th><th style="text-align: center; padding: 4px;">Coverage</th><th style="text-align: center; padding: 4px;">Status</th><th style="text-align: left; padding: 4px;">CP IDs</th><th style="text-align: left; padding: 4px;">Comments</th></tr></thead>
+                                        <tbody>
+                                            ${bins.map(bin => {
+                                                const hasNoCPs = !bin.cp_ids || bin.cp_ids.length === 0;
+                                                return `
+                                                <tr style="border-bottom: 1px solid #eee; ${hasNoCPs ? 'background-color: #fff3cd;' : ''}" data-fc-id="${bin.id}">
+                                                    <td style="padding: 4px; ${hasNoCPs ? 'color: #cc0000;' : ''}">${hasNoCPs ? '<span class="unlinked">' : ''}${escapeHtml(bin.bin_name || '')}${hasNoCPs ? '</span>' : ''}</td>
+                                                    <td style="padding: 4px; font-family: monospace;">${escapeHtml(bin.bin_val || '')}</td>
+                                                    <td style="padding: 4px;">${escapeHtml(bin.coverage_type || '')}</td>
+                                                    <td style="padding: 4px; text-align: center;">${(bin.coverage_pct || 0).toFixed(1)}%</td>
+                                                    <td style="padding: 4px; text-align: center;">${getFCStatusIcon(bin.status)}</td>
+                                                    <td style="padding: 4px;">${bin.cp_ids && bin.cp_ids.length > 0 ? bin.cp_ids.map(cpId => `<a href="#" onclick="jumpToCPItem(${cpId}); return false;" style="color: #0066cc; text-decoration: underline;">CP_${cpId}</a>`).join(', ') : '-'}</td>
+                                                    <td class="fc-comment-cell" title="${escapeHtml(bin.comments || '')}">${escapeHtml(bin.comments || '')}</td>
+                                                </tr>
+                                            `}).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>`;
+                        }).join('')}
+                    </div>
+                </div>`;
+            });
+
+            fcList.innerHTML = html;
+        }
+
+        function getFCStatusIcon(status) {
+            switch (status) {
+                case 'ready': return '✅';
+                case 'missing': return '⏳';
+                case 'error': return '❌';
+                default: return '⏳';
+            }
+        }
+
+        function toggleFCGroup(covergroup) {
+            // 切换状态：true -> false (collapse), undefined/false -> true (expand)
+            fcExpandedGroups[covergroup] = fcExpandedGroups[covergroup] === true ? false : true;
+            localStorage.setItem('tracker_fc_expanded_groups', JSON.stringify(fcExpandedGroups));
+            renderFC();
+        }
+
+        function toggleFCCoverpoint(covergroup, coverpoint) {
+            const key = `${covergroup}|${coverpoint}`;
+            // 切换状态：true -> false (collapse), undefined/false -> true (expand)
+            fcExpandedCoverpoints[key] = fcExpandedCoverpoints[key] === true ? false : true;
+            localStorage.setItem('tracker_fc_expanded_coverpoints', JSON.stringify(fcExpandedCoverpoints));
+            renderFC();
+        }
+
+        function toggleAllFC() {
+            // 获取所有 covergroup 的当前状态
+            const covergroups = [...new Set(functionalCoverages.map(fc => fc.covergroup))];
+            // 计算 allExpanded：如果所有分组都已展开，则为 true
+            const allExpanded = covergroups.length > 0 && covergroups.every(cg => fcExpandedGroups[cg] === true);
+
+            if (allExpanded) {
+                // 全部折叠 - 遍历所有 covergroup，设置为 false
+                covergroups.forEach(cg => {
+                    fcExpandedGroups[cg] = false;
+                    // 同时折叠该分组下所有 coverpoint
+                    functionalCoverages.filter(fc => fc.covergroup === cg).forEach(fc => {
+                        fcExpandedCoverpoints[`${fc.covergroup}|${fc.coverpoint}`] = false;
+                    });
+                });
+            } else {
+                // 全部展开 - 遍历所有 covergroup，设置为 true
+                covergroups.forEach(cg => {
+                    fcExpandedGroups[cg] = true;
+                    // 同时展开该分组下所有 coverpoint
+                    functionalCoverages.filter(fc => fc.covergroup === cg).forEach(fc => {
+                        fcExpandedCoverpoints[`${fc.covergroup}|${fc.coverpoint}`] = true;
+                    });
+                });
+            }
+            localStorage.setItem('tracker_fc_expanded_groups', JSON.stringify(fcExpandedGroups));
+            localStorage.setItem('tracker_fc_expanded_coverpoints', JSON.stringify(fcExpandedCoverpoints));
+            renderFC();
+            // 更新按钮文字：折叠状态显示"全部展开"，展开状态显示"全部折叠"
+            const btn = document.getElementById('toggleAllFCExpand');
+            if (btn) btn.textContent = allExpanded ? '全部展开 ▼' : '全部折叠 ▲';
+        }
+
+        function filterFC() {
+            renderFC();
+        }
+
+        function filterFCByCovergroup() {
+            renderFC();
+        }
+
+        function filterFCByCoverpoint() {
+            renderFC();
+        }
+
+        function filterFCByCoverageType() {
+            renderFC();
+        }
+
+        function resetFCFilter() {
+            document.getElementById('fcCovergroupFilter').value = '';
+            document.getElementById('fcCoverpointFilter').value = '';
+            document.getElementById('fcCoverageTypeFilter').value = '';
+            document.getElementById('fcSearchInput').value = '';
+            renderFC();
+        }
+
+        function openFCModal() {
+            // TODO: v0.11.0 FC 添加功能待实现 - 需要弹出 FC 添加表单（covergroup/coverpoint/coverage_type/bin_name 等字段）
+            console.log('FC 添加功能开发中');
+        }
+
+        // 更新 FC Tab 显示状态
+        function updateFCTabVisibility() {
+            const fcTab = document.getElementById('fcTab');
+            if (!fcTab) return;
+
+            if (currentProject && currentProject.coverage_mode === 'fc_cp') {
+                fcTab.style.display = '';
+            } else {
+                fcTab.style.display = 'none';
+                // 如果当前在 FC Tab，切换到 CP Tab
+                if (currentTab === 'fc') {
+                    switchTab('cp', null);
+                    // 取消 FC Tab 的 active 状态
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    document.querySelector('.tab').classList.add('active');
+                }
+            }
+        }
+
+        // v0.11.0 supplement: 跳转到 FC Item 并高亮
+        function jumpToFCItem(fcId) {
+            switchTab('fc', null);
+
+            // 1. 查找 FC item
+            const fc = functionalCoverages.find(f => f.id === fcId);
+            if (!fc) {
+                console.error('FC item not found:', fcId);
+                return;
+            }
+
+            // 2. 展开 covergroup（如果未展开）
+            if (!fcExpandedGroups[fc.covergroup]) {
+                fcExpandedGroups[fc.covergroup] = true;
+            }
+
+            // 3. 展开 coverpoint（如果未展开）
+            const cpKey = `${fc.covergroup}|${fc.coverpoint}`;
+            if (!fcExpandedCoverpoints[cpKey]) {
+                fcExpandedCoverpoints[cpKey] = true;
+            }
+
+            // 4. 重新渲染 FC 表格
+            renderFC();
+
+            // 5. 高亮并滚动到视图（延迟确保 DOM 已渲染）
+            setTimeout(() => {
+                const el = document.querySelector(`tr[data-fc-id="${fcId}"]`);
+                if (el) {
+                    el.classList.add('fc-highlight');
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    setTimeout(() => el.classList.remove('fc-highlight'), 3000);
+                }
+            }, 100);
+        }
+
+        // v0.11.0 supplement: 跳转到 CP Item 并高亮
+        function jumpToCPItem(cpId) {
+            switchTab('cp', null);
+
+            // 1. 展开 CP 详情（如果未展开）
+            toggleCPDetail(cpId);
+
+            // 2. 高亮 CP 行（延迟确保 DOM 已渲染）
+            setTimeout(() => {
+                const el = document.querySelector(`tr[data-cp-id="${cpId}"]`);
+                if (el) {
+                    el.classList.add('cp-highlight');
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    setTimeout(() => el.classList.remove('cp-highlight'), 3000);
+                }
+            }, 100);
+        }
+
         // Progress Charts (v0.8.0)
         let progressChart = null;
         let currentProgressData = null;
@@ -2242,12 +2672,25 @@
 
             // REQ-002: 计算每个CP的关联状态
             const linkedCPIds = new Set();
-            if (testCases && testCases.length > 0) {
-                testCases.forEach(tc => {
-                    if (tc.connected_cps && Array.isArray(tc.connected_cps)) {
-                        tc.connected_cps.forEach(cpId => linkedCPIds.add(cpId));
-                    }
-                });
+            const isFCPMode = currentProject && currentProject.coverage_mode === 'fc_cp';
+            if (isFCPMode) {
+                // FC-CP 模式：根据 FC 关联判断
+                if (functionalCoverages && functionalCoverages.length > 0) {
+                    functionalCoverages.forEach(fc => {
+                        if (fc.cp_ids && Array.isArray(fc.cp_ids)) {
+                            fc.cp_ids.forEach(cpId => linkedCPIds.add(cpId));
+                        }
+                    });
+                }
+            } else {
+                // TC-CP 模式：根据 TC 关联判断
+                if (testCases && testCases.length > 0) {
+                    testCases.forEach(tc => {
+                        if (tc.connected_cps && Array.isArray(tc.connected_cps)) {
+                            tc.connected_cps.forEach(cpId => linkedCPIds.add(cpId));
+                        }
+                    });
+                }
             }
 
             // 文本搜索过滤
@@ -2292,22 +2735,18 @@
                             <div class="cp-connected-tcs" id="cp-tcs-${cp.id}">
                                 <div style="padding: 8px; color: #666; font-size: 12px;">加载中...</div>
                             </div>
+                            <div class="cp-connected-fcs" id="cp-fcs-${cp.id}"></div>
                         </div>
                     </td>
                 </tr>
             `}).join('');
         }
 
-        function filterCP(value) { renderCP(value); }
-        function filterCPByFeature() { renderCP(); }
-        function filterCPByPriority() { renderCP(); }
-        function filterCPByLinked() { renderCP(); }
-        
         // CP 详情展开/收起
         async function toggleCPDetail(cpId) {
             const detailRow = document.getElementById(`cp-detail-${cpId}`);
             const btn = document.querySelector(`tr[data-cp-id="${cpId}"] .action-btn`);
-            
+
             if (detailRow.style.display === 'none') {
                 // 展开
                 detailRow.style.display = 'table-row';
@@ -2315,6 +2754,10 @@
                 btn.classList.add('active');
                 // 加载关联 TC
                 await loadCPTcConnections(cpId);
+                // v0.11.0: FC-CP 模式下加载关联的 FC
+                if (currentProject && currentProject.coverage_mode === 'fc_cp') {
+                    await loadCPFCConnections(cpId);
+                }
             } else {
                 // 收起
                 detailRow.style.display = 'none';
@@ -2353,13 +2796,60 @@
                 container.innerHTML = '<div style="padding: 8px; color: #f44336; font-size: 12px;">加载失败</div>';
             }
         }
-        
+
+        // v0.11.0: 加载 CP 关联的 FC (用于 CP 详情页)
+        async function loadCPFCConnections(cpId) {
+            const container = document.getElementById(`cp-fcs-${cpId}`);
+            if (!container) return;
+
+            try {
+                const projectId = document.getElementById('projectSelector')?.value;
+                const res = await fetch(`${API_BASE}/fc-cp-association?project_id=${projectId}&cp_id=${cpId}`);
+                const data = await res.json();
+
+                if (data && data.length > 0) {
+                    container.innerHTML = `
+                        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee;">
+                            <div style="font-size: 12px; font-weight: 500; color: #333; margin-bottom: 6px;">关联的 Functional Coverage:</div>
+                            <table style="width: 100%; font-size: 12px;">
+                                <thead>
+                                    <tr>
+                                        <th style="padding: 4px 8px; text-align: left; background: #f5f5f5;">Covergroup</th>
+                                        <th style="padding: 4px 8px; text-align: left; background: #f5f5f5;">Coverpoint</th>
+                                        <th style="padding: 4px 8px; text-align: left; background: #f5f5f5;">Bin Name</th>
+                                        <th style="padding: 4px 8px; text-align: left; background: #f5f5f5;">Coverage</th>
+                                        <th style="padding: 4px 8px; text-align: left; background: #f5f5f5;">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.map(fc => `
+                                        <tr>
+                                            <td style="padding: 4px 8px;">${escapeHtml(fc.fc_covergroup || '')}</td>
+                                            <td style="padding: 4px 8px;">${escapeHtml(fc.fc_coverpoint || '')}</td>
+                                            <td style="padding: 4px 8px;"><a href="#" onclick="jumpToFCItem(${fc.fc_id}); return false;" style="color: #0066cc; text-decoration: underline;">${escapeHtml(fc.fc_bin_name || '')}</a></td>
+                                            <td style="padding: 4px 8px;">${fc.fc_coverage_pct !== null ? fc.fc_coverage_pct + '%' : '-'}</td>
+                                            <td style="padding: 4px 8px;"><span class="status-badge status-${fc.fc_status || 'missing'}">${fc.fc_status || 'missing'}</span></td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = '<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee;"></div>';
+                }
+            } catch (e) {
+                container.innerHTML = '<div style="padding: 8px; color: #f44336; font-size: 12px;">加载失败</div>';
+            }
+        }
+
         // 展开/收起所有 CP 详情
         async function toggleAllCPDetails() {
             const btn = document.getElementById('toggleAllCPDetails');
             const allDetails = document.querySelectorAll('.cp-detail-row');
             const isExpanded = btn.textContent.includes('收起');
-            
+            const isFCPMode = currentProject && currentProject.coverage_mode === 'fc_cp';
+
             if (isExpanded) {
                 // 收起所有
                 allDetails.forEach(row => row.style.display = 'none');
@@ -2369,11 +2859,15 @@
                 });
                 btn.textContent = '详情 ▼';
             } else {
-                // 展开所有 - 需要加载每个 CP 的关联 TC
+                // 展开所有 - 需要加载每个 CP 的关联 TC/FC
                 for (const row of allDetails) {
                     row.style.display = 'table-row';
                     const cpId = row.id.replace('cp-detail-', '');
                     await loadCPTcConnections(cpId);
+                    // v0.11.0: FC-CP 模式下加载关联的 FC
+                    if (isFCPMode) {
+                        await loadCPFCConnections(cpId);
+                    }
                     // 更新按钮状态
                     const actionBtn = document.querySelector(`tr[data-cp-id="${cpId}"] .action-btn`);
                     if (actionBtn) {
@@ -2486,8 +2980,9 @@
                 const statusDate = statusDateMap[tc.status] || '';
                 // 状态日期显示逻辑
                 const statusDateDisplay = statusDate ? statusDate : '-';
-                // REQ-003: 判断TC是否未关联CP
-                const isUnlinked = !tc.connected_cps || tc.connected_cps.length === 0;
+                // REQ-003: 判断TC是否未关联CP（仅在 TC-CP 模式下高亮）
+                const tcIsFCPMode = currentProject && currentProject.coverage_mode === 'fc_cp';
+                const isUnlinked = !tcIsFCPMode && (!tc.connected_cps || tc.connected_cps.length === 0);
                 const testNameHtml = isUnlinked ? `<span class="unlinked">${escapeHtml(tc.test_name)}</span>` : escapeHtml(tc.test_name);
                 return `<tr><td><input type="checkbox" class="tc-select" value="${tc.id}" onchange="getSelectedTCs()"></td><td>${tc.id}</td><td>${tc.dv_milestone || '-'}</td><td>${escapeHtml(tc.testbench)}</td><td>${escapeHtml(tc.category || '')}</td><td>${escapeHtml(tc.owner || '')}</td><td><strong>${testNameHtml}</strong></td><td>${tc.target_date || '-'}</td><td><select class="status-select status-${tc.status}" onchange="updateTCStatus(${tc.id}, this.value)"><option value="OPEN" ${tc.status === 'OPEN' ? 'selected' : ''}>OPEN</option><option value="CODED" ${tc.status === 'CODED' ? 'selected' : ''}>CODED</option><option value="FAIL" ${tc.status === 'FAIL' ? 'selected' : ''}>FAIL</option><option value="PASS" ${tc.status === 'PASS' ? 'selected' : ''}>PASS</option><option value="REMOVED" ${tc.status === 'REMOVED' ? 'selected' : ''}>REMOVED</option></select></td><td>${statusDateDisplay}</td><td><div class="action-btns"><button class="action-btn" onclick="toggleTCDetails(${tc.id})">详情</button><button class="action-btn edit" onclick="editTC(${tc.id})">编辑</button><button class="action-btn delete" onclick="deleteTC(${tc.id})">删除</button></div></td></tr>${hasDetails ? `<tr class="tc-detail-row" id="${detailsId}"><td colspan="11" style="padding: 0;"><div class="details-content">${tc.scenario_details ? `<div class="detail-row"><span class="detail-label">Scenario:</span><span class="detail-value">${escapeHtml(tc.scenario_details)}</span></div>` : ''}${tc.checker_details ? `<div class="detail-row"><span class="detail-label">Checker:</span><span class="detail-value">${escapeHtml(tc.checker_details)}</span></div>` : ''}${tc.coverage_details ? `<div class="detail-row"><span class="detail-label">Coverage:</span><span class="detail-value">${escapeHtml(tc.coverage_details)}</span></div>` : ''}${tc.comments ? `<div class="detail-row"><span class="detail-label">Comments:</span><span class="detail-value">${escapeHtml(tc.comments)}</span></div>` : ''}</div></td></tr>` : ''}`;
             }).join('');
@@ -2509,6 +3004,7 @@
         function filterCP(value) { renderCP(value); }
         function filterCPByFeature() { renderCP(); }
         function filterCPByPriority() { renderCP(); }
+        function filterCPByLinked() { renderCP(); }
         function resetCPFilter() {
             const featureSelect = document.getElementById('cpFeatureFilter');
             const prioritySelect = document.getElementById('cpPriorityFilter');
@@ -2558,7 +3054,11 @@
             document.getElementById('cpPanel').style.display = tab === 'cp' ? 'block' : 'none';
             document.getElementById('tcPanel').style.display = tab === 'tc' ? 'block' : 'none';
             document.getElementById('progressPanel').style.display = tab === 'progress' ? 'block' : 'none';
+            document.getElementById('fcPanel').style.display = tab === 'fc' ? 'block' : 'none';
+            document.getElementById('dashboard-content').style.display = tab === 'dashboard' ? 'block' : 'none';
             if (tab === 'progress') loadProgressChart();
+            if (tab === 'fc') loadFC();
+            if (tab === 'dashboard' && currentProjectId) initDashboard(currentProjectId);
         }
         // 切换版本对话框中的标签页
         function switchVersionTab(tab, event) {
@@ -2636,14 +3136,19 @@
         function openImportModal(type) {
             if (!currentProject) { alert('请先选择一个项目'); return; }
             importType = type;
-            document.getElementById('importModalTitle').textContent = type === 'cp' ? '导入 Cover Points' : '导入 Test Cases';
+            document.getElementById('importModalTitle').textContent =
+                type === 'cp' ? '导入 Cover Points' :
+                type === 'tc' ? '导入 Test Cases' :
+                type === 'fc' ? '导入 Functional Coverage' :
+                type === 'fc-cp-assoc' ? '导入 FC-CP 关联' : '导入';
             document.getElementById('downloadTemplateBtn').textContent = type === 'cp' ? '📥 下载 CP 模板' : '📥 下载 TC 模板';
             document.getElementById('importFile').value = '';
             document.getElementById('importPreview').style.display = 'none';
             document.getElementById('importResult').style.display = 'none';
+            document.getElementById('executeImportBtn').onclick = executeImport;
             document.getElementById('importModal').classList.add('active');
         }
-        
+
         async function downloadTemplate() {
             const type = importType;
             window.location.href = `${API_BASE}/import/template?type=${type}`;
@@ -2693,14 +3198,164 @@
             };
             reader.readAsDataURL(file);
         }
-        
+
+        // FC 专用导入函数 (v0.11.0)
+        function openFCImportModal() {
+            if (!currentProject) { alert('请先选择一个项目'); return; }
+            importType = 'fc';
+            document.getElementById('importModalTitle').textContent = '导入 Functional Coverage';
+            document.getElementById('downloadTemplateBtn').textContent = '📥 下载 FC 模板';
+            document.getElementById('importFile').value = '';
+            document.getElementById('importPreview').style.display = 'none';
+            document.getElementById('importResult').style.display = 'none';
+            document.getElementById('executeImportBtn').onclick = executeFCImport;
+            document.getElementById('importModal').classList.add('active');
+        }
+
+        // FC-CP 关联专用导入函数 (v0.11.0)
+        function openFC_CPAssocImportModal() {
+            if (!currentProject) { alert('请先选择一个项目'); return; }
+            importType = 'fc-cp-assoc';
+            document.getElementById('importModalTitle').textContent = '导入 FC-CP 关联';
+            document.getElementById('downloadTemplateBtn').textContent = '📥 下载 FC-CP 关联模板';
+            document.getElementById('importFile').value = '';
+            document.getElementById('importPreview').style.display = 'none';
+            document.getElementById('importResult').style.display = 'none';
+            document.getElementById('executeImportBtn').onclick = executeFC_CPAssocImport;
+            document.getElementById('importModal').classList.add('active');
+        }
+
+        // FC 专用执行函数 (v0.11.0)
+        async function executeFCImport() {
+            const fileInput = document.getElementById('importFile');
+            const file = fileInput.files[0];
+            if (!file) { alert('请选择要导入的文件'); return; }
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const base64Data = e.target.result.split(',')[1];
+                try {
+                    const res = await fetch(`${API_ENDPOINTS.FC}/import`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            project_id: currentProject.id,
+                            file_data: base64Data
+                        })
+                    });
+                    const result = await res.json();
+                    const resultDiv = document.getElementById('importResult');
+                    resultDiv.style.display = 'block';
+                    if (result.success) {
+                        resultDiv.style.background = '#d4edda';
+                        resultDiv.style.color = '#155724';
+                        resultDiv.innerHTML = `✅ 导入成功！共导入 ${result.imported} 条记录`;
+                        setTimeout(async () => {
+                            closeModal('importModal');
+                            await loadFC();
+                            if (typeof loadFC_CPAssociation === 'function') await loadFC_CPAssociation();
+                            renderCP();  // 刷新 CP 列表的关联状态显示
+                        }, 1500);
+                    } else {
+                        resultDiv.style.background = '#f8d7da';
+                        resultDiv.style.color = '#721c24';
+                        resultDiv.innerHTML = `❌ 导入失败: ${result.error || '未知错误'}`;
+                    }
+                } catch (err) {
+                    alert('导入失败: ' + err);
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // FC-CP 关联专用执行函数 (v0.11.0)
+        async function executeFC_CPAssocImport() {
+            const fileInput = document.getElementById('importFile');
+            const file = fileInput.files[0];
+            if (!file) { alert('请选择要导入的文件'); return; }
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const base64Data = e.target.result.split(',')[1];
+                try {
+                    const res = await fetch(`${API_ENDPOINTS.FC_CP_ASSOCIATION}/import`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            project_id: currentProject.id,
+                            file_data: base64Data
+                        })
+                    });
+                    const result = await res.json();
+                    const resultDiv = document.getElementById('importResult');
+                    resultDiv.style.display = 'block';
+                    if (result.success) {
+                        resultDiv.style.background = '#d4edda';
+                        resultDiv.style.color = '#155724';
+                        resultDiv.innerHTML = `✅ 导入成功！共导入 ${result.imported} 条记录`;
+                        setTimeout(async () => {
+                            closeModal('importModal');
+                            // 重新加载 FC（包含 cp_ids）和 FC-CP 关联
+                            await loadFC();
+                            await loadFC_CPAssociation();
+                            renderCP();  // 刷新 CP 列表的关联状态显示
+                        }, 1500);
+                    } else {
+                        resultDiv.style.background = '#f8d7da';
+                        resultDiv.style.color = '#721c24';
+                        resultDiv.innerHTML = `❌ 导入失败: ${result.error || '未知错误'}`;
+                    }
+                } catch (err) {
+                    alert('导入失败: ' + err);
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 批量更新 FC items (v0.11.0)
+        async function batchUpdateFC(items) {
+            if (!currentProject) {
+                return {success: false, updated: 0, failed: 0, errors: [{id: null, error: "No project selected"}]};
+            }
+            if (!items || items.length === 0) {
+                return {success: true, updated: 0, failed: 0, errors: []};
+            }
+            try {
+                const res = await fetch(`${API_ENDPOINTS.FC}/batch`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        project_id: currentProject.id,
+                        items: items
+                    })
+                });
+                const result = await res.json();
+                return result;
+            } catch (err) {
+                console.error('批量更新 FC 失败:', err);
+                return {success: false, updated: 0, failed: items.length, errors: [{id: null, error: err.message}]};
+            }
+        }
+
         let exportType = 'cp';
         
         function exportData(type) {
             if (!currentProject) { alert('请先选择一个项目'); return; }
             exportType = type;
-            const data = type === 'cp' ? coverPoints : testCases;
-            document.getElementById('exportModalTitle').textContent = type === 'cp' ? '导出 Cover Points' : '导出 Test Cases';
+            let data;
+            let title;
+            if (type === 'cp') {
+                data = coverPoints;
+                title = '导出 Cover Points';
+            } else if (type === 'fc') {
+                data = functionalCoverages;
+                title = '导出 Functional Coverage';
+            } else {
+                data = testCases;
+                title = '导出 Test Cases';
+            }
+            document.getElementById('exportModalTitle').textContent = title;
             document.getElementById('exportProjectName').textContent = currentProject.project_name;
             document.getElementById('exportRecordCount').textContent = data.length;
             document.getElementById('exportModal').classList.add('active');
@@ -2708,8 +3363,32 @@
         
         function executeExport() {
             const format = document.querySelector('input[name="exportFormat"]:checked').value;
-            window.location.href = `${API_BASE}/export?project_id=${currentProject.id}&type=${exportType}&format=${format}`;
-            closeModal('exportModal');
+            if (exportType === 'fc') {
+                // FC export: call /api/fc/export which returns JSON with csv_data
+                fetch(`${API_BASE}/fc/export?project_id=${currentProject.id}`, {
+                    credentials: 'include'
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success && data.csv_data) {
+                        // Convert CSV data to downloadable file
+                        const csvContent = data.csv_data.map(row => row.join(',')).join('\n');
+                        const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${currentProject.project_name}_FC_${new Date().toISOString().split('T')[0]}.csv`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }
+                    closeModal('exportModal');
+                });
+            } else {
+                window.location.href = `${API_BASE}/export?project_id=${currentProject.id}&type=${exportType}&format=${format}`;
+                closeModal('exportModal');
+            }
         }
         
         /**
@@ -3107,7 +3786,18 @@
                 const isActive = currentProject && currentProject.id === p.id;
                 const deleteBtn = isAdmin ? `<button class="action-btn delete" onclick="event.stopPropagation(); showDeleteProjectConfirm(${p.id}, '${escapeHtml(p.name)}')" title="删除项目">🗑️ 删除</button>` : '';
                 const editBtn = isAdmin ? `<button class="action-btn edit" onclick="event.stopPropagation(); showEditProjectDate(${p.id}, '${escapeHtml(p.name)}', '${p.start_date || ''}', '${p.end_date || ''}')" title="编辑项目日期">✏️ 编辑</button>` : '';
-                return `<div class="project-item ${isActive ? 'active' : ''}" onclick="selectProject(${p.id}); closeModal('projectModal');"><div class="project-info"><span class="project-name">${p.name}</span><span class="project-meta">CP: ${p.cp_count} | TC: ${p.tc_count}${p.start_date ? ' | ' + p.start_date + ' ~ ' + p.end_date : ''}</span></div><div class="action-btns">${editBtn}${deleteBtn}</div></div>`;
+                // v0.11.0 supplement: 根据 coverage_mode 显示不同信息
+                const metaParts = [`CP: ${p.cp_count}`];
+                if (p.coverage_mode === 'fc_cp') {
+                    metaParts.push(`FC: ${p.fc_count || 0}`);
+                } else {
+                    metaParts.push(`TC: ${p.tc_count}`);
+                }
+                metaParts.push(p.coverage_mode === 'fc_cp' ? 'FC-CP' : 'TC-CP');
+                if (p.start_date) {
+                    metaParts.push(`${p.start_date} ~ ${p.end_date}`);
+                }
+                return `<div class="project-item ${isActive ? 'active' : ''}" onclick="selectProject(${p.id}); closeModal('projectModal');"><div class="project-info"><span class="project-name">${p.name}</span><span class="project-meta">${metaParts.join(' | ')}</span></div><div class="action-btns">${editBtn}${deleteBtn}</div></div>`;
             }).join('');
             document.getElementById('projectModal').classList.add('active');
         }
@@ -3193,12 +3883,13 @@
             const name = document.getElementById('newProjectName').value.trim();
             const startDate = document.getElementById('newProjectStartDate').value;
             const endDate = document.getElementById('newProjectEndDate').value;
+            const coverageMode = document.getElementById('newProjectCoverageMode').value;
             const createTestUser = document.getElementById('createTestUser').checked;
-            
+
             if (!name) { alert('请输入项目名称'); return; }
             if (!startDate) { alert('请输入开始日期'); return; }
             if (!endDate) { alert('请输入结束日期'); return; }
-            
+
             try {
                 const res = await fetch(API_ENDPOINTS.PROJECTS, {
                     method: 'POST',
@@ -3207,6 +3898,7 @@
                         name,
                         start_date: startDate,
                         end_date: endDate,
+                        coverage_mode: coverageMode,  // v0.11.0
                         create_test_user: createTestUser
                     })
                 });
@@ -3472,3 +4164,5 @@
             return div.innerHTML;
         }
     </script>
+    <!-- Dashboard Module (v0.11.0) -->
+    <script src="/static/js/dashboard.js"></script>

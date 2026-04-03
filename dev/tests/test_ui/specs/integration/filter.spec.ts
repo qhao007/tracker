@@ -148,7 +148,7 @@ test.describe('过滤功能测试', () => {
    */
   test('UI-FILTER-002: 过滤显示未关联CP', async ({ page }) => {
     // 先创建测试项目并获取项目ID
-    const { projectId } = await createTestProject(page);
+    const { projectId, projectName } = await createTestProject(page);
 
     const unlinkedCPName = TestDataFactory.generateCPName('Unlinked');
     const linkedCPName = TestDataFactory.generateCPName('Linked');
@@ -254,11 +254,8 @@ test.describe('过滤功能测试', () => {
     await page.waitForSelector('#projectSelector', { timeout: 10000 });
     await page.waitForTimeout(500);
 
-    const opts = await page.locator('#projectSelector option').count();
-    if (opts > 0) {
-      const lastOptionVal = await page.locator('#projectSelector option').nth(opts - 1).getAttribute('value');
-      await page.selectOption('#projectSelector', lastOptionVal);
-    }
+    // 重新选择之前创建的项目
+    await page.selectOption('#projectSelector', { label: projectName });
     await page.waitForTimeout(500);
 
     // 切换到 CP 面板，验证未过滤状态下显示两个 CP

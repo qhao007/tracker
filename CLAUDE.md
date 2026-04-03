@@ -81,8 +81,13 @@ launchOptions: {
 
 **⚠️ 必须格式**: 每个命令必须包含 `--args "--no-sandbox"` 参数
 
+**⚠️ 环境变量**: 需要设置 `AGENT_BROWSER_SOCKET_DIR` 指定可写的 socket 目录
+
 ```bash
 # 基础工作流
+export AGENT_BROWSER_SOCKET_DIR=/tmp/agent-browser-socket  # 设置可写目录
+mkdir -p $AGENT_BROWSER_SOCKET_DIR && chmod 777 $AGENT_BROWSER_SOCKET_DIR
+
 agent-browser --args "--no-sandbox" close                                    # 先关闭现有会话
 agent-browser --args "--no-sandbox" open http://localhost:8081               # 打开页面
 agent-browser --args "--no-sandbox" snapshot                                 # 获取可访问性树

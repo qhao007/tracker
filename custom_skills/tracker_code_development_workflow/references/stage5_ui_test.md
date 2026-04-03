@@ -11,8 +11,9 @@
 - max_retries: 3
 
 ### 必须激活的技能
-1. **Bash** - 运行 Playwright
-2. **Playwright** - UI测试框架
+1. **playwright-debug** - Playwright调试最佳实践（必须激活，获取Trace Viewer、超时问题、元素定位等调试指南）
+2. **Bash** - 运行 Playwright
+3. **Playwright** - UI测试框架
 
 ### 必须阅读的文档
 1. `/projects/management/tracker/CLAUDE.md` - 测试命令

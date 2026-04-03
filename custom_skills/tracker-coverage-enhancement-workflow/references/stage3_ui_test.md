@@ -1,5 +1,19 @@
 # 阶段3：UI测试开发快速参考
 
+## ⚠️ 必须激活的技能
+
+**在开始测试开发前，必须先激活 `playwright-debug` 技能！**
+
+```bash
+使用 Skill 工具激活技能:
+skill: "playwright-debug"
+```
+
+**playwright-debug 技能提供**:
+- Playwright 测试调试最佳实践
+- Tracker 项目特有的沙箱环境问题处理
+- CDNX 超时、loginOverlay 覆盖层等常见问题解决方案
+
 ## ⚠️ 重要改进：必须先参考现有代码
 
 ### 选择器验证步骤（不可跳过）
@@ -24,11 +38,12 @@ cd /projects/management/tracker/dev && npx playwright test tests/test_ui/specs/i
 
 ## 核心任务
 
-1. **选择器验证** (必做) - 先确认选择器再编写代码
-2. 根据阶段1的分析开发Playwright测试用例
-3. 运行测试并调试 - 必须通过！
-4. 记录Bug到Buglog
-5. 追加到测试报告
+1. **激活 playwright-debug 技能** (必做)
+2. **选择器验证** (必做) - 先确认选择器再编写代码
+3. 根据阶段1的分析开发Playwright测试用例
+4. 运行测试并调试 - 必须通过！
+5. 记录Bug到Buglog
+6. 追加到测试报告
 
 ## 测试用例ID格式
 

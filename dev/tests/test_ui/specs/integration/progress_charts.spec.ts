@@ -3,13 +3,38 @@ import { test, expect } from '@playwright/test';
 test.describe('Progress Charts (v0.8.0)', () => {
 
   test.beforeEach(async ({ page }) => {
-    // 登录
+    // 登录 - 使用 domcontentloaded 避免 CDN 超时
     await page.goto('http://localhost:8081', { waitUntil: 'domcontentloaded' });
-    await page.fill('#loginUsername', 'admin');
-    await page.fill('#loginPassword', 'admin123');
-    await page.click('button.login-btn');
-    // 等待登录成功 - 使用 DOM 元素而不是 URL
-    await page.waitForSelector('#userInfo', { timeout: 30000 });
+    await page.waitForLoadState('domcontentloaded');
+
+    // 处理引导页（v0.10.x 新增）
+    const introBtn = page.locator('.intro-cta-btn');
+    if (await introBtn.isVisible().catch(() => false)) {
+      await introBtn.click();
+      await page.waitForTimeout(500);
+    }
+
+    // 检查是否需要登录
+    const needsLogin = await page.locator('#loginForm').isVisible().catch(() => false);
+    if (needsLogin) {
+      await page.fill('#loginUsername', 'admin');
+      await page.fill('#loginPassword', 'admin123');
+      await page.click('#loginForm button[type="submit"]');
+      await page.waitForTimeout(1500);
+    }
+
+    // 处理首次登录密码修改模态框（v0.10.x 新增）
+    const changePwdModal = page.locator('#changePasswordModal');
+    if (await changePwdModal.isVisible().catch(() => false)) {
+      await page.fill('#newPassword', 'admin123');
+      await page.fill('#confirmPassword', 'admin123');
+      await page.click('#changePasswordModal button.btn-primary');
+      await page.waitForSelector('#changePasswordModal', { state: 'hidden', timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(1000);
+    }
+
+    // 等待项目选择器可用
+    await page.waitForSelector('#projectSelector:not([disabled])', { timeout: 30000 });
   });
 
   test('UI-CHART-001: Tab 切换到 Progress Charts', async ({ page }) => {

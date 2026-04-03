@@ -60,8 +60,9 @@ export default defineConfig({
     // 沙箱环境：使用当前用户的 HOME 目录
     launchOptions: {
       env: {
-        HOME: process.env.HOME || '/home/hqi',
         XDG_RUNTIME_DIR: '/tmp',
+        XDG_CONFIG_HOME: '/tmp/xdg',
+        FONTCONFIG_PATH: '/etc/fonts',
         MOZ_ENABLE_WAYLAND: '0',
       },
     },
@@ -71,7 +72,10 @@ export default defineConfig({
   projects: [
     {
       name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
+      use: {
+        ...devices['Desktop Firefox'],
+        headless: true,
+      },
     },
   ],
 
