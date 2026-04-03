@@ -11,9 +11,10 @@
 - max_retries: 3
 
 ### 必须激活的技能
-1. **frontend-design** - 前端界面开发
-2. **Explore** - 探索现有代码结构
-3. **Bash** - 运行检查脚本
+1. **minimax-skills:fullstack-dev** - 全栈开发技能（必须激活，获取后端API和前端集成开发指南）
+2. **frontend-design** - 前端界面开发
+3. **Explore** - 探索现有代码结构
+4. **Bash** - 运行检查脚本
 
 ### 必须阅读的文档
 1. `/projects/management/tracker/CLAUDE.md`
