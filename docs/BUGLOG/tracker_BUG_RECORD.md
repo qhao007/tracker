@@ -500,6 +500,194 @@ filepath = os.path.join(archives_dir, filename)
 
 ---
 
+### BUG-123: FC导入API参数不匹配
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-30 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-03-30 |
+| **修复人** | Claude Code |
+
+**描述**: FC导入功能前端发送的参数格式与后端API期望的不一致，导致导入失败。
+
+**问题分析**:
+- **前端** (`executeFCImport` in `index.html`) 发送:
+  - `project_id` 在 request body 中
+  - `file_data` 为 base64 编码的 CSV 内容
+- **后端** (`import_fc` in `api.py`) 期望:
+  - `project_id` 在 query parameter 中 (`request.args.get`)
+  - `csv_data` 为 2D JSON 数组
+
+**错误信息**: `❌ 导入失败: 缺少 project_id`
+
+**修复方案**:
+修改 `api.py` 中的 `import_fc` 函数，支持两种参数格式：
+1. `file_data` (base64) + `project_id` (body) - 与前端保持一致
+2. `csv_data` (2D数组) + `project_id` (query) - 遗留格式兼容
+
+**修复代码位置**: `/projects/management/tracker/dev/app/api.py` 第 2688-2817 行
+
+**验证**:
+```bash
+# 测试 base64 格式
+curl -X POST "http://localhost:8081/api/fc/import?project_id=1049" \
+  -H 'Content-Type: application/json' \
+  -d '{"file_data": "<base64_csv>"}'
+# 返回: {"errors":[],"failed":0,"imported":1,"success":true}
+```
+
+---
+
+### BUG-127: FC-CP 模式下 CP 关联状态显示错误
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-04-02 |
+| **报告人** | 用户反馈 |
+| **修复日期** | 2026-04-02 |
+| **修复人** | Claude Code |
+
+**描述**: 在 FC-CP 模式下，有 FC 关联的 CP 条目仍然显示红色高亮（未关联状态）。
+
+**问题分析**:
+- `renderCP()` 通过 `functionalCoverages[i].cp_ids` 构建 `linkedCPIds` Set 来判断 CP 是否已关联
+- `functionalCoverages` 只在切换到 FC Tab 时才加载（通过 `switchTab('fc')` 调用 `loadFC()`）
+- 用户在 CP Tab 查看时，`functionalCoverages` 为空数组，导致所有 CP 被判断为"未关联"
+
+**根本原因**: `loadData()` 在 FC-CP 模式下未加载 FC 数据
+
+**修复方案**:
+1. 修改 `loadData()` 函数，在 FC-CP 模式下同时加载 FC 数据
+2. 在 FC-CP 关联导入成功后调用 `renderCP()` 刷新关联状态显示
+
+**修复代码位置**: `/projects/management/tracker/dev/index.html`
+- `loadData()` 函数 (第 1860-1870 行): 添加 `loadFC()` 调用
+- `executeFCImport()` 函数: 导入成功后添加 `renderCP()` 调用
+- `executeFC_CPAssocImport()` 函数: 导入成功后添加 `renderCP()` 调用
+
+**验证**:
+- 在 FC-CP 模式下创建项目，导入 FC 和 FC-CP 关联
+- 查看 CP Tab，已关联的 CP 不再显示红色高亮
+
+---
+
+### BUG-128: get_coverpoints() API 未区分 coverage_mode
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-04-02 |
+| **报告人** | Claude Code (Subagent COV_B) |
+| **修复日期** | 2026-04-02 |
+| **修复人** | Claude Code |
+| **Bug ID** | API-CP-COVERAGE |
+
+**描述**: `get_coverpoints()` API 始终使用 `tc_cp_connections` 表计算 CP 覆盖率和 linked 状态，完全忽略 `coverage_mode` 设置。在 FC-CP 模式下，应该使用 `fc_cp_associations` 表和 FC 的 `coverage_pct` 来计算覆盖率。
+
+**问题位置**: `/projects/management/tracker/dev/app/api.py` 第 1537-1628 行 `get_coverpoints()` 函数
+
+**修复方案**:
+修改 `get_coverpoints()` 函数，根据项目的 `coverage_mode` 选择不同的查询逻辑:
+- `tc_cp` 模式: 现有逻辑（使用 tc_cp_connections）
+- `fc_cp` 模式: 使用 fc_cp_associations 和 functional_coverage 表
+
+**修复内容**:
+1. 在函数开头检查 `project.get("coverage_mode")` 判断模式
+2. FC-CP 模式使用 `fc_cp_associations` 表获取 linked_cp_ids
+3. FC-CP 模式使用 `fc_cp_associations + functional_coverage.coverage_pct` 计算覆盖率
+4. TC-CP 模式保持原有逻辑不变
+
+**验证**:
+- `test_api_cp_coverage_fc_mode.py` 全部 10 个测试通过
+- FC-CP 模式下 CP 的 `coverage` 正确返回关联 FC 的 `coverage_pct` 均值
+- FC-CP 模式下 CP 的 `linked` 正确基于 `fc_cp_associations` 判断
+
+---
+
+### BUG-129: 删除 FC-CP 关联 API 返回错误
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-04-02 |
+| **报告人** | Claude Code |
+| **修复日期** | 2026-04-02 |
+| **修复人** | Claude Code |
+| **Bug ID** | API-FC-CP-DELETE |
+
+**描述**: `delete_fc_cp_association()` API 只支持 query parameter 格式 `?id=<assoc_id>&project_id=<project_id>`，但前端发送的是 JSON body 格式 `{"cp_id": X, "fc_id": Y, "project_id": Z}`。
+
+**问题位置**: `/projects/management/tracker/dev/app/api.py` 第 3010-3036 行 `delete_fc_cp_association()` 函数
+
+**修复方案**:
+增强 API 支持两种格式:
+1. Query params: `?id=<assoc_id>&project_id=<project_id>` (原有)
+2. JSON body: `{"cp_id": <cp_id>, "fc_id": <fc_id>, "project_id": <project_id>}` (新增)
+
+**修复内容**:
+1. 使用 `request.get_json(silent=True)` 安全获取 JSON body
+2. 如果没有 assoc_id 但有 cp_id 和 fc_id，从数据库查询对应关联 ID
+3. 保持向后兼容 query parameter 格式
+
+**验证**:
+- `test_api_fc_cp_association.py` 全部 18 个测试通过
+- 前端 JSON body 格式和 query parameter 格式均能正确删除关联
+
+---
+
+### BUG-130: get_fc_cp_associations API 忽略 cp_id 参数
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-04-02 |
+| **报告人** | Claude Code |
+| **修复日期** | 2026-04-02 |
+| **修复人** | Claude Code |
+
+**描述**: `get_fc_cp_associations()` API 支持可选的 `cp_id` 参数用于过滤指定 CP 的关联，但该参数被忽略，始终返回所有 FC-CP 关联。
+
+**问题位置**: `/projects/management/tracker/dev/app/api.py` 第 2906-2931 行 `get_fc_cp_associations()` 函数
+
+**复现步骤**:
+1. 调用 `GET /api/fc-cp-association?project_id=6&cp_id=28`
+2. 期望返回: 只包含 CP 28 的 FC 关联（1条）
+3. 实际返回: 所有 CP 的 FC 关联（44条）
+
+**原因**: 函数定义时读取了 `cp_id` 参数但未在 SQL 查询中使用
+
+**修复方案**:
+```python
+# 修复前
+query = """SELECT ... FROM fc_cp_association ..."""
+
+# 修复后
+query = """SELECT ... FROM fc_cp_association ..."""
+params = []
+if cp_id:
+    query += " WHERE fcca.cp_id = ?"
+    params.append(cp_id)
+cursor.execute(query, params)
+```
+
+**验证**:
+- `GET /api/fc-cp-association?project_id=6&cp_id=28` 返回 1 条关联 ✓
+- `GET /api/fc-cp-association?project_id=6&cp_id=7` 返回 2 条关联 ✓
+
+**测试用例**:
+- `TestFCCPAssociationList::test_get_fc_cp_associations_filter_by_cp_id` (API-FC-CP-005)
+- 回归测试: BUG-130
+
+---
+
 ## 2. 功能增强
 
 ### FEAT-001: CP 覆盖率计算
@@ -3352,6 +3540,422 @@ function executeExport() {
 ```
 
 **影响测试**: UI-FC-EXPORT-001
+
+---
+
+#### BUG-121: CP 详情页 FC Coverage 显示为 undefined%
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-30 |
+| **修复日期** | 2026-03-30 |
+| **文件** | `app/api.py` - `get_fc_cp_associations()` 第 2872-2899 行 |
+
+**问题**: CP 详情页中关联的 Functional Coverage Item，Coverage 列显示为 "undefined%"。
+
+**根因**: 后端 `get_fc_cp_associations` API 查询时没有返回 `fc.coverage_pct` 和 `fc.status` 字段，但前端第 2746 行使用 `fc.fc_coverage_pct` 来显示。
+
+**修复**: 修改 SQL 查询添加 `fc.coverage_pct as fc_coverage_pct, fc.status as fc_status`，并在返回数据中添加这两个字段。
+
+**修复代码** (`app/api.py` 第 2872-2899 行):
+```python
+cursor.execute("""
+    SELECT fcca.*,
+           cp.feature as cp_feature, cp.sub_feature as cp_sub_feature, cp.cover_point as cp_cover_point,
+           fc.covergroup as fc_covergroup, fc.coverpoint as fc_coverpoint, fc.bin_name as fc_bin_name,
+           fc.coverage_pct as fc_coverage_pct, fc.status as fc_status
+    FROM fc_cp_association fcca
+    LEFT JOIN cover_point cp ON fcca.cp_id = cp.id
+    LEFT JOIN functional_coverage fc ON fcca.fc_id = fc.id
+    ORDER BY cp.feature, cp.sub_feature, cp.cover_point
+""")
+
+# ...
+
+associations.append({
+    # ... 其他字段 ...
+    "fc_covergroup": assoc.get("fc_covergroup"),
+    "fc_coverpoint": assoc.get("fc_coverpoint"),
+    "fc_bin_name": assoc.get("fc_bin_name"),
+    "fc_coverage_pct": assoc.get("fc_coverage_pct"),
+    "fc_status": assoc.get("fc_status")
+})
+```
+
+---
+
+## v0.11.0 回归测试发现的应用 Bug (2026-03-31)
+
+### 已修复的应用 Bug
+
+#### BUG-122: 缺失"导入 FC-CP 关联"按钮
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-31 |
+| **发现者** | Claude Code (测试调试) |
+| **修复日期** | 2026-03-31 |
+| **文件** | `index.html` 第 1038 行 |
+
+**问题**: FC Panel 工具栏缺少"导入 FC-CP 关联"按钮，导致 UI-FC-CP-002 测试失败。函数 `openFC_CPAssocImportModal()` 已定义但未绑定到任何 UI 按钮。
+
+**修复**: 在 FC Panel 工具栏添加按钮:
+```html
+<button class="btn" onclick="openFC_CPAssocImportModal()">📥 导入 FC-CP 关联</button>
+```
+
+**影响测试**: UI-FC-CP-002
+
+---
+
+#### BUG-123: API `import_fc_cp_association` 只从 request.args 读取 project_id
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Critical |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-31 |
+| **发现者** | Claude Code (测试调试) |
+| **修复日期** | 2026-03-31 |
+| **文件** | `app/api.py` 第 3014 行 |
+
+**问题**: API `import_fc_cp_association()` 只从 `request.args.get("project_id")` 读取项目 ID，但前端通过 `request.json` 发送 `project_id`，导致 API 返回"缺少 project_id"错误。
+
+**根因**: 与 `import_fc()` API 不一致，后者支持从 `request.json` 和 `request.args` 两种方式读取。
+
+**修复**: 修改 API 同时支持两种方式读取 project_id:
+```python
+# 支持从 body 或 query 获得 project_id
+project_id = request.json.get("project_id") if request.json else None
+if not project_id:
+    project_id = request.args.get("project_id", type=int)
+```
+
+**影响测试**: UI-FC-CP-002
+
+---
+
+#### BUG-124: API `import_fc_cp_association` 不支持 base64 file_data
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Critical |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-31 |
+| **发现者** | Claude Code (测试调试) |
+| **修复日期** | 2026-03-31 |
+| **文件** | `app/api.py` 第 3028 行 |
+
+**问题**: API `import_fc_cp_association()` 只接受 `csv_data` (JSON 数组)，但前端发送 `file_data` (base64 编码的 CSV 文件内容)，导致导入返回"CSV 数据为空或格式错误"。
+
+**根因**: 与 `import_fc()` API 不一致，后者支持 base64 `file_data` 解码。
+
+**修复**: 添加 file_data (base64) 解码支持:
+```python
+# 支持两种格式:
+# 1. file_data: base64 编码的 CSV 文件内容
+# 2. csv_data: 2D 数组 (遗留格式)
+csv_data = None
+if request.json:
+    file_data = request.json.get("file_data")
+    if file_data:
+        import base64
+        import csv as csv_module
+        import io
+        file_content = base64.b64decode(file_data)
+        csv_reader = csv_module.reader(io.StringIO(file_content.decode("utf-8")))
+        csv_data = list(csv_reader)
+    else:
+        csv_data = request.json.get("csv_data", [])
+```
+
+**影响测试**: UI-FC-CP-002
+
+---
+
+### v0.11.0 修复汇总
+
+| Bug ID | 描述 | 修复日期 |
+|--------|------|----------|
+| BUG-122 | 缺失"导入 FC-CP 关联"按钮 | 2026-03-31 |
+| BUG-123 | API import_fc_cp_association project_id 读取方式 | 2026-03-31 |
+| BUG-124 | API import_fc_cp_association 不支持 base64 file_data | 2026-03-31 |
+| BUG-125 | 缺失 filterCPByLinked 函数 | 2026-03-31 |
+
+**影响测试**: UI-FILTER-002 (因该问题导致过滤失效)
+
+---
+
+#### BUG-126: CP CRUD UI 测试无法通过按钮点击创建 CP
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 (测试适应) |
+| **发现日期** | 2026-03-31 |
+| **修复日期** | 2026-03-31 |
+| **文件** | `tests/test_ui/specs/integration/cp_link_filter.spec.ts` |
+
+**问题**: UI-REG-002 测试使用 `page.click('#cpForm button[type="submit"]')` 提交表单时，`saveCP()` 被调用但 `loadCP()` 未正确刷新列表，导致新创建的 CP 不出现在 UI 中。
+
+**分析**: Playwright 的 button click 可以触发 `saveCP()` (modal 关闭说明 API 调用成功)，但后续的 `loadCP()` + `renderCP()` 刷新流程未能正确更新前端 `coverPoints` 数据。
+
+**修复**: 测试改用 API 直接进行 Create/Update/Delete 操作，通过 page reload 验证 UI 显示正确。
+
+**影响测试**: UI-REG-002 (现已通过)
+
+---
+
+---
+
+#### BUG-122: FC-CP 模式下高亮逻辑错误
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-03-30 |
+| **修复日期** | 2026-03-30 |
+| **文件** | `index.html` - `renderCP()`, `renderTC()`, `renderFC()` |
+
+**问题描述**:
+1. CP 高亮逻辑错误：FC-CP 模式下仍使用 TC 关联判断 CP 是否有关联
+2. TC 高亮逻辑错误：FC-CP 模式下仍高亮未关联 CP 的 TC
+3. FC 高亮缺失：FC 没有关联 CP 时没有高亮提示
+
+**根因**:
+- CP 列表渲染时 `linkedCPIds` 只基于 `testCases` 构建，未考虑 FC-CP 模式
+- TC 列表渲染时 `isUnlinked` 未区分模式
+- FC 列表渲染时未实现未关联 CP 的高亮逻辑
+
+**修复方案**:
+
+1. **CP 高亮逻辑** (`renderCP()` 第 2602-2620 行):
+```javascript
+const isFCPMode = currentProject && currentProject.coverage_mode === 'fc_cp';
+if (isFCPMode) {
+    // FC-CP 模式：根据 FC 关联判断
+    if (functionalCoverages && functionalCoverages.length > 0) {
+        functionalCoverages.forEach(fc => {
+            if (fc.cp_ids && Array.isArray(fc.cp_ids)) {
+                fc.cp_ids.forEach(cpId => linkedCPIds.add(cpId));
+            }
+        });
+    }
+} else {
+    // TC-CP 模式：根据 TC 关联判断
+    // ... 原有的 TC 关联逻辑
+}
+```
+
+2. **TC 高亮逻辑** (`renderTC()` 第 2912-2914 行):
+```javascript
+const tcIsFCPMode = currentProject && currentProject.coverage_mode === 'fc_cp';
+const isUnlinked = !tcIsFCPMode && (!tc.connected_cps || tc.connected_cps.length === 0);
+```
+
+3. **FC 高亮逻辑** (`renderFC()` 第 2038-2048 行):
+```javascript
+const hasNoCPs = !bin.cp_ids || bin.cp_ids.length === 0;
+return `
+<tr style="border-bottom: 1px solid #eee; ${hasNoCPs ? 'background-color: #fff3cd;' : ''}" data-fc-id="${bin.id}">
+    <td style="padding: 4px; ${hasNoCPs ? 'color: #cc0000;' : ''}">${hasNoCPs ? '<span class="unlinked">' : ''}${escapeHtml(bin.bin_name || '')}${hasNoCPs ? '</span>' : ''}</td>
+    ...
+</tr>
+```
+
+**影响测试**: UI-PROJ-DIALOG, UI-FC-CPIDS
+
+---
+
+## BUG-106: calculate_current_coverage 覆盖率计算逻辑与 Dashboard 不一致
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-04-03 |
+| **报告人** | 用户反馈 |
+| **修复日期** | 2026-04-03 |
+| **修复人** | Claude Code |
+| **影响版本** | v0.11.0 |
+
+**描述**: 刷新快照后，趋势图中显示的覆盖率（90%）与概览中的覆盖率（34.5%）严重不符。
+
+**根本原因**:
+- `calculate_current_coverage()` 函数（快照用）使用旧逻辑：`(被PASS TC覆盖的CP数 / 总CP数) * 100`
+- `get_dashboard_stats()` 函数（概览用）使用新逻辑：每个CP的 `(PASS TC数/关联TC总数)` 求平均
+
+**影响范围**:
+- `app/api.py` 第 1188-1199 行（`calculate_current_coverage` 函数）
+- `app/api.py` 第 1193-1228 行（Priority 覆盖率计算）
+
+**修复方案**:
+修改 `calculate_current_coverage` 函数，使用与 Dashboard 概览相同的计算逻辑：
+```python
+# v0.11.0: 新逻辑 - 对每个 CP 的覆盖率求平均
+cursor.execute("SELECT id FROM cover_point")
+all_cp_ids = [row[0] for row in cursor.fetchall()]
+
+total_coverage_rate = 0.0
+covered_cps = 0
+
+for cp_id in all_cp_ids:
+    cursor.execute("""
+        SELECT tc.status FROM test_case tc
+        INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+        WHERE tcc.cp_id = ?
+    """, (cp_id,))
+    connected_tcs = cursor.fetchall()
+
+    total_tc = len(connected_tcs)
+    if total_tc == 0:
+        cp_rate = 0.0
+    else:
+        pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
+        cp_rate = (pass_tc / total_tc) * 100
+        if pass_tc > 0:
+            covered_cps += 1
+
+    total_coverage_rate += cp_rate
+
+coverage = round(total_coverage_rate / total_cp, 1) if total_cp > 0 else 0
+```
+
+**验证**:
+- ✅ Dashboard 概览 `coverage_rate`: 34.5%
+- ✅ 快照 `actual_coverage`: 34.5%
+- ✅ 两者一致
+
+---
+
+## BUG-107: create_snapshot API 字段映射错误
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-04-03 |
+| **报告人** | Claude Code |
+| **修复日期** | 2026-04-03 |
+| **修复人** | Claude Code |
+| **影响版本** | v0.11.0 |
+
+**描述**: `create_snapshot` API 返回的字段值错误，如 `cp_total` 显示 0.0 而实际应为 30。
+
+**根本原因**:
+`project_progress` 表字段顺序为：
+```
+id, project_id, snapshot_date, actual_coverage, p0_coverage, p1_coverage, p2_coverage, p3_coverage, tc_pass_count, tc_total, cp_covered, cp_total, created_at, updated_at, updated_by
+```
+
+但代码映射错误地将 `p0_coverage` 位置的值映射成了 `tc_pass_count`：
+```python
+# 修复前（错误）
+'tc_pass_count': row[4],   # 错！row[4] 是 p0_coverage
+'tc_total': row[5],        # 错！row[5] 是 p1_coverage
+'cp_covered': row[6],      # 错！row[6] 是 p2_coverage
+'cp_total': row[7],        # 错！row[7] 是 p3_coverage
+'created_at': row[8]      # 错！row[8] 是 tc_pass_count
+```
+
+**影响范围**:
+- `app/api.py` 第 1358-1367 行（`create_snapshot` 函数返回字段映射）
+
+**修复方案**:
+```python
+snapshot = {
+    'id': row[0],
+    'project_id': row[1],
+    'snapshot_date': row[2],
+    'actual_coverage': row[3],
+    'p0_coverage': row[4],
+    'p1_coverage': row[5],
+    'p2_coverage': row[6],
+    'p3_coverage': row[7],
+    'tc_pass_count': row[8],
+    'tc_total': row[9],
+    'cp_covered': row[10],
+    'cp_total': row[11],
+    'created_at': row[12]
+}
+```
+
+**验证**:
+- ✅ `cp_total`: 30（正确）
+- ✅ `tc_total`: 50（正确）
+- ✅ `cp_covered`: 21（正确）
+- ✅ Priority 覆盖率字段正确返回
+
+---
+
+## BUG-108: calculate_planned_coverage 计划曲线覆盖率计算逻辑错误
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-04-03 |
+| **报告人** | 用户反馈 |
+| **修复日期** | 2026-04-03 |
+| **修复人** | Claude Code |
+| **影响版本** | v0.11.0 |
+
+**描述**: 计划曲线覆盖率计算结果与 Dashboard 概览不一致。
+
+**根本原因**:
+- 计划曲线使用 `DISTINCT cp.id` 统计"被覆盖的 CP 数量"，然后除以总 CP 数
+- 这与 Dashboard 概览的"每个 CP 覆盖率求平均"算法不一致
+
+**正确的计划曲线算法**:
+1. 分子：target_date <= 当前周 的 TC（假设 PASS）
+2. 分母：该 CP 关联的**所有 TC**（包括 target_date 为 NULL 的）
+3. CP 覆盖率 = 分子 / 分母
+4. 计划覆盖率 = 所有 CP 覆盖率的平均值
+
+**影响范围**:
+- `app/api.py` 第 875-926 行（`calculate_planned_coverage` 函数）
+
+**修复方案**:
+```python
+# v0.11.0: 新算法 - 对每个 CP 的覆盖率求平均
+for cp_id in cp_ids:
+    # 分母：该 CP 关联的所有 TC（包括 target_date 为 NULL 的）
+    cursor.execute("""
+        SELECT COUNT(*) FROM tc_cp_connections WHERE cp_id = ?
+    """, (cp_id,))
+    total_tcs = cursor.fetchone()[0]
+
+    if total_tcs == 0:
+        cp_rate = 0.0
+    else:
+        # 分子：该 CP 关联的、target_date <= 当前周 且 status != 'REMOVED' 的 TC
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM test_case tc
+            INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+            WHERE tcc.cp_id = ?
+            AND tc.target_date IS NOT NULL
+            AND tc.target_date <= ?
+            AND tc.status != 'REMOVED'
+        """, (cp_id, week_end.isoformat()))
+        passed_tcs = cursor.fetchone()[0]
+        cp_rate = (passed_tcs / total_tcs) * 100
+
+    total_coverage_rate += cp_rate
+
+coverage = round(total_coverage_rate / total_cp, 1)
+```
+
+**验证**:
+- ✅ 计划曲线 2026-02-02: 24%
+- ✅ 计划曲线 2026-02-23: 53.5%
+- ✅ 计划曲线 2026-03-16: 87.5%
+- ✅ 计划曲线 2026-04-13: 90%
 
 ---
 

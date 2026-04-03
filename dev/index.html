@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>芯片验证 Tracker</title>
     <link rel="stylesheet" href="/static/css/design-system.css">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: Microsoft YaHei, -apple-system, sans-serif; background: #f5f5f5; font-size: 13px; color: #333; }
@@ -934,6 +935,7 @@
             <button class="tab" onclick="switchTab('tc', event)">Test Cases</button>
             <button class="tab" onclick="switchTab('progress', event)">Progress Charts</button>
             <button class="tab" id="fcTab" onclick="switchTab('fc', event)" style="display: none;">Functional Coverage</button>
+            <button class="tab" id="dashboardTab" onclick="switchTab('dashboard', event)">Dashboard</button>
         </div>
         <div id="cpPanel">
             <div class="toolbar">
@@ -1057,6 +1059,52 @@
                 <p style="font-size: 12px;">点击"导入 FC"按钮导入数据</p>
             </div>
             <div id="fcList"></div>
+        </div>
+    </div>
+
+    <!-- Dashboard Content (v0.11.0) -->
+    <div id="dashboard-content" style="display: none;">
+        <div class="dashboard">
+            <!-- Overview Cards -->
+            <div id="dashboard-overview" class="dashboard-overview">
+                <!-- JS dynamic render -->
+            </div>
+
+            <!-- Charts Row -->
+            <div class="dashboard-charts">
+                <!-- Feature Coverage Chart -->
+                <div class="chart-card">
+                    <div class="chart-title">Feature Coverage Distribution</div>
+                    <div id="feature-chart"></div>
+                </div>
+
+                <!-- Priority Distribution -->
+                <div class="chart-card">
+                    <div class="chart-title">Priority Distribution</div>
+                    <div id="priority-cards" class="priority-cards"></div>
+                </div>
+            </div>
+
+            <!-- Trend Chart -->
+            <div class="trend-card">
+                <div class="chart-title">Coverage Trend</div>
+                <div id="trend-chart"></div>
+            </div>
+
+            <!-- Lists Row -->
+            <div class="dashboard-lists">
+                <!-- Top 5 Uncovered -->
+                <div class="list-card">
+                    <div class="chart-title">Top 5 Uncovered CPs</div>
+                    <div id="top-uncovered"></div>
+                </div>
+
+                <!-- Recent Activity -->
+                <div class="list-card">
+                    <div class="chart-title">Recent Activity</div>
+                    <div id="recent-activity"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -3007,8 +3055,10 @@
             document.getElementById('tcPanel').style.display = tab === 'tc' ? 'block' : 'none';
             document.getElementById('progressPanel').style.display = tab === 'progress' ? 'block' : 'none';
             document.getElementById('fcPanel').style.display = tab === 'fc' ? 'block' : 'none';
+            document.getElementById('dashboard-content').style.display = tab === 'dashboard' ? 'block' : 'none';
             if (tab === 'progress') loadProgressChart();
             if (tab === 'fc') loadFC();
+            if (tab === 'dashboard' && currentProjectId) initDashboard(currentProjectId);
         }
         // 切换版本对话框中的标签页
         function switchVersionTab(tab, event) {
@@ -4114,3 +4164,5 @@
             return div.innerHTML;
         }
     </script>
+    <!-- Dashboard Module (v0.11.0) -->
+    <script src="/static/js/dashboard.js"></script>
