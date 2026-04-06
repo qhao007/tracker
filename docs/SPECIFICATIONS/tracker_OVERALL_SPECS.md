@@ -1,6 +1,6 @@
-# 芯片验证 Tracker v0.10.2 总体规格书
+# 芯片验证 Tracker v0.11.0 总体规格书
 
-> **版本**: v0.10.2 | **更新日期**: 2026-03-23 | **状态**: 📋 开发中
+> **版本**: v0.11.0 | **更新日期**: 2026-04-03 | **状态**: ✅ 已完成开发
 
 ---
 
@@ -54,6 +54,7 @@
 | **v0.10.0 Priority 过滤功能** | |
 | **v0.10.1 批量创建用户** | |
 | **v0.10.2 Intro 引导页** | |
+| **v0.11.0 FC/Dashboard** | |
 
 ### 1.4 v0.9.0 重大变更
 
@@ -436,6 +437,12 @@ python3 scripts/data_manager.py clean
 | **F048** | **用户反馈功能** | 反馈API+UI，收集用户建议和问题 | P1 |
 | **F049** | **Priority 过滤功能** | 图表支持按 CP Priority (P0-P3) 过滤 | P1 |
 | **F050** | **批量创建用户** | 批量创建普通用户 API，默认密码 123456 | P1 |
+| **F051** | **FC Tab 页面** | Functional Coverage 管理界面 | P1 |
+| **F052** | **FC-CP 关联** | FC 与 CP 的多对多关联 | P1 |
+| **F053** | **FC Batch API** | 批量更新 FC coverage_pct/status | P1 |
+| **F054** | **CP Dashboard** | Apple 风格覆盖率仪表板 | P0 |
+| **F055** | **Cron 快照 Token** | 修复 BUG-129，定时任务认证 | P1 |
+| **F056** | **覆盖率算法修复** | BUG-106/107/108 修复 | P0 |
 
 ### 3.2 Cover Point 字段
 
@@ -1109,6 +1116,25 @@ coverage = (CP1覆盖率 + CP2覆盖率 + ... + CPn覆盖率) / n
 | DELETE | `/api/progress/snapshots/<id>` | 删除快照 | admin |
 | GET | `/api/progress/<project_id>/export` | 导出进度数据 | 登录 |
 
+### 4.9 FC (Functional Coverage) API (v0.11.0 新增)
+
+| 方法 | 路径 | 功能 | 状态 |
+|------|------|------|------|
+| GET | `/api/fc` | 获取 FC 列表（支持筛选） | ✅ 已实现 |
+| POST | `/api/fc/import` | 导入 FC (CSV) | ✅ 已实现 |
+| GET | `/api/fc/export` | 导出 FC (CSV) | ✅ 已实现 |
+| PUT | `/api/fc/batch` | 批量更新 FC items | ✅ 已实现 |
+| GET | `/api/fc-cp-association` | 获取 FC-CP 关联列表 | ✅ 已实现 |
+| POST | `/api/fc-cp-association` | 创建 FC-CP 关联 | ✅ 已实现 |
+| DELETE | `/api/fc-cp-association` | 删除 FC-CP 关联 | ✅ 已实现 |
+| POST | `/api/fc-cp-association/import` | 导入 FC-CP 关联 (CSV) | ✅ 已实现 |
+
+### 4.10 Dashboard API (v0.11.0 新增)
+
+| 方法 | 路径 | 功能 | 权限 |
+|------|------|------|------|
+| GET | `/api/dashboard/stats` | 获取 Dashboard 统计数据 | 登录 |
+
 #### 4.8.1 GET /api/progress/<project_id>
 
 获取完整进度数据，包含计划曲线和实际曲线。
@@ -1323,7 +1349,51 @@ CREATE TABLE project_progress (
 | updated_at | TEXT | 更新时间 |
 | updated_by | TEXT | 更新人 |
 
-### 5.5 v0.2 到 v0.3 迁移
+### 5.5 v0.11.0 新增表
+
+#### functional_coverage 表
+
+```sql
+CREATE TABLE functional_coverage (
+    id INTEGER PRIMARY KEY,
+    project_id INTEGER,
+    covergroup TEXT NOT NULL,
+    coverpoint TEXT NOT NULL,
+    coverage_type TEXT NOT NULL,
+    bin_name TEXT NOT NULL,
+    bin_val TEXT,
+    comments TEXT,
+    coverage_pct REAL DEFAULT 0.0,
+    status TEXT DEFAULT 'missing' CHECK (status IN ('missing', 'ready')),
+    owner TEXT,
+    created_by TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    UNIQUE (project_id, covergroup, coverpoint, bin_name)
+);
+```
+
+#### fc_cp_association 表
+
+```sql
+CREATE TABLE fc_cp_association (
+    id INTEGER PRIMARY KEY,
+    project_id INTEGER,
+    cp_id INTEGER,
+    fc_id INTEGER,
+    created_by TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE (cp_id, fc_id)
+);
+```
+
+#### project 表新增字段
+
+```sql
+ALTER TABLE project ADD COLUMN coverage_mode TEXT DEFAULT 'tc_cp';
+```
+
+### 5.6 v0.2 到 v0.3 迁移
 
 现有用户需要执行迁移：
 
@@ -1843,6 +1913,10 @@ journalctl -u tracker -f
 | **v0.9.0** | **2026-03-05** | **前端界面优化**：设计系统 CSS 变量（紫色主题 Vercel/Linear 风格）、组件样式重构（Header/Tabs/Table/Modal）、微交互动画、兼容映射 |
 | **v0.9.1** | **2026-03-08** | **用户反馈功能**：反馈 API + UI、switchTab 函数改进、常量管理优化 |
 | **v0.9.2** | **2026-03-17** | **关联状态与滚动优化**：CP/TC关联状态可视化（红色+🔗图标）、独立滚动条+表头sticky+高度自适应、TC过滤单行布局、CP未关联过滤、admin强制改密码前端、Manual更新 |
+| **v0.10.0** | **2026-03-20** | **Priority 过滤功能**：图表支持按 CP Priority 过滤、新增 p0-p3_coverage 字段 |
+| **v0.10.1** | **2026-03-21** | **批量创建用户**：POST /api/users/batch 批量创建普通用户 |
+| **v0.10.2** | **2026-03-23** | **Intro 引导页**：首次访问引导页、5 slides 介绍功能 |
+| **v0.11.0** | **2026-04-03** | **FC/Dashboard**：FC 功能、CP Dashboard、定时快照修复、覆盖率算法修复 |
 
 ### v0.8.3 详细变更
 
@@ -2113,6 +2187,85 @@ journalctl -u tracker -f
    - 包含 UI 创建、API 创建、批量创建三种方式
 
 ### v0.10.2 详细变更 (2026-03-23)
+
+1. **Intro 引导页**：
+   - 新增首次访问引导页（5 slides：封面 + 3 功能截图 + CTA）
+   - 用户首次访问时显示引导页
+   - 点击"开始使用"后进入主界面并弹出登录框
+   - 通过 `localStorage` 记录用户是否已看过引导页
+   - 再次访问时直接显示登录界面
+
+2. **引导页功能特性**：
+   - 滚动式导航（scroll-snap + 平滑滚动）
+   - 右侧进度导航点（可点击跳转）
+   - 滚动动画效果（fadeInUp）
+   - 浏览器模拟框展示功能截图
+   - 版本号从 API 动态获取
+
+3. **相关文件**：
+   - `dev/index.html` - 集成 Intro overlay
+   - `dev/tracker-intro.html` - 独立引导页（保留）
+   - `dev/static/images/slides/` - 截图图片目录
+
+### v0.11.0 详细变更 (2026-04-03)
+
+#### 1. FC (Functional Coverage) 功能
+
+**FC 表结构与 API**：
+- 新增 `functional_coverage` 表存储 bin 级别覆盖率数据
+- 新增 `fc_cp_association` 表存储 FC-CP 多对多关联
+- 项目新增 `coverage_mode` 字段（TC-CP / FC-CP 模式）
+
+**FC API**:
+- `GET /api/fc` - 获取 FC 列表（支持筛选）
+- `POST /api/fc/import` - 导入 FC (CSV)
+- `GET /api/fc/export` - 导出 FC (CSV)
+- `PUT /api/fc/batch` - 批量更新 FC items
+
+**FC Tab 界面**：
+- 两级折叠（covergroup → coverpoint）
+- 支持 covergroup/coverpoint/coverage_type 筛选
+- 支持 bin_name 模糊搜索
+- FC-CP 关联导入/导出
+
+#### 2. CP Dashboard 功能
+
+**Dashboard API**:
+- `GET /api/dashboard/stats` - 获取统计数据
+
+**Dashboard 页面**：
+- 概览卡片（总 CP/已覆盖/覆盖率/未关联）
+- Feature 覆盖率分布图
+- Priority 分布卡片 (P0/P1/P2)
+- 覆盖率趋势折线图 (7天)
+- Top 5 未覆盖 CP 列表
+- Recent Activity 动态
+
+#### 3. 定时快照增强 (BUG-129 修复)
+
+**问题**：`CRON_API_TOKEN` 配置从未设置，导致定时快照失败
+
+**修复**：
+- 改为从 `os.environ.get('CRON_API_TOKEN')` 读取
+- 响应格式改为 `created_count/skipped_count/errors/timestamp`
+- INSERT 语句添加 `p0_coverage/p1_coverage/p2_coverage/p3_coverage` 字段
+
+#### 4. 覆盖率算法修复
+
+**BUG-106**: `calculate_current_coverage` 算法改为"每个 CP 覆盖率求平均"
+
+**BUG-107**: `create_snapshot` 字段映射修复
+
+**BUG-108**: `calculate_planned_coverage` NULL target_date TC 计入分母
+
+#### 5. FC 增强功能 (SUPPLEMENT)
+
+- FC Tab 标题显示 "Functional Coverage"
+- 移除"添加 FC"和"导入 FC-CP 关联"按钮
+- CP 详情页 FC Item 可点击跳转
+- FC Bin 显示 CP IDs 列（可点击）
+- FC Comment 超过 150px 截断
+- 项目对话框显示 coverage_mode 和 FC 个数
 
 1. **Intro 引导页**：
    - 新增首次访问引导页（5 slides：封面 + 3 功能截图 + CTA）
