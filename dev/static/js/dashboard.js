@@ -328,7 +328,7 @@ const Dashboard = {
         }
 
         // 概览页空洞摘要: 只显示 critical 等级的前 5 条 (§3.2)
-        const items = (critical?.slice(0, 5) || []).map(h => ({ ...h, severity: 'critical' });
+        const items = (critical?.slice(0, 5) || []).map(h => ({ ...h, severity: 'critical' }));
 
         const priorityColors = { P0: '#ef4444', P1: '#f59e0b', P2: '#22c55e' };
 
