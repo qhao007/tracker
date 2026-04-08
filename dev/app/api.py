@@ -1093,6 +1093,7 @@ def ensure_progress_table_exists(project_name):
     """
     确保 project_progress 表存在，如不存在则创建
     v0.10.0: 扩展支持 p0_coverage~p3_coverage 字段
+    v0.12.0: 扩展支持 progress_data JSON 字段（存储 cp_states 和 tc_states）
 
     Returns:
         bool: 表是否存在或创建成功
@@ -1120,9 +1121,17 @@ def ensure_progress_table_exists(project_name):
                     conn.commit()
                 except Exception as e:
                     print(f"Warning: Could not add column {col_name}: {e}")
+
+        # v0.12.0: 如果缺少 progress_data 字段，则添加
+        if 'progress_data' not in columns:
+            try:
+                cursor.execute("ALTER TABLE project_progress ADD COLUMN progress_data TEXT")
+                conn.commit()
+            except Exception as e:
+                print(f"Warning: Could not add column progress_data: {e}")
         return True
 
-    # 创建表 (包含 Priority 覆盖率字段)
+    # 创建表 (包含 Priority 覆盖率字段和 progress_data)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS project_progress (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1137,6 +1146,7 @@ def ensure_progress_table_exists(project_name):
             tc_total INTEGER,
             cp_covered INTEGER,
             cp_total INTEGER,
+            progress_data TEXT,
             created_at TEXT DEFAULT (datetime('now')),
             updated_at TEXT,
             updated_by TEXT,
@@ -1151,11 +1161,14 @@ def calculate_current_coverage(project_name):
     """
     计算当前覆盖率（用于快照）
     v0.10.0: 扩展支持各 Priority 覆盖率计算
+    v0.12.0: 扩展支持 cp_states 和 tc_states
 
     Returns:
         dict: {actual_coverage, p0_coverage, p1_coverage, p2_coverage, p3_coverage,
-               tc_pass_count, tc_total, cp_covered, cp_total}
+               tc_pass_count, tc_total, cp_covered, cp_total, cp_states, tc_states}
     """
+    import json
+
     # 确保 project_progress 表存在
     try:
         ensure_progress_table_exists(project_name)
@@ -1183,30 +1196,49 @@ def calculate_current_coverage(project_name):
             'p2_coverage': 0,
             'p3_coverage': 0,
             'tc_pass_count': 0,
+            'tc_fail_count': 0,  # v0.12.0: 新增
             'tc_total': 0,
             'cp_covered': 0,
-            'cp_total': total_cp
+            'cp_total': total_cp,
+            'cp_states': {},
+            'tc_states': {}
         }
 
     # 获取 Pass 状态的 TC
     cursor.execute("SELECT COUNT(*) FROM test_case WHERE status = 'PASS'")
     tc_pass = cursor.fetchone()[0]
 
+    # 获取 Fail 状态的 TC (v0.12.0: 新增)
+    cursor.execute("SELECT COUNT(*) FROM test_case WHERE status = 'FAIL'")
+    tc_fail = cursor.fetchone()[0]
+
     # 获取总 TC 数
     cursor.execute("SELECT COUNT(*) FROM test_case")
     tc_total = cursor.fetchone()[0]
 
-    # v0.11.0: 新逻辑 - 对每个 CP 的覆盖率求平均
-    # 先获取所有 CP
-    cursor.execute("SELECT id FROM cover_point")
-    all_cp_ids = [row[0] for row in cursor.fetchall()]
+    # v0.12.0: 收集 cp_states 和 tc_states
+    # CP States: {cp_id: {name, coverage_rate, linked_tcs}}
+    cp_states = {}
+    # TC States: {tc_id: status}
+    tc_states = {}
+
+    # 获取所有 CP 信息
+    cursor.execute("""
+        SELECT cp.id, cp.cover_point, cp.priority, cp.feature
+        FROM cover_point cp
+        WHERE cp.project_id = ?
+    """, (project['id'],))
+    all_cps = cursor.fetchall()
 
     total_coverage_rate = 0.0
     covered_cps = 0  # 有至少一个 PASS TC 的 CP 数
 
-    for cp_id in all_cp_ids:
+    for cp_row in all_cps:
+        cp_id = cp_row[0]
+        cp_name = cp_row[1] if cp_row[1] else ''
+
         cursor.execute("""
-            SELECT tc.status FROM test_case tc
+            SELECT tc.id, tc.status FROM test_case tc
             INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
             WHERE tcc.cp_id = ?
         """, (cp_id,))
@@ -1215,13 +1247,28 @@ def calculate_current_coverage(project_name):
         total_tc = len(connected_tcs)
         if total_tc == 0:
             cp_rate = 0.0
+            linked_tcs = []
         else:
-            pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
+            pass_tc = sum(1 for tc in connected_tcs if tc[1] == 'PASS')
             cp_rate = (pass_tc / total_tc) * 100
             if pass_tc > 0:
                 covered_cps += 1
+            # linked_tcs: list of {tc_id, status}
+            linked_tcs = [{'tc_id': tc[0], 'status': tc[1]} for tc in connected_tcs]
 
         total_coverage_rate += cp_rate
+
+        # v0.12.0: 存储 CP 状态
+        cp_states[str(cp_id)] = {
+            'name': cp_name,
+            'coverage_rate': round(cp_rate, 1),
+            'linked_tcs': len(linked_tcs)
+        }
+
+    # v0.12.0: 收集 TC States
+    cursor.execute("SELECT id, status FROM test_case WHERE project_id = ?", (project['id'],))
+    for tc_row in cursor.fetchall():
+        tc_states[str(tc_row[0])] = tc_row[1]
 
     coverage = round(total_coverage_rate / total_cp, 1) if total_cp > 0 else 0
 
@@ -1268,9 +1315,12 @@ def calculate_current_coverage(project_name):
     return {
         'actual_coverage': coverage,
         'tc_pass_count': tc_pass,
+        'tc_fail_count': tc_fail,  # v0.12.0: 新增
         'tc_total': tc_total,
         'cp_covered': covered_cps,
         'cp_total': total_cp,
+        'cp_states': cp_states,
+        'tc_states': tc_states,
         **priority_coverages
     }
 
@@ -1278,36 +1328,58 @@ def calculate_current_coverage(project_name):
 @api.route("/api/progress/<int:project_id>/snapshot", methods=["POST"])
 @admin_required
 def create_snapshot(project_id):
-    """手动创建进度快照"""
+    """手动创建进度快照
+    v0.12.0: 增强保存 cp_states 和 tc_states 到 progress_data 字段"""
+    import json
     from datetime import datetime
-    
+
     projects = load_projects()
     project = next((p for p in projects if p["id"] == project_id), None)
-    
+
     if not project:
         return jsonify({"error": "项目不存在"}), 404
-    
+
     # 确保表存在
     ensure_progress_table_exists(project["name"])
-    
+
     # 计算当前覆盖率
     coverage_data = calculate_current_coverage(project["name"])
     if coverage_data is None:
         return jsonify({"error": "数据库未初始化"}), 500
-    
+
     today = datetime.now().strftime('%Y-%m-%d')
     conn = get_db(project["name"])
     cursor = conn.cursor()
-    
+
+    # v0.12.0: 构建 progress_data JSON
+    # 计算 TC Pass Rate
+    tc_total = coverage_data.get('tc_total', 0)
+    tc_pass_count = coverage_data.get('tc_pass_count', 0)
+    tc_fail_count = coverage_data.get('tc_fail_count', 0)
+    tc_not_run_count = tc_total - tc_pass_count - tc_fail_count
+    pass_rate = round((tc_pass_count / tc_total * 100), 1) if tc_total > 0 else 0
+
+    progress_data = json.dumps({
+        'cp_states': coverage_data.get('cp_states', {}),
+        'tc_summary': {
+            'total': tc_total,
+            'pass': tc_pass_count,
+            'fail': tc_fail_count,
+            'not_run': tc_not_run_count,
+            'pass_rate': pass_rate
+        },
+        'tc_states': coverage_data.get('tc_states', {})
+    })
+
     # 检查是否已存在当周快照
     cursor.execute("""
-        SELECT id FROM project_progress 
+        SELECT id FROM project_progress
         WHERE project_id = ? AND snapshot_date = ?
     """, (project_id, today))
     existing = cursor.fetchone()
-    
+
     if existing:
-        # 更新现有快照 (v0.10.0: 包含 Priority 覆盖率)
+        # 更新现有快照 (v0.12.0: 包含 progress_data)
         cursor.execute("""
             UPDATE project_progress SET
                 actual_coverage = ?,
@@ -1319,6 +1391,7 @@ def create_snapshot(project_id):
                 tc_total = ?,
                 cp_covered = ?,
                 cp_total = ?,
+                progress_data = ?,
                 updated_at = ?,
                 updated_by = ?
             WHERE project_id = ? AND snapshot_date = ?
@@ -1332,6 +1405,7 @@ def create_snapshot(project_id):
             coverage_data['tc_total'],
             coverage_data['cp_covered'],
             coverage_data['cp_total'],
+            progress_data,
             today,
             session.get('username', 'admin'),
             project_id,
@@ -1340,13 +1414,13 @@ def create_snapshot(project_id):
         conn.commit()
         snapshot_id = existing[0]
     else:
-        # 创建新快照 (v0.10.0: 包含 Priority 覆盖率)
+        # 创建新快照 (v0.12.0: 包含 progress_data)
         cursor.execute("""
             INSERT INTO project_progress (
                 project_id, snapshot_date, actual_coverage,
                 p0_coverage, p1_coverage, p2_coverage, p3_coverage,
-                tc_pass_count, tc_total, cp_covered, cp_total
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                tc_pass_count, tc_total, cp_covered, cp_total, progress_data
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             project_id,
             today,
@@ -1358,14 +1432,22 @@ def create_snapshot(project_id):
             coverage_data['tc_pass_count'],
             coverage_data['tc_total'],
             coverage_data['cp_covered'],
-            coverage_data['cp_total']
+            coverage_data['cp_total'],
+            progress_data
         ))
         conn.commit()
         snapshot_id = cursor.lastrowid
-    
+
     # 获取创建的快照
     cursor.execute("SELECT * FROM project_progress WHERE id = ?", (snapshot_id,))
     row = cursor.fetchone()
+    # 解析 progress_data (column index 15)
+    progress_data_parsed = {}
+    if row[15]:  # progress_data column
+        try:
+            progress_data_parsed = json.loads(row[15])
+        except:
+            pass
     snapshot = {
         'id': row[0],
         'project_id': row[1],
@@ -1379,9 +1461,10 @@ def create_snapshot(project_id):
         'tc_total': row[9],
         'cp_covered': row[10],
         'cp_total': row[11],
-        'created_at': row[12]
+        'progress_data': progress_data_parsed,
+        'created_at': row[12] if len(row) > 12 else None
     }
-    
+
     return jsonify({
         "success": True,
         "snapshot": snapshot
@@ -4674,6 +4757,52 @@ def get_dashboard_stats():
             """, (cp[0],)).fetchall()
         ))
 
+        # v0.12.0: TC 统计（用于 Dashboard Overview 显示 TC Pass Rate）
+        cursor.execute("SELECT COUNT(*) FROM test_case WHERE project_id = ?", (project_id,))
+        tc_total = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM test_case WHERE project_id = ? AND status = 'PASS'", (project_id,))
+        tc_pass = cursor.fetchone()[0]
+        tc_pass_rate = round((tc_pass / tc_total * 100), 1) if tc_total > 0 else 0
+
+        # v0.12.0: 周环比变化计算 (§6)
+        # 获取最近两次快照进行对比
+        cursor.execute("""
+            SELECT snapshot_date, actual_coverage, cp_covered, cp_total, tc_pass_count, tc_total
+            FROM project_progress
+            WHERE project_id = ?
+            ORDER BY snapshot_date DESC
+            LIMIT 2
+        """, (project_id,))
+        snapshot_rows = cursor.fetchall()
+
+        week_change = {
+            'covered_cp': None,  # 上周 covered_cp 变化
+            'unlinked_cp': None,  # 不显示（快照无法准确计算"无关联TC的CP"）
+            'tc_pass_rate': None  # 上周 tc_pass_rate 变化
+        }
+
+        if len(snapshot_rows) >= 2:
+            # snapshot_rows[0] = 当前/最新, snapshot_rows[1] = 上一次
+            current_row = snapshot_rows[0]
+            prev_row = snapshot_rows[1]
+
+            # 计算 covered_cp 变化 (covered = 有 ≥1 PASS TC 的 CP)
+            current_covered_cp = current_row[2]
+            prev_covered_cp = prev_row[2]
+            week_change['covered_cp'] = current_covered_cp - prev_covered_cp
+
+            # 注意: unlinked_cp 的 week_change 无法准确计算
+            # 因为快照存储的是 cp_covered (有PASS TC的CP)，不是真正的"无关联TC的CP"
+            # live unlinked_cp 是实时计算: CPs with linked_tcs = 0
+            # 两者定义不同，不能直接比较
+
+            # 计算 tc_pass_rate 变化
+            current_tc_total = current_row[5] if current_row[5] > 0 else 1
+            prev_tc_total = prev_row[5] if prev_row[5] > 0 else 1
+            current_tc_pass_rate = round((current_row[4] / current_tc_total) * 100, 1)
+            prev_tc_pass_rate = round((prev_row[4] / prev_tc_total) * 100, 1)
+            week_change['tc_pass_rate'] = round(current_tc_pass_rate - prev_tc_pass_rate, 1)
+
         # 2. 按 Feature 统计
         # 新逻辑：对同一 feature 下所有 CP 的覆盖率求平均
         cursor.execute("""
@@ -4841,13 +4970,419 @@ def get_dashboard_stats():
                     'total_cp': total_cp,
                     'covered_cp': covered_cp,
                     'coverage_rate': coverage_rate,
-                    'unlinked_cp': unlinked_cp
+                    'unlinked_cp': unlinked_cp,
+                    'tc_total': tc_total,
+                    'tc_pass': tc_pass,
+                    'tc_pass_rate': tc_pass_rate,
+                    'week_change': week_change
                 },
                 'by_feature': by_feature,
                 'by_priority': by_priority,
                 'trend': trend,
                 'top_uncovered': top_uncovered,
                 'recent_activity': recent_activity
+            }
+        })
+
+    except sqlite3.Error as e:
+        return jsonify({'success': False, 'error': f'Database error: {str(e)}'}), 500
+
+
+# ============ Dashboard API v0.12.0 (New Endpoints) ============
+
+
+@api.route('/api/dashboard/coverage-holes', methods=['GET'])
+@login_required
+def get_dashboard_coverage_holes():
+    """获取覆盖率空洞数据
+    v0.12.0: 新增端点
+
+    tc-cp 模式空洞定义：
+    ① 已关联 TC: linked_tcs >= 1
+    ② 覆盖率: coverage_rate = 0 (所有关联 TC 都未 PASS)
+
+    等级判定(tci-cp):
+    - 🔴 严重: P0 + coverage_rate=0%
+    - 🟡 警告: P1 + coverage_rate=0%
+    - 🟡 关注: P2 + coverage_rate=0%
+
+    fc-cp 模式空洞定义(简化版):
+    ① 已关联 FC: linked_fcs >= 1
+    ② 覆盖率很低: coverage_rate < 25%
+
+    等级判定(fc-cp):
+    - 🔴 严重: coverage_rate = 0%
+    - 🟡 警告: 0% < coverage_rate < 15%
+    - 🟡 关注: 15% <= coverage_rate < 25%
+
+    通用规则:
+    - 每类等级最多显示 20 条
+    - 未关联 TC/FC 的 CP 不计入空洞
+    """
+    project_id = request.args.get('project_id', type=int)
+
+    if not project_id:
+        return jsonify({'success': False, 'error': 'project_id is required'}), 400
+
+    # 验证项目存在
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    if not project:
+        return jsonify({'success': False, 'error': 'Project not found', 'code': 'PROJECT_NOT_FOUND'}), 404
+
+    project_name = project['name']
+    conn = get_db(project_name)
+    cursor = conn.cursor()
+
+    # v0.12.0: 检查 coverage_mode
+    coverage_mode = project.get('coverage_mode', 'tc_cp')
+    is_fc_cp_mode = coverage_mode == 'fc_cp'
+
+    try:
+        # 获取所有 CP
+        cursor.execute("""
+            SELECT cp.id, cp.cover_point, cp.feature, cp.priority
+            FROM cover_point cp
+            WHERE cp.project_id = ?
+        """, (project_id,))
+
+        critical = []
+        warning = []
+        attention = []
+
+        priority_order = {'P0': 0, 'P1': 1, 'P2': 2, 'P3': 3}
+
+        for cp_row in cursor.fetchall():
+            cp_id = cp_row[0]
+            cp_name = cp_row[1] if cp_row[1] else ''
+            feature = cp_row[2] if cp_row[2] else ''
+            priority = cp_row[3] if cp_row[3] else 'P0'
+
+            if is_fc_cp_mode:
+                # FC-CP 模式: 使用 fc_cp_association
+                cursor.execute("""
+                    SELECT fc.id, fc.covergroup, fc.coverpoint, fc.coverage_pct
+                    FROM functional_coverage fc
+                    INNER JOIN fc_cp_association fcca ON fc.id = fcca.fc_id
+                    WHERE fcca.cp_id = ?
+                """, (cp_id,))
+                linked_fcs = cursor.fetchall()
+
+                linked_fc_count = len(linked_fcs)
+                if linked_fc_count == 0:
+                    continue  # 未关联 FC 的不算空洞
+
+                # FC 的 coverage_pct 即为该 CP 的覆盖率
+                coverage_rate = sum(fc[3] for fc in linked_fcs) / linked_fc_count if linked_fc_count > 0 else 0
+
+                # fc-cp 模式空洞: linked_fcs >= 1 AND coverage_rate < 25%
+                if coverage_rate >= 25:
+                    continue
+
+                hole_entry = {
+                    'cp_id': cp_id,
+                    'cp_name': cp_name[:80] if cp_name else '',
+                    'feature': feature,
+                    'priority': priority,
+                    'coverage_rate': round(coverage_rate, 1),
+                    'linked_fcs': [
+                        {'fc_id': fc[0], 'fc_name': f"{fc[1]}/{fc[2]}"[:50] if fc[1] else '', 'coverage_pct': fc[3]}
+                        for fc in linked_fcs
+                    ]
+                }
+
+                # fc-cp 等级判定
+                if coverage_rate == 0:
+                    critical.append(hole_entry)
+                elif coverage_rate < 15:
+                    warning.append(hole_entry)
+                else:  # 15 <= coverage_rate < 25
+                    attention.append(hole_entry)
+            else:
+                # TC-CP 模式: 使用 tc_cp_connections
+                cursor.execute("""
+                    SELECT tc.id, tc.test_name, tc.status
+                    FROM test_case tc
+                    INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+                    WHERE tcc.cp_id = ?
+                """, (cp_id,))
+                linked_tcs = cursor.fetchall()
+
+                linked_tc_count = len(linked_tcs)
+                if linked_tc_count == 0:
+                    continue  # 未关联 TC 的不算空洞
+
+                # 计算 TC 通过率
+                pass_tc = sum(1 for tc in linked_tcs if tc[2] == 'PASS')
+                coverage_rate = (pass_tc / linked_tc_count) * 100 if linked_tc_count > 0 else 0
+
+                # tc-cp 模式空洞: linked_tcs >= 1 AND coverage_rate = 0
+                # 注意: coverage_rate=0 意味着 pass_tc=0，即所有关联 TC 都失败
+                if coverage_rate > 0:
+                    continue
+
+                hole_entry = {
+                    'cp_id': cp_id,
+                    'cp_name': cp_name[:80] if cp_name else '',
+                    'feature': feature,
+                    'priority': priority,
+                    'coverage_rate': round(coverage_rate, 1),
+                    'linked_tcs': [
+                        {'tc_id': tc[0], 'tc_name': tc[1][:50] if tc[1] else '', 'status': tc[2]}
+                        for tc in linked_tcs
+                    ]
+                }
+
+                # tc-cp 等级判定: 按 priority 分级
+                if priority == 'P0':
+                    critical.append(hole_entry)
+                elif priority == 'P1':
+                    warning.append(hole_entry)
+                else:  # P2, P3
+                    attention.append(hole_entry)
+
+        # tc-cp: 按 priority 降序，再按 linked_tcs 降序
+        # fc-cp: 按 priority 降序，再按 coverage_rate 升序，再按 linked_fcs 降序
+        if is_fc_cp_mode:
+            for lst in [critical, warning, attention]:
+                lst.sort(key=lambda x: (
+                    priority_order.get(x['priority'], 4),
+                    x['coverage_rate'],
+                    -len(x.get('linked_fcs', []))
+                ))
+        else:
+            for lst in [critical, warning, attention]:
+                lst.sort(key=lambda x: (
+                    priority_order.get(x['priority'], 4),
+                    -len(x.get('linked_tcs', []))
+                ))
+
+        # 每类最多显示 20 条
+        for lst in [critical, warning, attention]:
+            del lst[20:]
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'mode': 'fc_cp' if is_fc_cp_mode else 'tc_cp',
+                'critical': critical,
+                'warning': warning,
+                'attention': attention,
+                'total_critical': len(critical),
+                'total_warning': len(warning),
+                'total_attention': len(attention)
+            }
+        })
+
+    except sqlite3.Error as e:
+        return jsonify({'success': False, 'error': f'Database error: {str(e)}'}), 500
+
+
+@api.route('/api/dashboard/owner-stats', methods=['GET'])
+@login_required
+def get_dashboard_owner_stats():
+    """获取 TC Owner 分布统计数据
+    v0.12.0: 新增端点
+
+    设计原则: API 返回原始计数，前端计算百分比
+    """
+    project_id = request.args.get('project_id', type=int)
+
+    if not project_id:
+        return jsonify({'success': False, 'error': 'project_id is required'}), 400
+
+    # 验证项目存在
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    if not project:
+        return jsonify({'success': False, 'error': 'Project not found', 'code': 'PROJECT_NOT_FOUND'}), 404
+
+    project_name = project['name']
+    conn = get_db(project_name)
+    cursor = conn.cursor()
+
+    try:
+        # 获取所有 Owner 及其 TC 统计
+        cursor.execute("""
+            SELECT owner, status, COUNT(*) as cnt
+            FROM test_case
+            WHERE project_id = ?
+            GROUP BY owner, status
+        """, (project_id,))
+
+        rows = cursor.fetchall()
+
+        # 聚合每个 Owner 的统计
+        owner_stats = {}
+        for row in rows:
+            owner = row[0] if row[0] else '(unassigned)'
+            status = row[1]
+            cnt = row[2]
+
+            if owner not in owner_stats:
+                owner_stats[owner] = {
+                    'owner': owner,
+                    'tc_total': 0,
+                    'tc_pass': 0,
+                    'tc_fail': 0,
+                    'tc_not_run': 0
+                }
+
+            owner_stats[owner]['tc_total'] += cnt
+            if status == 'PASS':
+                owner_stats[owner]['tc_pass'] += cnt
+            elif status == 'FAIL':
+                owner_stats[owner]['tc_fail'] += cnt
+            else:  # OPEN, CODED, NOT_RUN, REMOVED 等
+                owner_stats[owner]['tc_not_run'] += cnt
+
+        # 计算未分配的 TC 总数
+        unassigned_tc_count = sum(
+            v['tc_total'] for k, v in owner_stats.items()
+            if k == '(unassigned)'
+        )
+
+        # 转换为列表并按 tc_total 降序排序
+        owners_list = sorted(owner_stats.values(), key=lambda x: x['tc_total'], reverse=True)
+
+        # 移除 "(unassigned)" 前缀用于显示
+        for o in owners_list:
+            if o['owner'] == '(unassigned)':
+                o['owner'] = '(unassigned)'
+            o['display_name'] = o['owner']
+
+        # 获取每个 Owner 的 TC 列表（限制 20 条）
+        for o in owners_list:
+            owner_filter = o['owner'] if o['owner'] != '(unassigned)' else None
+            cursor.execute("""
+                SELECT id, test_name, status
+                FROM test_case
+                WHERE project_id = ? AND (owner = ? OR (owner IS NULL AND ? IS NULL))
+                ORDER BY id DESC
+                LIMIT 20
+            """, (project_id, owner_filter, owner_filter))
+            tc_rows = cursor.fetchall()
+            o['tc_list'] = [
+                {'id': row[0], 'name': row[1][:50] if row[1] else '', 'status': row[2]}
+                for row in tc_rows
+            ]
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'owners': owners_list,
+                'summary': {
+                    'total_owners': len([o for o in owners_list if o['owner'] != '(unassigned)']),
+                    'unassigned_tc_count': unassigned_tc_count
+                }
+            }
+        })
+
+    except sqlite3.Error as e:
+        return jsonify({'success': False, 'error': f'Database error: {str(e)}'}), 500
+
+
+@api.route('/api/dashboard/coverage-matrix', methods=['GET'])
+@login_required
+def get_dashboard_coverage_matrix():
+    """获取 Feature × Priority 覆盖率矩阵
+    v0.12.0: 新增端点
+
+    设计原则: API 返回原始计数，前端计算百分比
+    """
+    project_id = request.args.get('project_id', type=int)
+
+    if not project_id:
+        return jsonify({'success': False, 'error': 'project_id is required'}), 400
+
+    # 验证项目存在
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    if not project:
+        return jsonify({'success': False, 'error': 'Project not found', 'code': 'PROJECT_NOT_FOUND'}), 404
+
+    project_name = project['name']
+    conn = get_db(project_name)
+    cursor = conn.cursor()
+
+    try:
+        # 获取所有 CP 及其关联 TC
+        cursor.execute("""
+            SELECT cp.id, cp.cover_point, cp.feature, cp.priority
+            FROM cover_point cp
+            WHERE cp.project_id = ?
+        """, (project_id,))
+
+        all_cps = cursor.fetchall()
+
+        # 构建矩阵: {feature: {priority: {covered, total, cp_list: [{id, name, coverage_rate}, ...]}}}
+        matrix = {}
+        features_set = set()
+        priorities = ['P0', 'P1', 'P2', 'P3']
+
+        for cp_row in all_cps:
+            cp_id = cp_row[0]
+            cp_name = cp_row[1] if cp_row[1] else ''
+            feature = cp_row[2] if cp_row[2] else '(no feature)'
+            priority = cp_row[3] if cp_row[3] else 'P0'
+
+            features_set.add(feature)
+
+            if feature not in matrix:
+                matrix[feature] = {}
+            if priority not in matrix[feature]:
+                matrix[feature][priority] = {'covered': 0, 'total': 0, 'cp_list': []}
+
+            matrix[feature][priority]['total'] += 1
+
+            # 计算该 CP 的覆盖率
+            cursor.execute("""
+                SELECT tc.status FROM test_case tc
+                INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+                WHERE tcc.cp_id = ?
+            """, (cp_id,))
+            connected_tcs = cursor.fetchall()
+
+            cp_coverage_rate = 0
+            if len(connected_tcs) > 0:
+                pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
+                cp_coverage_rate = round((pass_tc / len(connected_tcs)) * 100, 1)
+                if pass_tc > 0:
+                    matrix[feature][priority]['covered'] += 1
+
+            # 添加 CP 详情到列表
+            matrix[feature][priority]['cp_list'].append({
+                'id': cp_id,
+                'name': cp_name[:80] if cp_name else '',
+                'coverage_rate': cp_coverage_rate
+            })
+
+        # 构建 weak_areas (覆盖率 < 50%)
+        weak_areas = []
+        for feature, priorities_dict in matrix.items():
+            for priority, data in priorities_dict.items():
+                if data['total'] > 0:
+                    rate = (data['covered'] / data['total']) * 100
+                    if rate < 50:
+                        severity = 'critical' if rate < 20 else 'warning'
+                        weak_areas.append({
+                            'feature': feature,
+                            'priority': priority,
+                            'covered': data['covered'],
+                            'total': data['total'],
+                            'severity': severity
+                        })
+
+        # 按 severity 降序，再按 total 降序
+        weak_areas.sort(key=lambda x: (0 if x['severity'] == 'critical' else 1, -x['total']))
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'matrix': matrix,
+                'features': sorted(list(features_set)),
+                'priorities': priorities,
+                'weak_areas': weak_areas
             }
         })
 

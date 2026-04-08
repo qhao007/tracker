@@ -688,6 +688,76 @@ cursor.execute(query, params)
 
 ---
 
+### BUG-131: v0.12.0 Dashboard API 端点未实现
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Critical |
+| **状态** | 🔴 未修复 |
+| **发现日期** | 2026-04-07 |
+| **报告人** | Claude Code (Subagent D) |
+| **修复日期** | TBD |
+| **修复人** | TBD |
+
+**描述**: v0.12.0 Dashboard 前端已实现 4-Tab 结构（概览/空洞/Owner/矩阵），但对应的后端 API 端点未实现，导致 Dashboard 显示 "Failed to load dashboard data" 错误。
+
+**问题位置**: `/projects/management/tracker/dev/app/api.py`
+
+**缺失的 API 端点**:
+
+| 端点 | 状态 | 说明 |
+|------|------|------|
+| `GET /api/dashboard/stats` | ⚠️ 已有但格式不匹配 | 返回 v0.11.0 格式，缺少 `tc_pass_rate` 等字段 |
+| `GET /api/dashboard/coverage-holes` | 🔴 404 Not Found | 覆盖空洞看板 API |
+| `GET /api/dashboard/owner-stats` | 🔴 404 Not Found | Owner 分布统计 API |
+| `GET /api/dashboard/coverage-matrix` | 🔴 404 Not Found | Feature×Priority 矩阵 API |
+
+**问题分析**:
+
+1. **前端代码已实现** (`dashboard.js`):
+   - `Dashboard.loadAllData()` 并行调用 4 个 API
+   - `Dashboard.renderOverviewTab()` 期望 `overview.tc_pass_rate` 字段
+   - `Dashboard.renderHolesTab()` 期望 `holesData.critical/warning/attention` 结构
+   - `Dashboard.renderOwnerTab()` 期望 `ownerData.owners` 数组
+   - `Dashboard.renderMatrixTab()` 期望 `matrixData.matrix/features/priorities` 结构
+
+2. **后端 API 问题**:
+   - `/api/dashboard/stats` 返回 v0.11.0 格式，缺少 `tc_pass_rate`
+   - 其他 3 个端点返回 404
+
+**错误信息**:
+```
+Dashboard load error: Error: Failed to load dashboard data
+```
+
+**复现步骤**:
+1. 登录系统，选择 SOC_DV 项目
+2. 点击 Dashboard Tab
+3. 页面显示 "Failed to load dashboard data"
+4. 打开浏览器控制台看到上述错误
+
+**影响范围**:
+- v0.12.0 Dashboard 所有功能无法使用
+- 概览页数字卡片无法显示
+- 覆盖空洞看板无法显示
+- Owner 分布无法显示
+- 覆盖率矩阵无法显示
+
+**修复方案**:
+1. 实现 `/api/dashboard/coverage-holes` 端点 (参考规格书 §7.1)
+2. 实现 `/api/dashboard/owner-stats` 端点 (参考规格书 §7.2)
+3. 实现 `/api/dashboard/coverage-matrix` 端点 (参考规格书 §7.3)
+4. 更新 `/api/dashboard/stats` 返回格式以包含 `tc_pass_rate` (参考规格书 §6)
+
+**相关文件**:
+- 前端: `/projects/management/tracker/dev/static/js/dashboard.js`
+- 前端: `/projects/management/tracker/dev/index.html` (Dashboard HTML)
+- 后端: `/projects/management/tracker/dev/app/api.py`
+- 规格书: `/projects/management/tracker/docs/SPECIFICATIONS/tracker_SPECS_v0.12.0.md`
+- 测试计划: `/projects/management/tracker/docs/PLANS/TRACKER_TEST_PLAN_v0.12.0.md`
+
+---
+
 ## 2. 功能增强
 
 ### FEAT-001: CP 覆盖率计算
@@ -4017,3 +4087,101 @@ window.updateUIForLoggedIn(); // 函数在闭包内，window 上不存在
 1. **检查时机**: 错误可能是异步加载时产生，需要等待页面完全稳定后再检查
 2. **环境变量**: 确保 `AGENT_BROWSER_SOCKET_DIR` 设置为可写目录
 3. **close 再 open**: 每次打开新会话前先执行 `close`，避免 "Target page closed" 错误
+
+---
+
+## v0.12.0 Bug: 周环比变化功能未实现
+
+**发现日期**: 2026-04-08
+**状态**: ✅ 已修复
+**优先级**: P2
+
+### 问题描述
+
+规格书 §3.2 布局要求在数字卡片下方显示周环比变化（如 ↑+8, ↓-3），但最初实现时该功能未完成。
+
+### 原因分析
+
+- `renderOverviewCards` 函数只渲染了 `value` 和 `label`，没有渲染周环比变化
+- API `get_dashboard_stats` 未返回 `week_change` 字段
+
+### 修复内容
+
+1. **API 修改** (`app/api.py`):
+   - 在 `get_dashboard_stats` 函数中添加周环比计算逻辑
+   - 查询最近两次快照进行对比
+   - 计算 `covered_cp`、`unlinked_cp`、`tc_pass_rate` 的变化值
+
+2. **前端修改** (`static/js/dashboard.js`):
+   - 更新 `renderOverviewCards` 函数
+   - 添加 `getChangeDisplay` 辅助函数生成 ↑+N 或 ↓-N 格式
+   - 在卡片 value 右侧显示变化值
+
+3. **CSS 样式** (已存在):
+   - `.overview-change` - 周环比变化容器
+   - `.overview-change.positive` - 绿色背景 (#22c55e20)
+   - `.overview-change.negative` - 红色背景 (#ef444420)
+
+### 验证方法
+
+```bash
+# API 验证
+curl -X POST http://localhost:8081/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}' -c cookies.txt
+curl -b cookies.txt http://localhost:8081/api/dashboard/stats?project_id=3
+# 确认返回的 overview.week_change 包含 covered_cp, unlinked_cp, tc_pass_rate
+
+# UI 测试
+npx playwright test tests/test_ui/specs/integration/dashboard-tabs.spec.ts -g "UI-OVER-003" --project=firefox
+```
+
+---
+
+## v0.12.0 Bug: 周环比变化计算问题
+
+**发现日期**: 2026-04-08
+**状态**: ✅ 已修复
+**优先级**: P2
+
+### 问题描述
+
+1. **unlinked 周环比显示错误**: live unlinked=1 但变化显示+3，数据不一致
+2. **箭头颜色语义错误**: ↑显示绿色(好)但对unlinked来说↑是坏的(不好)
+
+### 根因分析
+
+1. **unlinked 计算不一致**:
+   - Live `unlinked_cp` = 没有关联任何TC的CP数量 (loop计算)
+   - Snapshot unlinked = `cp_total - cp_covered` (快照用"有PASS TC"计算)
+   - `cp_covered` 定义是"有≥1 PASS TC的CP"，不等于"已关联TC的CP"
+   - 两者定义不同，无法准确比较
+
+2. **颜色语义问题**:
+   - 当前: 数值正=绿色positive, 数值负=红色negative
+   - 但对 unlinked: 增加是坏事(应该红色), 减少是好事(应该绿色)
+
+### 修复内容
+
+1. **API修改** (`app/api.py`):
+   - `week_change.unlinked_cp` 设为 `null`（无法从快照准确计算）
+   - 添加注释说明原因
+
+2. **前端修改** (`dashboard.js`):
+   - `getChangeDisplay` 增加 `higherIsBetter` 参数
+   - `covered_cp`/`tc_pass_rate`: `higherIsBetter=true` (上升=绿)
+   - `unlinked`: `higherIsBetter=false` (上升=红)
+
+### 验证方法
+
+```bash
+# API 验证 - unlinked_cp 应为 null
+curl -X POST http://localhost:8081/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}' -c cookies.txt
+curl -b cookies.txt http://localhost:8081/api/dashboard/stats?project_id=3
+# 确认 week_change.unlinked_cp 为 null
+
+# UI 测试
+npx playwright test tests/test_ui/specs/integration/dashboard-tabs.spec.ts -g "UI-OVER-003" --project=firefox
+```

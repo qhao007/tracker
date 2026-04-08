@@ -1,8 +1,9 @@
 # Tracker 管理员后台项目创建/迁移指导手册
 
-> **版本**: v1.0  
-> **适用版本**: Tracker v0.9.0+  
+> **版本**: v1.1  
+> **适用版本**: Tracker v0.9.0+ (v0.11.0+ 新增 FC 迁移)  
 > **创建日期**: 2026-03-05  
+> **更新日期**: 2026-04-03  
 > **文档类型**: 操作指南
 
 ---
@@ -14,14 +15,16 @@
 3. [API基础 - 项目管理](#3-api基础---项目管理)
 4. [Cover Point 导入](#4-cover-point-导入)
 5. [Test Case 导入](#5-test-case-导入)
-6. [批量操作与脚本](#6-批量操作与脚本)
-7. [CSV标准模板](#7-csv标准模板)
-8. [迁移验证](#8-迁移验证)
-   - [8.1 统计数据校验](#81-统计数据校验)
-   - [8.2 数据完整性检查脚本](#82-数据完整性检查脚本)
-   - [8.3 常见校验问题](#83-常见校验问题)
-   - [8.4 TC-CP 关联导入](#84-tc-cp-关联导入-v091-新增)
-9. [附录](#9-附录)
+6. [FC 导入 (v0.11.0 新增)](#6-fc-导入-v0110-新增)
+7. [FC-CP 关联导入 (v0.11.0 新增)](#7-fc-cp-关联导入-v0110-新增)
+8. [批量操作与脚本](#8-批量操作与脚本)
+9. [CSV标准模板](#9-csv标准模板)
+10. [迁移验证](#10-迁移验证)
+    - [10.1 统计数据校验](#101-统计数据校验)
+    - [10.2 数据完整性检查脚本](#102-数据完整性检查脚本)
+    - [10.3 常见校验问题](#103-常见校验问题)
+    - [10.4 TC-CP 关联导入](#104-tc-cp-关联导入-v091-新增)
+11. [附录](#11-附录)
 
 ---
 
@@ -47,6 +50,8 @@
 
 ### 1.4 迁移流程概览
 
+#### TC-CP 模式迁移流程
+
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │  1. 创建项目    │ ──▶ │  2. 导入 CP     │ ──▶ │  3. 导入 TC     │
@@ -56,6 +61,92 @@
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │  6. 数据验证    │ ◀─── │  5. 关联 CP    │ ◀─── │  4. 批量导入    │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
+```
+
+#### FC-CP 模式迁移流程 (v0.11.0 新增)
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  1. 创建项目    │ ──▶ │  2. 导入 FC     │ ──▶ │  3. 导入 CP     │
+│  (设coverage_mode│     │                 │     │                 │
+│   =fc_cp)       │     │                 │     │                 │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+                                                        │
+                                                        ▼
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  6. 数据验证    │ ◀─── │  5. 关联 FC-CP │ ◀─── │  4. 导入 TC     │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+```
+
+### 1.6 覆盖率模式说明 (v0.11.0 新增)
+
+Tracker v0.11.0 支持两种覆盖率计算模式：
+
+#### 两种模式对比
+
+| 模式 | coverage_mode | 覆盖率计算 | 适用场景 |
+|------|---------------|------------|----------|
+| **TC-CP 模式** | `tc_cp` | 基于 TC 关联 CP 计算覆盖率 | 传统覆盖率跟踪 |
+| **FC-CP 模式** | `fc_cp` | 基于 FC (Functional Coverage) 关联 CP 计算覆盖率 | SV 代码覆盖率跟踪 |
+
+#### 模式选择
+
+| 场景 | 推荐模式 | 说明 |
+|------|----------|------|
+| 纯人工跟踪验证进度 | `tc_cp` | CP 通过 TC 关联，人工维护 |
+| 已有 SV 覆盖率数据 | `fc_cp` | FC 数据从仿真器导出，自动关联 CP |
+| 混合场景 | `fc_cp` | FC-CP 关联后，TC 仅用于人工跟踪 |
+
+#### 创建项目时指定模式
+
+```bash
+# TC-CP 模式（默认）
+curl -X POST http://localhost:8081/api/projects \
+  -H "Content-Type: application/json" \
+  -b cookies.txt \
+  -d '{
+    "name": "Chip_A_Verification",
+    "start_date": "2026-01-01",
+    "end_date": "2026-12-31",
+    "coverage_mode": "tc_cp"
+  }'
+
+# FC-CP 模式
+curl -X POST http://localhost:8081/api/projects \
+  -H "Content-Type: application/json" \
+  -b cookies.txt \
+  -d '{
+    "name": "Chip_B_Verification",
+    "start_date": "2026-01-01",
+    "end_date": "2026-12-31",
+    "coverage_mode": "fc_cp"
+  }'
+```
+
+#### 获取项目的覆盖率模式
+
+```bash
+curl http://localhost:8081/api/projects/5 -b cookies.txt
+```
+
+**响应包含**：
+```json
+{
+  "id": 5,
+  "name": "Chip_B_Verification",
+  "coverage_mode": "fc_cp",
+  ...
+}
+```
+
+#### 迁移决策树
+
+```
+项目是否需要 SV 覆盖率数据？
+├── 否 → 使用 TC-CP 模式
+│        迁移流程: 创建项目 → 导入 CP → 导入 TC → 关联 TC-CP
+└── 是 → 使用 FC-CP 模式
+         迁移流程: 创建项目(设coverage_mode=fc_cp) → 导入 FC → 导入 CP → 关联 FC-CP → 导入 TC
 ```
 
 ---
@@ -651,9 +742,293 @@ curl "http://localhost:8081/api/tc?project_id=5" -b cookies.txt
 
 ---
 
-## 6. 批量操作与脚本
+## 6. FC 导入 (v0.11.0 新增)
 
-### 6.1 批量更新 TC 状态
+> **前提条件**: 项目 `coverage_mode` 必须为 `fc_cp`
+
+### 6.1 FC 数据结构
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| covergroup | string | Cover Group 名称 |
+| coverpoint | string | Cover Point 名称 |
+| coverage_type | string | 类型 (coverpoint/cross) |
+| bin_name | string | Bin 名称 |
+| bin_val | string | Bin 值 (可选) |
+| coverage_pct | float | 覆盖率百分比 (0-100) |
+| status | string | 状态 (missing/ready) |
+| owner | string | 负责人 (可选) |
+| comments | string | 备注 (可选) |
+
+### 6.2 FC CSV 格式
+
+```csv
+Covergroup,Coverpoint,Type,Bin_Name,Bin_Value,Coverage_Pct,Status,Comments
+apb_protocol_cg,cp_addr_range,coverpoint,addr_max,{32'hFFFFFFFC},98.0,ready,CP_048
+apb_protocol_cg,cp_addr_range,coverpoint,addr_mid,default,85.0,ready,CP_049
+axi_protocol_cg,cp_burst_type,cross,inc_burst,,92.0,missing,CP_101
+```
+
+| 列 | 必填 | 说明 |
+|----|------|------|
+| Covergroup | ✅ | Cover Group 名称 |
+| Coverpoint | ✅ | Cover Point 名称 |
+| Type | ✅ | 类型：coverpoint 或 cross |
+| Bin_Name | ✅ | Bin 名称 |
+| Bin_Value | ❌ | Bin 值（如 {32'hFFFFFFFC}） |
+| Coverage_Pct | ✅ | 覆盖率百分比 (0-100) |
+| Status | ✅ | 状态：missing（未实现）或 ready（已实现） |
+| Comments | ❌ | 备注信息 |
+
+### 6.3 导入 FC
+
+**API**: `POST /api/fc/import`
+
+```bash
+curl -X POST "http://localhost:8081/api/fc/import" \
+  -H "Content-Type: application/json" \
+  -b cookies.txt \
+  -d '{
+    "project_id": 5,
+    "file_data": "<base64编码的CSV内容>"
+  }'
+```
+
+**Python 脚本**:
+```python
+#!/usr/bin/env python3
+"""FC 导入脚本"""
+import base64
+import requests
+
+BASE_URL = "http://localhost:8081"
+
+def import_fc(project_id, csv_file, cookies):
+    """导入 FC 数据"""
+    with open(csv_file, "r", encoding="utf-8") as f:
+        csv_content = f.read()
+    
+    file_data = base64.b64encode(csv_content.encode("utf-8")).decode("utf-8")
+    
+    resp = requests.post(
+        f"{BASE_URL}/api/fc/import",
+        json={
+            "project_id": project_id,
+            "file_data": file_data
+        },
+        cookies=cookies
+    )
+    
+    return resp.json()
+
+if __name__ == "__main__":
+    import sys
+    project_id = int(sys.argv[1])
+    csv_file = sys.argv[2]
+    
+    with open("cookies.txt", "r") as f:
+        cookies = {}
+        for line in f:
+            parts = line.strip().split("\t")
+            if len(parts) == 2:
+                cookies[parts[0]] = parts[1]
+    
+    result = import_fc(project_id, csv_file, cookies)
+    print(result)
+```
+
+### 6.4 导出 FC
+
+**API**: `GET /api/fc/export?project_id={id}`
+
+```bash
+curl "http://localhost:8081/api/fc/export?project_id=5" \
+  -b cookies.txt \
+  -o fc_export.csv
+```
+
+### 6.5 批量更新 FC
+
+更新已有 FC 项的 coverage_pct 或 status：
+
+**API**: `PUT /api/fc/batch`
+
+```bash
+curl -X PUT "http://localhost:8081/api/fc/batch" \
+  -H "Content-Type: application/json" \
+  -b cookies.txt \
+  -d '{
+    "project_id": 5,
+    "items": [
+      {
+        "covergroup": "apb_protocol_cg",
+        "coverpoint": "cp_addr_range",
+        "bin_name": "addr_max",
+        "coverage_pct": 99.5,
+        "status": "ready"
+      }
+    ]
+  }'
+```
+
+### 6.6 获取 FC 列表
+
+**API**: `GET /api/fc?project_id={id}`
+
+```bash
+curl "http://localhost:8081/api/fc?project_id=5" -b cookies.txt
+```
+
+**响应**:
+```json
+{
+  "success": true,
+  "fc_items": [
+    {
+      "id": 1,
+      "covergroup": "apb_protocol_cg",
+      "coverpoint": "cp_addr_range",
+      "bin_name": "addr_max",
+      "coverage_pct": 98.0,
+      "status": "ready"
+    }
+  ]
+}
+```
+
+---
+
+## 7. FC-CP 关联导入 (v0.11.0 新增)
+
+> **前提条件**: 已导入 FC 数据和 CP 数据
+
+### 7.1 功能说明
+
+FC-CP 关联建立 Functional Coverage 与 Cover Point 之间的映射关系。
+
+**支持场景**：
+- 一个 FC item 关联多个 CP
+- 一个 CP 关联多个 FC items
+- 多对多映射
+
+### 7.2 FC-CP 关联 CSV 格式
+
+```csv
+cp_feature,cp_sub_feature,cp_cover_point,fc_covergroup,fc_coverpoint,fc_bin_name
+apb_protocol,addr_range,CP_048,apb_protocol_cg,cp_addr_range,addr_max
+apb_protocol,addr_range,CP_049,apb_protocol_cg,cp_addr_range,addr_mid
+axi_protocol,burst_mode,CP_101,axi_protocol_cg,cp_burst_type,inc_burst
+```
+
+| 列 | 必填 | 说明 |
+|----|------|------|
+| cp_feature | ✅ | CP 所属 Feature |
+| cp_sub_feature | ✅ | CP 所属 Sub-Feature |
+| cp_cover_point | ✅ | CP 名称 |
+| fc_covergroup | ✅ | FC 所属 Covergroup |
+| fc_coverpoint | ✅ | FC Coverpoint 名称 |
+| fc_bin_name | ✅ | FC Bin 名称 |
+
+### 7.3 导入 FC-CP 关联
+
+**API**: `POST /api/fc-cp-association/import`
+
+```bash
+curl -X POST "http://localhost:8081/api/fc-cp-association/import" \
+  -H "Content-Type: application/json" \
+  -b cookies.txt \
+  -d '{
+    "project_id": 5,
+    "file_data": "<base64编码的CSV内容>"
+  }'
+```
+
+**Python 脚本**:
+```python
+#!/usr/bin/env python3
+"""FC-CP 关联导入脚本"""
+import base64
+import requests
+
+BASE_URL = "http://localhost:8081"
+
+def import_fc_cp_association(project_id, csv_file, cookies):
+    """导入 FC-CP 关联"""
+    with open(csv_file, "r", encoding="utf-8") as f:
+        csv_content = f.read()
+    
+    file_data = base64.b64encode(csv_content.encode("utf-8")).decode("utf-8")
+    
+    resp = requests.post(
+        f"{BASE_URL}/api/fc-cp-association/import",
+        json={
+            "project_id": project_id,
+            "file_data": file_data
+        },
+        cookies=cookies
+    )
+    
+    return resp.json()
+
+if __name__ == "__main__":
+    import sys
+    project_id = int(sys.argv[1])
+    csv_file = sys.argv[2]
+    
+    with open("cookies.txt", "r") as f:
+        cookies = {}
+        for line in f:
+            parts = line.strip().split("\t")
+            if len(parts) == 2:
+                cookies[parts[0]] = parts[1]
+    
+    result = import_fc_cp_association(project_id, csv_file, cookies)
+    print(result)
+```
+
+### 7.4 获取 FC-CP 关联列表
+
+**API**: `GET /api/fc-cp-association?project_id={id}`
+
+```bash
+curl "http://localhost:8081/api/fc-cp-association?project_id=5" -b cookies.txt
+```
+
+**响应**:
+```json
+{
+  "success": true,
+  "associations": [
+    {
+      "id": 1,
+      "cp_id": 48,
+      "fc_id": 1,
+      "cp_name": "CP_048",
+      "fc_name": "apb_protocol_cg::cp_addr_range::addr_max"
+    }
+  ]
+}
+```
+
+### 7.5 删除 FC-CP 关联
+
+**API**: `DELETE /api/fc-cp-association`
+
+```bash
+curl -X DELETE "http://localhost:8081/api/fc-cp-association" \
+  -H "Content-Type: application/json" \
+  -b cookies.txt \
+  -d '{
+    "project_id": 5,
+    "fc_cp_association_ids": [1, 2, 3]
+  }'
+```
+
+---
+
+## 8. 批量操作与脚本
+
+### 8.1 批量更新 TC 状态
 
 **API**: `POST /api/tc/batch/status`
 
@@ -668,7 +1043,7 @@ curl -X POST http://localhost:8081/api/tc/batch/status \
   }'
 ```
 
-### 6.2 批量更新 Target Date
+### 8.2 批量更新 Target Date
 
 **API**: `POST /api/tc/batch/target_date`
 
@@ -683,7 +1058,7 @@ curl -X POST http://localhost:8081/api/tc/batch/target_date \
   }'
 ```
 
-### 6.3 批量更新 Priority
+### 8.3 批量更新 Priority
 
 **API**: `POST /api/cp/batch/priority`
 
@@ -698,7 +1073,7 @@ curl -X POST http://localhost:8081/api/cp/batch/priority \
   }'
 ```
 
-### 6.4 一键迁移脚本
+### 8.4 一键迁移脚本
 
 以下是一个完整的数据迁移脚本示例：
 
@@ -849,9 +1224,9 @@ python3 migrate.py cp_data.csv tc_data.csv
 
 ---
 
-## 7. CSV标准模板
+## 9. CSV标准模板
 
-### 7.1 项目模板
+### 9.1 项目模板
 
 项目通过 API 创建，CSV 仅用于记录参考：
 
@@ -860,7 +1235,7 @@ Project Name,Start Date,End Date,Description
 Chip_A_Verification,2026-01-01,2026-12-31,芯片A验证项目
 ```
 
-### 7.2 CP 导入模板
+### 9.2 CP 导入模板
 
 **文件**: `cp_template.csv`
 
@@ -878,7 +1253,7 @@ Memory,SRAM,CP_MEM_SRAM_READ,SRAM读操作检查,
 Memory,SRAM,CP_MEM_SRAM_WRITE,SRAM写操作检查,
 ```
 
-### 7.3 TC 导入模板
+### 9.3 TC 导入模板
 
 **文件**: `tc_template.csv`
 
@@ -896,7 +1271,7 @@ TB_SRAM,Regression,TestEng4,TC_SRAM_READ_001,验证SRAM读操作,检查读数据
 TB_SRAM,Regression,TestEng4,TC_SRAM_WRITE_001,验证SRAM写操作,检查写数据正确性,覆盖率90%,,2026-06-01,DV1.0,OPEN
 ```
 
-### 7.4 模板下载 API
+### 9.4 模板下载 API
 
 也可以通过 API 下载官方模板：
 
@@ -917,11 +1292,22 @@ curl "http://localhost:8081/api/import/template?type=connection" \
   -o connection_template.xlsx
 ```
 
+### 9.5 FC 相关模板 (v0.11.0 新增)
+
+FC 数据不支持模板下载，请参考 6.2 节中的 CSV 格式手动创建。
+
+**FC-CP 关联模板示例**：
+```csv
+cp_feature,cp_sub_feature,cp_cover_point,fc_covergroup,fc_coverpoint,fc_bin_name
+apb_protocol,addr_range,CP_048,apb_protocol_cg,cp_addr_range,addr_max
+axi_protocol,burst_mode,CP_101,axi_protocol_cg,cp_burst_type,inc_burst
+```
+
 ---
 
-## 8. 迁移验证
+## 10. 迁移验证
 
-### 8.1 统计数据校验
+### 10.1 统计数据校验
 
 **API**: `GET /api/stats?project_id={id}`
 
@@ -943,7 +1329,7 @@ curl "http://localhost:8081/api/stats?project_id=5" -b cookies.txt
 }
 ```
 
-### 8.2 数据完整性检查脚本
+### 10.2 数据完整性检查脚本
 
 ```python
 #!/usr/bin/env python3
@@ -1023,7 +1409,7 @@ if __name__ == "__main__":
 python3 verify.py 5 10 20
 ```
 
-### 8.3 常见校验问题
+### 10.3 常见校验问题
 
 | 问题 | 原因 | 解决方案 |
 |------|------|----------|
@@ -1034,9 +1420,9 @@ python3 verify.py 5 10 20
 
 ---
 
-## 8.4 TC-CP 关联导入 (v0.9.1 新增)
+### 10.4 TC-CP 关联导入 (v0.9.1 新增)
 
-### 8.4.1 功能说明
+### 10.4.1 功能说明
 
 导入 TC 和 CP 后，可以使用关联导入功能建立它们之间的映射关系。
 
@@ -1045,7 +1431,7 @@ python3 verify.py 5 10 20
 - **多对一**：多个 TC 关联同一个 CP
 - **多对多**：组合场景
 
-### 8.4.2 CSV 格式
+### 10.4.2 CSV 格式
 
 ```csv
 Test Case,Cover Point
@@ -1059,7 +1445,7 @@ TC名称2,CP名称1
 | Test Case | ✅ | TC 名称（必须已存在于项目中） |
 | Cover Point | ✅ | CP 名称（必须已存在于项目中） |
 
-### 8.4.3 API 调用
+### 10.4.3 API 调用
 
 ```bash
 # 导入关联
@@ -1080,7 +1466,7 @@ curl -X POST "http://localhost:8081/api/import" \
 | type | string | 固定为 "connection" |
 | file_data | string | Base64 编码的 CSV 内容 |
 
-### 8.4.4 Python 脚本
+### 10.4.4 Python 脚本
 
 ```python
 #!/usr/bin/env python3
@@ -1123,7 +1509,7 @@ if __name__ == "__main__":
     print(f"失败: {result.get('failed')}")
 ```
 
-### 8.4.5 响应示例
+### 10.4.5 响应示例
 
 ```json
 {
@@ -1143,7 +1529,7 @@ if __name__ == "__main__":
 | failed | 失败数量 |
 | errors | 错误详情列表 |
 
-### 8.4.6 常见错误
+### 10.4.6 常见错误
 
 | 错误信息 | 原因 | 解决方案 |
 |----------|------|----------|
@@ -1153,9 +1539,9 @@ if __name__ == "__main__":
 
 ---
 
-## 9. 附录
+## 11. 附录
 
-### 9.1 完整 curl 示例
+### 11.1 完整 curl 示例
 
 ```bash
 #!/bin/bash
@@ -1208,7 +1594,7 @@ echo -e "\n6. 登出..."
 curl -X POST "$BASE_URL/api/auth/logout" -b $COOKIE_FILE
 ```
 
-### 9.2 错误码说明
+### 11.2 错误码说明
 
 | 错误码 | 说明 | 常见原因 |
 |--------|------|----------|
@@ -1218,7 +1604,7 @@ curl -X POST "$BASE_URL/api/auth/logout" -b $COOKIE_FILE
 | 404 | 资源不存在 | 项目/CP/TC ID 不存在 |
 | 409 | 冲突 | 项目名称重复、CP/TC 名称重复 |
 
-### 9.3 字段映射表
+### 11.3 字段映射表
 
 #### Excel/CSV → Tracker API 字段映射
 
@@ -1231,5 +1617,5 @@ curl -X POST "$BASE_URL/api/auth/logout" -b $COOKIE_FILE
 
 ---
 
-*文档版本: v1.0*
-*最后更新: 2026-03-05*
+*文档版本: v1.1*
+*最后更新: 2026-04-03*
