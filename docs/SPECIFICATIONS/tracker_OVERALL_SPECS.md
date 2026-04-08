@@ -1,6 +1,6 @@
-# 芯片验证 Tracker v0.11.0 总体规格书
+# 芯片验证 Tracker v0.12.0 总体规格书
 
-> **版本**: v0.11.0 | **更新日期**: 2026-04-03 | **状态**: ✅ 已完成开发
+> **版本**: v0.12.0 | **更新日期**: 2026-04-08 | **状态**: 🔄 开发中
 
 ---
 
@@ -55,6 +55,7 @@
 | **v0.10.1 批量创建用户** | |
 | **v0.10.2 Intro 引导页** | |
 | **v0.11.0 FC/Dashboard** | |
+| **v0.12.0 Dashboard 增强** | |
 
 ### 1.4 v0.9.0 重大变更
 
@@ -443,6 +444,13 @@ python3 scripts/data_manager.py clean
 | **F054** | **CP Dashboard** | Apple 风格覆盖率仪表板 | P0 |
 | **F055** | **Cron 快照 Token** | 修复 BUG-129，定时任务认证 | P1 |
 | **F056** | **覆盖率算法修复** | BUG-106/107/108 修复 | P0 |
+| **F057** | **Dashboard 4 Tab 重构** | 概览/覆盖率矩阵/Owner分布/覆盖空洞 | P1 |
+| **F058** | **覆盖率空洞看板** | 按 mode 区分逻辑的空洞识别和分级 | P1 |
+| **F059** | **TC Owner 分布统计** | Owner 维度的 TC 数量和通过率 | P1 |
+| **F060** | **Feature × Priority 矩阵** | 二维覆盖率热力图视图 | P2 |
+| **F061** | **快照 CP+TC 状态增强** | 新增 cp_states 和 tc_states 字段 | P1 |
+| **F062** | **周环比变化计算** | Dashboard 卡片显示周环比指示器 | P1 |
+| **F063** | **FC Group 覆盖率显示** | Cover Group 行显示组覆盖率 | P2 |
 
 ### 3.2 Cover Point 字段
 
@@ -1917,6 +1925,7 @@ journalctl -u tracker -f
 | **v0.10.1** | **2026-03-21** | **批量创建用户**：POST /api/users/batch 批量创建普通用户 |
 | **v0.10.2** | **2026-03-23** | **Intro 引导页**：首次访问引导页、5 slides 介绍功能 |
 | **v0.11.0** | **2026-04-03** | **FC/Dashboard**：FC 功能、CP Dashboard、定时快照修复、覆盖率算法修复 |
+| **v0.12.0** | **2026-04-08** | **Dashboard 增强**：4 Tab 重构、覆盖率空洞看板、Owner 分布、Feature×Priority 矩阵、快照状态增强、周环比 |
 
 ### v0.8.3 详细变更
 
@@ -2285,6 +2294,148 @@ journalctl -u tracker -f
    - `dev/index.html` - 集成 Intro overlay
    - `dev/tracker-intro.html` - 独立引导页（保留）
    - `dev/static/images/slides/` - 截图图片目录
+
+### v0.12.0 详细变更 (2026-04-08)
+
+#### 1. Dashboard 4 Tab 重构
+
+**v0.12.0 Dashboard 问题**：
+- 概览卡片与 Feature/Priority 分布、趋势图存在数据重叠
+- Top 5 未覆盖 CP 价值有限，无法区分"未关联 TC"和"覆盖策略问题"
+- 缺乏对 TC Owner 工作量的可视化
+- 缺乏 Feature × Priority 二维覆盖率视角
+- 快照缺少 TC/CP 详细状态，无法支持未来分析
+
+**新 4 Tab 结构**：
+
+| Tab | 内容 |
+|-----|------|
+| 概览 | 数字卡片 + 矩阵预览 + 趋势图 + 空洞/Owner 摘要 |
+| 覆盖率矩阵 | Feature × Priority 完整热力图 |
+| Owner 分布 | Owner 表格 + 通过率 |
+| 覆盖空洞 | 空洞看板完整版（按 mode 区分逻辑） |
+
+**去除组件**：
+| 组件 | 去除理由 |
+|------|----------|
+| 总 CP 卡片 | 覆盖率矩阵中有总数，无需单独展示 |
+| 覆盖率卡片 | 趋势图里已有数字 |
+| Feature 分布图 | 被 Feature × Priority 矩阵替代 |
+| Priority 分布卡 | 被 Feature × Priority 矩阵替代 |
+| Top 5 未覆盖 | 被空洞看板替代 |
+| Recent Activity | 从概览页移除，移至页面底部 |
+
+**新增组件**：
+| 组件 | 位置 |
+|------|------|
+| TC 通过率卡片 | 概览页 |
+| 覆盖率空洞看板 | Tab 4 |
+| TC Owner 分布 | Tab 3 |
+| Feature × Priority 矩阵 | Tab 4 |
+| 矩阵预览 | 概览页 |
+| 空洞摘要 | 概览页 |
+| Owner 摘要 | 概览页 |
+
+#### 2. 概览页卡片 (v0.12.0)
+
+**3 张概览卡片**（v0.12.0 新变化）：
+- **已覆盖**：关联 TC ≥ 1 且 coverage > 0 的 CP 数量 + 周环比
+- **未关联**：关联 TC = 0 的 CP 数量 + 周环比
+- **TC 通过率**：PASS TC / 总 TC 百分比 + 周环比
+
+**颜色映射**：
+| 覆盖率范围 | 颜色 | 状态 |
+|------------|------|------|
+| >= 80% | #22c55e 绿色 | ✅ 达标 |
+| 50% - 79% | #f59e0b 橙色 | ⚠️ 关注 |
+| 20% - 49% | #ef4444 红色 | 🔴 预警 |
+| < 20% | #991b1b 深红 | 🔴🔴 严重 |
+
+#### 3. 覆盖率空洞看板 (v0.12.0)
+
+**空洞分析需区分 coverage_mode**：
+
+**tc-cp 模式**：
+| 条件 | 说明 |
+|------|------|
+| ① 已关联 TC | `linked_tcs >= 1` |
+| ② 覆盖率为 0 | `coverage_rate = 0`（所有关联 TC 都未 PASS）|
+
+**空洞等级**：
+| 等级 | 条件 | 排序 |
+|------|------|------|
+| 🔴 严重 | P0 + coverage=0% | priority 降序，linked_tcs 降序 |
+| 🟡 警告 | P1 + coverage=0% | priority 降序，linked_tcs 降序 |
+| 🟡 关注 | P2 + coverage=0% | priority 降序，linked_tcs 降序 |
+
+**fc-cp 模式**：
+| 条件 | 说明 |
+|------|------|
+| ① 已关联 FC | `linked_fcs >= 1` |
+| ② 覆盖率很低 | `coverage_rate < 25%` |
+
+**空洞等级**：
+| 等级 | 条件 | 排序 |
+|------|------|------|
+| 🔴 严重 | coverage_rate = 0% | priority 降序，coverage_rate 升序 |
+| 🟡 警告 | 0% < coverage_rate < 15% | priority 降序，coverage_rate 升序 |
+| 🟡 关注 | 15% <= coverage_rate < 25% | priority 降序，coverage_rate 升序 |
+
+#### 4. 快照 CP+TC 状态增强 (v0.12.0)
+
+**新增字段**：
+```json
+{
+  "snapshot_date": "2026-04-07",
+  "coverage_rate": 67.5,
+  "cp_summary": { "total": 156, "covered": 89 },
+  "cp_states": {
+    "1": { "name": "AXI_TIMEOUT", "coverage_rate": 85, "linked_tcs": 3 },
+    "2": { "name": "BURST_ALIGN", "coverage_rate": 0, "linked_tcs": 2 }
+  },
+  "tc_summary": {
+    "total": 156,
+    "pass": 138,
+    "fail": 12,
+    "not_run": 6,
+    "pass_rate": 88.5
+  },
+  "tc_states": {
+    "1": "PASS",
+    "2": "FAIL",
+    "3": "NOT_RUN"
+  }
+}
+```
+
+**向后兼容**：旧快照（`cp_states` 为 null）前端显示"--"。
+
+#### 5. 周环比变化计算 (v0.12.0)
+
+| 情况 | 计算方式 |
+|------|----------|
+| 本周已有快照 | 本周数值 - 上周数值 |
+| 本周尚无快照 | 上周数值 - 上上周数值 |
+| 仅有一周数据 | 显示"--" |
+| 无快照数据 | 显示"--" |
+
+#### 6. FC Group 覆盖率显示 (v0.12.0)
+
+每个 Cover Group 行显示组覆盖率：
+```
+Group 覆盖率 = Σ(每个 CP 的覆盖率) / CP 总数
+```
+
+使用简单算术平均（受数据模型限制，`cover_point` 无 bins 数量字段）。
+
+#### 7. Dashboard API 增强 (v0.12.0)
+
+| 方法 | 路径 | 功能 |
+|------|------|------|
+| GET | `/api/dashboard/stats` | 概览统计数据 |
+| GET | `/api/dashboard/coverage-holes` | 覆盖空洞数据 |
+| GET | `/api/dashboard/owner-stats` | Owner 统计数据 |
+| GET | `/api/dashboard/coverage-matrix` | Feature×Priority 矩阵 |
 
 ### v0.5.x 详细变更
 

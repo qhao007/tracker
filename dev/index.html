@@ -1062,48 +1062,83 @@
         </div>
     </div>
 
-    <!-- Dashboard Content (v0.11.0) -->
+    <!-- Dashboard Content (v0.12.0) -->
     <div id="dashboard-content" style="display: none;">
         <div class="dashboard">
-            <!-- Overview Cards -->
-            <div id="dashboard-overview" class="dashboard-overview">
+            <!-- Dashboard Tabs -->
+            <div class="dashboard-tabs">
+                <button class="dashboard-tab active" data-tab="overview" onclick="switchDashboardTab('overview')">
+                    Overview
+                </button>
+                <button class="dashboard-tab" data-tab="matrix" onclick="switchDashboardTab('matrix')">
+                    Coverage Matrix
+                </button>
+                <button class="dashboard-tab" data-tab="owner" onclick="switchDashboardTab('owner')">
+                    Owner Distribution
+                </button>
+                <button class="dashboard-tab" data-tab="holes" onclick="switchDashboardTab('holes')">
+                    Coverage Holes
+                    <span class="dashboard-tab-badge badge-critical" style="display: none;"></span>
+                </button>
+            </div>
+
+            <!-- Tab 1: Overview -->
+            <div id="overview-content" class="dashboard-tab-content active" data-tab="overview">
+                <!-- Overview Cards (3 cards) -->
+                <div id="dashboard-overview" class="dashboard-overview">
+                    <!-- JS dynamic render -->
+                </div>
+
+                <!-- Matrix Preview -->
+                <div class="list-card" id="matrix-preview">
+                    <!-- JS dynamic render -->
+                </div>
+
+                <!-- Trend Chart -->
+                <div class="trend-card">
+                    <div class="chart-title">Coverage Trend (7 weeks)</div>
+                    <div id="trend-chart"></div>
+                </div>
+
+                <!-- Summary Row -->
+                <div class="dashboard-summary-row">
+                    <div class="summary-card" id="holes-summary">
+                        <!-- JS dynamic render -->
+                    </div>
+                    <div class="summary-card" id="owner-summary">
+                        <!-- JS dynamic render -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 2: Coverage Matrix -->
+            <div id="matrix-content" class="dashboard-tab-content" data-tab="matrix">
+                <div id="matrix-tab-content">
+                    <!-- JS dynamic render -->
+                </div>
+            </div>
+
+            <!-- Tab 3: Owner Distribution -->
+            <div id="owner-content" class="dashboard-tab-content" data-tab="owner">
+                <div id="owner-tab-content">
+                    <!-- JS dynamic render -->
+                </div>
+            </div>
+
+            <!-- Tab 4: Coverage Holes -->
+            <div id="holes-content" class="dashboard-tab-content" data-tab="holes">
+                <div id="holes-tab-content">
+                    <!-- JS dynamic render -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dashboard Modal (for detail views) -->
+    <div class="modal" id="dashboard-modal" style="display: none; z-index: 1000;">
+        <div class="modal-content dashboard-modal" style="max-width: 600px;">
+            <div id="dashboard-modal-content">
                 <!-- JS dynamic render -->
-            </div>
-
-            <!-- Charts Row -->
-            <div class="dashboard-charts">
-                <!-- Feature Coverage Chart -->
-                <div class="chart-card">
-                    <div class="chart-title">Feature Coverage Distribution</div>
-                    <div id="feature-chart"></div>
-                </div>
-
-                <!-- Priority Distribution -->
-                <div class="chart-card">
-                    <div class="chart-title">Priority Distribution</div>
-                    <div id="priority-cards" class="priority-cards"></div>
-                </div>
-            </div>
-
-            <!-- Trend Chart -->
-            <div class="trend-card">
-                <div class="chart-title">Coverage Trend</div>
-                <div id="trend-chart"></div>
-            </div>
-
-            <!-- Lists Row -->
-            <div class="dashboard-lists">
-                <!-- Top 5 Uncovered -->
-                <div class="list-card">
-                    <div class="chart-title">Top 5 Uncovered CPs</div>
-                    <div id="top-uncovered"></div>
-                </div>
-
-                <!-- Recent Activity -->
-                <div class="list-card">
-                    <div class="chart-title">Recent Activity</div>
-                    <div id="recent-activity"></div>
-                </div>
             </div>
         </div>
     </div>
@@ -2088,9 +2123,26 @@
                 const cpCount = Object.keys(coverpoints).length;
                 const isExpanded = fcExpandedGroups[covergroup] === true;
 
+                // v0.12.0: 计算 Group 覆盖率 = Σ(每个 bin 的 coverage_pct) / bin 总数
+                let allBins = [];
+                Object.values(coverpoints).forEach(bins => allBins.push(...bins));
+                const totalCoverage = allBins.reduce((sum, bin) => sum + (bin.coverage_pct || 0), 0);
+                const groupCoverage = totalBins > 0 ? (totalCoverage / totalBins) : 0;
+                const groupCoverageRounded = groupCoverage.toFixed(1);
+
+                // Group 覆盖率颜色
+                const coverageColor = groupCoverage >= 80 ? '#22c55e' : (groupCoverage >= 50 ? '#f59e0b' : '#ef4444');
+                const coverageBgColor = groupCoverage >= 80 ? '#22c55e20' : (groupCoverage >= 50 ? '#f59e0b20' : '#ef444420');
+
                 html += `<div class="fc-covergroup" style="margin-bottom: 8px; border: 1px solid #ddd; border-radius: 4px; overflow: hidden;">
                     <div class="fc-covergroup-header" onclick="toggleFCGroup('${escapeHtml(covergroup)}')" style="background: #f5f5f5; padding: 8px 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-weight: bold;">${isExpanded ? '▼' : '▶'} ${escapeHtml(covergroup)} (${cpCount} coverpoints, ${totalBins} bins)</span>
+                        <span style="font-weight: bold;">${isExpanded ? '▼' : '▶'} ${escapeHtml(covergroup)}</span>
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <span style="font-size: 12px; color: #666;">${cpCount} CP, ${totalBins} bins</span>
+                            <span style="background: ${coverageBgColor}; color: ${coverageColor}; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 12px;">
+                                ${groupCoverageRounded}%
+                            </span>
+                        </div>
                     </div>
                     <div class="fc-covergroup-content" style="display: ${isExpanded ? 'block' : 'none'}; padding: 8px;">
                         ${Object.keys(coverpoints).sort().map(coverpoint => {
@@ -3513,6 +3565,10 @@
          */
         function closeModal(id) {
             document.getElementById(id).classList.remove('active');
+            // v0.12.0: dashboard-modal uses style.display='flex' when active, reset to 'none'
+            if (id === 'dashboard-modal') {
+                document.getElementById(id).style.display = 'none';
+            }
             if (id === 'tcModal') {
                 document.removeEventListener('keydown', handleCPSearchKeydown);
             }

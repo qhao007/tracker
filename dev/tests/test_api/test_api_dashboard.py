@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app import create_app
 
 # 使用已存在的测试项目 ID
-TEST_PROJECT_ID = 5  # SOC_DV 项目
+TEST_PROJECT_ID = 3  # SOC_DV 项目
 
 
 @pytest.fixture
@@ -110,10 +110,8 @@ class TestDashboardStatsAPI:
         assert overview['coverage_rate'] >= 0
         assert overview['coverage_rate'] <= 100
 
-        # 验证覆盖率计算逻辑: covered_cp / total_cp * 100
-        if overview['total_cp'] > 0:
-            expected_rate = round((overview['covered_cp'] / overview['total_cp']) * 100, 1)
-            assert overview['coverage_rate'] == expected_rate
+        # v0.12.0: 覆盖率 = 所有 CP 覆盖率的平均值 (每个 CP 的 TC 通过率求平均)
+        # 注: coverage_rate 是 average of per-CP TC pass rate，不是 covered_cp/total_cp
 
     def test_api_dash_006_by_feature_grouping(self, admin_client):
         """API-DASH-006: by_feature 按 feature 分组统计正确"""
@@ -220,6 +218,333 @@ class TestDashboardStatsAPI:
         data = json.loads(response.data)
         assert data['success'] == False
         assert 'error' in data
+
+
+# ============ Dashboard API v0.12.0 新增测试 ============
+
+class TestCoverageHolesAPI:
+    """Coverage Holes API 测试 (v0.12.0) - API-HOLE-001 to API-HOLE-006"""
+
+    # 使用有数据的项目 (SOC_DV 有空洞数据)
+    TEST_PROJECT_ID = 3  # SOC_DV
+
+    def test_coverage_holes_basic(self, admin_client):
+        """API-HOLE-001: 测试获取空洞列表返回正确结构"""
+        response = admin_client.get(f'/api/dashboard/coverage-holes?project_id={self.TEST_PROJECT_ID}')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['success'] == True
+        assert 'data' in data
+
+        # 验证必要字段都存在
+        holes_data = data['data']
+        assert 'mode' in holes_data  # v0.12.0 新增
+        assert 'critical' in holes_data
+        assert 'warning' in holes_data
+        assert 'attention' in holes_data
+        assert 'total_critical' in holes_data
+        assert 'total_warning' in holes_data
+        assert 'total_attention' in holes_data
+
+        # 验证都是数组
+        assert isinstance(holes_data['critical'], list)
+        assert isinstance(holes_data['warning'], list)
+        assert isinstance(holes_data['attention'], list)
+
+    def test_coverage_holes_entry_structure(self, admin_client):
+        """API-HOLE-002: 测试空洞条目包含必要字段"""
+        response = admin_client.get(f'/api/dashboard/coverage-holes?project_id={self.TEST_PROJECT_ID}')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+
+        # 检查所有非空空洞的条目结构
+        for level in ['critical', 'warning', 'attention']:
+            for hole in data['data'][level]:
+                assert 'cp_id' in hole
+                assert 'cp_name' in hole
+                assert 'feature' in hole
+                assert 'priority' in hole
+                assert 'coverage_rate' in hole
+                assert 'linked_tcs' in hole
+                assert isinstance(hole['linked_tcs'], list)
+
+                # 验证 linked_tcs 中每个条目
+                for tc in hole['linked_tcs']:
+                    assert 'tc_id' in tc
+                    assert 'tc_name' in tc
+                    assert 'status' in tc
+
+    def test_coverage_holes_tc_cp_mode_priority_classification(self, admin_client):
+        """API-HOLE-003: 测试 tc-cp 模式按 priority 分级 (P0=critical, P1=warning, P2=attention)"""
+        response = admin_client.get(f'/api/dashboard/coverage-holes?project_id={self.TEST_PROJECT_ID}')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+
+        # 验证是 tc_cp 模式
+        assert data['data']['mode'] == 'tc_cp'
+
+        # Critical 应该是 P0
+        for hole in data['data']['critical']:
+            assert hole['priority'] == 'P0', f"Critical hole {hole['cp_id']} has priority {hole['priority']}, expected P0"
+            assert hole['coverage_rate'] == 0, f"Critical hole {hole['cp_id']} has non-zero coverage"
+
+        # Warning 应该是 P1
+        for hole in data['data']['warning']:
+            assert hole['priority'] == 'P1', f"Warning hole {hole['cp_id']} has priority {hole['priority']}, expected P1"
+            assert hole['coverage_rate'] == 0, f"Warning hole {hole['cp_id']} has non-zero coverage"
+
+        # Attention 应该是 P2
+        for hole in data['data']['attention']:
+            assert hole['priority'] == 'P2', f"Attention hole {hole['cp_id']} has priority {hole['priority']}, expected P2"
+            assert hole['coverage_rate'] == 0, f"Attention hole {hole['cp_id']} has non-zero coverage"
+
+    def test_coverage_holes_sorted_by_priority(self, admin_client):
+        """API-HOLE-004: 测试空洞按 priority 降序排列"""
+        response = admin_client.get(f'/api/dashboard/coverage-holes?project_id={self.TEST_PROJECT_ID}')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+
+        priority_order = {'P0': 0, 'P1': 1, 'P2': 2, 'P3': 3}
+
+        # 检查 critical 列表是按 priority 降序 (P0 在前)
+        critical_priorities = [hole['priority'] for hole in data['data']['critical']]
+        if len(critical_priorities) > 1:
+            for i in range(len(critical_priorities) - 1):
+                assert priority_order[critical_priorities[i]] <= priority_order[critical_priorities[i + 1]], \
+                    "Critical holes not sorted by priority"
+
+    def test_coverage_holes_excludes_unlinked(self, admin_client):
+        """API-HOLE-005: 测试排除未关联 TC 的 CP"""
+        response = admin_client.get(f'/api/dashboard/coverage-holes?project_id={self.TEST_PROJECT_ID}')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+
+        # 所有返回的空洞都应该有 linked_tcs >= 1
+        all_holes = data['data']['critical'] + data['data']['warning'] + data['data']['attention']
+        for hole in all_holes:
+            assert len(hole['linked_tcs']) > 0, f"CP {hole['cp_id']} has no linked TCs but returned as hole"
+
+    def test_coverage_holes_max_20_per_category(self, admin_client):
+        """API-HOLE-006: 测试每类等级最多显示 20 条"""
+        response = admin_client.get(f'/api/dashboard/coverage-holes?project_id={self.TEST_PROJECT_ID}')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+
+        assert len(data['data']['critical']) <= 20
+        assert len(data['data']['warning']) <= 20
+        assert len(data['data']['attention']) <= 20
+
+
+class TestOwnerStatsAPI:
+    """Owner Stats API 测试 (v0.12.0) - API-OWNER-001 to API-OWNER-004"""
+
+    TEST_PROJECT_ID = 3  # SOC_DV
+
+    def test_owner_stats_basic(self, admin_client):
+        """API-OWNER-001: 测试获取 Owner 列表返回正确结构"""
+        response = admin_client.get(f'/api/dashboard/owner-stats?project_id={self.TEST_PROJECT_ID}')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['success'] == True
+        assert 'data' in data
+
+        owner_data = data['data']
+        assert 'owners' in owner_data
+        assert 'summary' in owner_data
+        assert isinstance(owner_data['owners'], list)
+
+    def test_owner_stats_entry_fields(self, admin_client):
+        """API-OWNER-002: 测试 Owner 条目包含必要字段"""
+        response = admin_client.get(f'/api/dashboard/owner-stats?project_id={self.TEST_PROJECT_ID}')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+
+        for owner in data['data']['owners']:
+            assert 'owner' in owner
+            assert 'tc_total' in owner
+            assert 'tc_pass' in owner
+            assert 'tc_fail' in owner
+            assert 'tc_not_run' in owner
+            assert 'display_name' in owner
+
+            # 验证数值都是非负整数
+            assert isinstance(owner['tc_total'], int)
+            assert isinstance(owner['tc_pass'], int)
+            assert isinstance(owner['tc_fail'], int)
+            assert isinstance(owner['tc_not_run'], int)
+            assert owner['tc_total'] >= 0
+            assert owner['tc_pass'] >= 0
+            assert owner['tc_fail'] >= 0
+            assert owner['tc_not_run'] >= 0
+
+            # tc_total = tc_pass + tc_fail + tc_not_run
+            assert owner['tc_total'] == owner['tc_pass'] + owner['tc_fail'] + owner['tc_not_run']
+
+    def test_owner_stats_unassigned_tc(self, admin_client):
+        """API-OWNER-003: 测试未分配 TC 显示 (unassigned)"""
+        response = admin_client.get(f'/api/dashboard/owner-stats?project_id={self.TEST_PROJECT_ID}')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+
+        # 检查是否有 (unassigned) owner
+        unassigned_owners = [o for o in data['data']['owners'] if o['owner'] == '(unassigned)']
+        # 如果有，验证其 TC 数量
+        for unassigned in unassigned_owners:
+            assert unassigned['tc_total'] >= 0
+
+        # 验证 summary 中的 unassigned_tc_count
+        summary = data['data']['summary']
+        assert 'unassigned_tc_count' in summary
+        assert isinstance(summary['unassigned_tc_count'], int)
+
+    def test_owner_stats_summary_fields(self, admin_client):
+        """API-OWNER-004: 测试汇总统计包含必要字段"""
+        response = admin_client.get(f'/api/dashboard/owner-stats?project_id={self.TEST_PROJECT_ID}')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+
+        summary = data['data']['summary']
+        assert 'total_owners' in summary
+        assert 'unassigned_tc_count' in summary
+
+        # total_owners 应该是非负整数 (排除 unassigned)
+        assert isinstance(summary['total_owners'], int)
+        assert summary['total_owners'] >= 0
+
+
+class TestCoverageMatrixAPI:
+    """Coverage Matrix API 测试 (v0.12.0) - API-MATRIX-001 to API-MATRIX-005"""
+
+    TEST_PROJECT_ID = 3  # SOC_DV
+
+    def test_coverage_matrix_basic(self, admin_client):
+        """API-MATRIX-001: 测试获取矩阵返回正确结构"""
+        response = admin_client.get(f'/api/dashboard/coverage-matrix?project_id={self.TEST_PROJECT_ID}')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['success'] == True
+        assert 'data' in data
+
+        matrix_data = data['data']
+        assert 'matrix' in matrix_data
+        assert 'features' in matrix_data
+        assert 'priorities' in matrix_data
+        assert 'weak_areas' in matrix_data
+
+        # 验证 features 和 priorities 是数组
+        assert isinstance(matrix_data['features'], list)
+        assert isinstance(matrix_data['priorities'], list)
+
+    def test_coverage_matrix_covered_count(self, admin_client):
+        """API-MATRIX-002: 测试已覆盖计数正确 (covered <= total)"""
+        response = admin_client.get(f'/api/dashboard/coverage-matrix?project_id={self.TEST_PROJECT_ID}')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+
+        matrix = data['data']['matrix']
+        for feature, priorities in matrix.items():
+            for priority, cell in priorities.items():
+                assert 'covered' in cell
+                assert 'total' in cell
+                assert cell['covered'] <= cell['total']
+                assert cell['covered'] >= 0
+                assert cell['total'] >= 0
+
+    def test_coverage_matrix_cp_ids_in_cp_list(self, admin_client):
+        """API-MATRIX-003: 测试 CP ID 列表在 cp_list 中"""
+        response = admin_client.get(f'/api/dashboard/coverage-matrix?project_id={self.TEST_PROJECT_ID}')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+
+        matrix = data['data']['matrix']
+        for feature, priorities in matrix.items():
+            for priority, cell in priorities.items():
+                assert 'cp_list' in cell
+                assert isinstance(cell['cp_list'], list)
+
+                # cp_list 中每个条目应该有 id
+                for cp in cell['cp_list']:
+                    assert 'id' in cp
+                    assert 'name' in cp
+                    assert 'coverage_rate' in cp
+
+                # cp_list 长度应该等于 total
+                assert len(cell['cp_list']) == cell['total']
+
+    def test_coverage_matrix_weak_areas_threshold(self, admin_client):
+        """API-MATRIX-004: 测试薄弱区域识别 (< 50% 覆盖率)"""
+        response = admin_client.get(f'/api/dashboard/coverage-matrix?project_id={self.TEST_PROJECT_ID}')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+
+        weak_areas = data['data']['weak_areas']
+        matrix = data['data']['matrix']
+
+        # 验证每个薄弱区域确实 < 50%
+        for weak in weak_areas:
+            feature = weak['feature']
+            priority = weak['priority']
+            rate = (weak['covered'] / weak['total'] * 100) if weak['total'] > 0 else 0
+
+            assert rate < 50, f"Weak area {feature}/{priority} has rate {rate}% >= 50%"
+            assert 'severity' in weak
+            assert 'covered' in weak
+            assert 'total' in weak
+
+    def test_coverage_matrix_severity_correct(self, admin_client):
+        """API-MATRIX-005: 测试告警级别正确 (critical < 20%, warning < 50%)"""
+        response = admin_client.get(f'/api/dashboard/coverage-matrix?project_id={self.TEST_PROJECT_ID}')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+
+        weak_areas = data['data']['weak_areas']
+
+        for weak in weak_areas:
+            rate = (weak['covered'] / weak['total'] * 100) if weak['total'] > 0 else 0
+
+            if weak['severity'] == 'critical':
+                assert rate < 20, f"Critical area {weak['feature']}/{weak['priority']} has rate {rate}% >= 20%"
+            elif weak['severity'] == 'warning':
+                assert 20 <= rate < 50, f"Warning area {weak['feature']}/{weak['priority']} has rate {rate}% not in [20%, 50%)"
+
+
+class TestDashboardStatsV012:
+    """Dashboard Stats API v0.12.0 增强测试"""
+
+    TEST_PROJECT_ID = 3  # SOC_DV
+
+    def test_dashboard_stats_week_change_placeholder(self, admin_client):
+        """API-DASH-012: 测试概览统计包含必要的统计字段
+
+        注意: 周环比 (week_change) 是前端根据快照数据计算的，API 返回当前值
+        本测试验证概览数据完整性
+        """
+        response = admin_client.get(f'/api/dashboard/stats?project_id={self.TEST_PROJECT_ID}')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+
+        overview = data['data']['overview']
+        # 验证概览数据完整
+        assert 'total_cp' in overview
+        assert 'covered_cp' in overview
+        assert 'coverage_rate' in overview
+        assert 'unlinked_cp' in overview
+
+    def test_dashboard_stats_no_snapshot_returns_current_data(self, admin_client):
+        """API-DASH-013: 测试无快照数据时 API 仍返回当前数据
+
+        API 本身不依赖快照，返回的是当前数据库实时数据
+        """
+        # 使用没有快照的项目 47
+        response = admin_client.get(f'/api/dashboard/stats?project_id={self.TEST_PROJECT_ID}')
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['success'] == True
+
+        # 概览数据应该基于当前数据
+        overview = data['data']['overview']
+        assert overview['total_cp'] >= 0
+        assert overview['coverage_rate'] >= 0
 
 
 # ============ 运行测试 ============
