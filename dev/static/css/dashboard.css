@@ -498,6 +498,34 @@
     color: var(--color-text-muted);
 }
 
+/* Matrix Total Row & Column */
+.coverage-matrix th.total-header {
+    background: var(--color-primary);
+    color: white;
+}
+
+.coverage-matrix td.total-cell {
+    background: var(--color-bg-secondary);
+    font-weight: 600;
+}
+
+.coverage-matrix tr.total-row td {
+    background: var(--color-bg-secondary);
+    font-weight: 700;
+    border-top: 2px solid var(--color-border);
+}
+
+.coverage-matrix td.total-label {
+    background: var(--color-primary);
+    color: white;
+    font-weight: 700;
+}
+
+.coverage-matrix .total-cell.green { background: #22c55e25; }
+.coverage-matrix .total-cell.orange { background: #f59e0b25; }
+.coverage-matrix .total-cell.red { background: #ef444425; }
+.coverage-matrix .total-cell.dark-red { background: #991b1b25; }
+
 /* Weak Areas Alert */
 .weak-areas-list {
     display: flex;

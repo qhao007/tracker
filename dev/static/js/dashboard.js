@@ -689,12 +689,17 @@ const Dashboard = {
             return;
         }
 
-        const { matrix, features, priorities, weak_areas } = this.matrixData;
+        const { matrix, features, priorities, weak_areas, row_totals, column_totals } = this.matrixData;
 
         if (features.length === 0) {
             container.innerHTML = '<div class="dashboard-empty">No Cover Point data</div>';
             return;
         }
+
+        // 计算总体覆盖率
+        const totalCovered = Object.values(row_totals).reduce((sum, t) => sum + t.covered, 0);
+        const totalCP = Object.values(row_totals).reduce((sum, t) => sum + t.total, 0);
+        const overallRate = totalCP > 0 ? Math.round((totalCovered / totalCP) * 100) : 0;
 
         container.innerHTML = `
             <div class="list-card" style="margin-bottom: 16px;">
@@ -718,10 +723,15 @@ const Dashboard = {
                             <tr>
                                 <th class="feature-header">Feature</th>
                                 ${priorities.map(p => `<th>${p}</th>`).join('')}
+                                <th class="total-header">Total</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${features.map(feature => `
+                            ${features.map(feature => {
+                                const rowTotal = row_totals[feature] || { covered: 0, total: 0, rate: 0 };
+                                const rowLevel = rowTotal.rate >= 80 ? 'green' : (rowTotal.rate >= 50 ? 'orange' : (rowTotal.rate >= 20 ? 'red' : 'dark-red'));
+
+                                return `
                                 <tr>
                                     <td class="feature-cell">${this.escapeHtml(feature)}</td>
                                     ${priorities.map(priority => {
@@ -742,8 +752,40 @@ const Dashboard = {
                                             </td>
                                         `;
                                     }).join('')}
+                                    <td class="matrix-cell total-cell ${rowLevel}">
+                                        <div class="matrix-cell-content">
+                                            <span class="matrix-cell-rate">${rowTotal.rate}%</span>
+                                            <span class="matrix-cell-count">${rowTotal.covered}/${rowTotal.total}</span>
+                                        </div>
+                                    </td>
                                 </tr>
-                            `).join('')}
+                            `}).join('')}
+                            <tr class="total-row">
+                                <td class="feature-cell total-label">Total</td>
+                                ${priorities.map(priority => {
+                                    const colTotal = column_totals[priority] || { covered: 0, total: 0, rate: 0 };
+                                    const colLevel = colTotal.rate >= 80 ? 'green' : (colTotal.rate >= 50 ? 'orange' : (colTotal.rate >= 20 ? 'red' : 'dark-red'));
+
+                                    if (colTotal.total === 0) {
+                                        return `<td class="matrix-cell empty">-</td>`;
+                                    }
+
+                                    return `
+                                        <td class="matrix-cell total-cell ${colLevel}">
+                                            <div class="matrix-cell-content">
+                                                <span class="matrix-cell-rate">${colTotal.rate}%</span>
+                                                <span class="matrix-cell-count">${colTotal.covered}/${colTotal.total}</span>
+                                            </div>
+                                        </td>
+                                    `;
+                                }).join('')}
+                                <td class="matrix-cell total-cell green">
+                                    <div class="matrix-cell-content">
+                                        <span class="matrix-cell-rate">${overallRate}%</span>
+                                        <span class="matrix-cell-count">${totalCovered}/${totalCP}</span>
+                                    </div>
+                                </td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
