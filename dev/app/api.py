@@ -5318,7 +5318,7 @@ def get_dashboard_coverage_matrix():
         # 构建矩阵: {feature: {priority: {covered, total, cp_list: [{id, name, coverage_rate}, ...]}}}
         matrix = {}
         features_set = set()
-        priorities = ['P0', 'P1', 'P2', 'P3']
+        priorities = ['P0', 'P1', 'P2']  # v0.12.0: 去掉 P3
 
         for cp_row in all_cps:
             cp_id = cp_row[0]
@@ -5376,13 +5376,37 @@ def get_dashboard_coverage_matrix():
         # 按 severity 降序，再按 total 降序
         weak_areas.sort(key=lambda x: (0 if x['severity'] == 'critical' else 1, -x['total']))
 
+        # 计算每行（Feature）统计: 该 Feature 下所有 CP 的覆盖率
+        row_totals = {}
+        for feature in matrix:
+            total_covered = sum(data['covered'] for data in matrix[feature].values())
+            total_cp = sum(data['total'] for data in matrix[feature].values())
+            rate = round((total_covered / total_cp) * 100, 1) if total_cp > 0 else 0
+            row_totals[feature] = {'covered': total_covered, 'total': total_cp, 'rate': rate}
+
+        # 计算每列（Priority）统计: 该 Priority 下所有 CP 的覆盖率
+        column_totals = {}
+        for priority in priorities:
+            total_covered = sum(
+                matrix[f][priority]['covered']
+                for f in matrix if priority in matrix[f]
+            )
+            total_cp = sum(
+                matrix[f][priority]['total']
+                for f in matrix if priority in matrix[f]
+            )
+            rate = round((total_covered / total_cp) * 100, 1) if total_cp > 0 else 0
+            column_totals[priority] = {'covered': total_covered, 'total': total_cp, 'rate': rate}
+
         return jsonify({
             'success': True,
             'data': {
                 'matrix': matrix,
                 'features': sorted(list(features_set)),
                 'priorities': priorities,
-                'weak_areas': weak_areas
+                'weak_areas': weak_areas,
+                'row_totals': row_totals,
+                'column_totals': column_totals
             }
         })
 
