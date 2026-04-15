@@ -758,6 +758,69 @@ Dashboard load error: Error: Failed to load dashboard data
 
 ---
 
+### BUG-132: Progress Charts 实际曲线数据点日期不对齐
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-04-10 |
+| **报告人** | Claude Code |
+| **修复日期** | 2026-04-10 |
+| **修复人** | Claude Code |
+
+**描述**: Progress Charts 页面的"计划曲线"和"实际曲线"数据点未按正确的周对齐。计划曲线每周的数据点使用周一日期，而实际曲线（从快照读取）使用快照存储的原始日期（可能是任意星期几），导致两条曲线的时间轴不对齐，图表显示错误。
+
+**问题位置**:
+- 后端: `/projects/management/tracker/dev/app/api.py` 第 1025-1092 行（原第 1064-1074 行）
+
+**修复方案**:
+1. 快照按周（周一）对齐：同一周多个快照只保留最后一个
+2. 无快照的周使用前后周线性插值填充
+3. 确保实际曲线与计划曲线长度和周标签完全对齐
+
+**已修复**: ✅ 2026-04-10 在 `api.py` 中实现周对齐 + 线性插值
+- 前端: `/projects/management/tracker/dev/index.html` 第 2618-2690 行
+
+**问题分析**:
+
+1. **计划曲线** (`calculate_planned_coverage`, 第 930 行):
+   ```python
+   planned.append({
+       'week': current.isoformat(),  # 周一的日期
+       'coverage': coverage
+   })
+   ```
+
+2. **实际曲线** (第 1071-1074 行):
+   ```python
+   actual.append({
+       'week': row[0],  # snapshot_date，原始日期（可能是任意星期几）
+       'coverage': row[1] if row[1] is not None else 0
+   })
+   ```
+
+3. **前端图表** (第 2631-2634 行):
+   ```javascript
+   let labels = planned.map(p => p.week);  // 标签来自计划曲线（周一）
+   if (labels.length === 0) {
+       labels = actual.map(a => a.week);   // 备选来自实际曲线（原始日期）
+   }
+   ```
+   计划曲线和实际曲线使用不同的日期格式/星期，导致 X 轴不对齐。
+
+**修复方案**:
+1. 将实际曲线的 `week` 字段转换为对应的周一日期（与计划曲线一致）
+2. 可选：前端 charts 也应支持按快照实际日期显示（需新增参数控制）
+
+**复现步骤**:
+1. 进入有快照数据的项目
+2. 切换到 Progress Charts 标签页
+3. 观察计划曲线（蓝色虚线）和实际曲线（绿色实线）是否在时间轴上对齐
+4. 如果快照日期不是周一，曲线会错位
+
+---
+
 ## 2. 功能增强
 
 ### FEAT-001: CP 覆盖率计算
@@ -4185,3 +4248,132 @@ curl -b cookies.txt http://localhost:8081/api/dashboard/stats?project_id=3
 # UI 测试
 npx playwright test tests/test_ui/specs/integration/dashboard-tabs.spec.ts -g "UI-OVER-003" --project=firefox
 ```
+
+---
+
+## v0.13.0 Wiki UI 测试发现的应用 Bug (2026-04-12)
+
+### Bug-WIKI-001: Wiki 导航项不显示
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 (2026-04-12) |
+| **发现日期** | 2026-04-12 |
+| **版本** | v0.13.0 |
+| **测试用例** | UI-WIKI-010, UI-WIKI-011 |
+
+**问题描述**:
+点击 Wiki Tab 后，左侧导航面板为空，无导航项显示。
+
+**根因分析**:
+- API `/wiki/soc_dv/index.json` 返回正确数据（4个页面）
+- 但前端 `renderWikiNav` 未正确渲染导航项
+- `loadWiki()` 函数调用了不存在的 `fetchProjects()` 函数，导致 `ReferenceError`
+
+**影响测试**:
+- UI-WIKI-010: 左侧导航正确显示页面列表 - ✅ 通过
+- UI-WIKI-011: 点击导航加载对应页面 - ✅ 通过
+
+**修复方案**:
+- 移除 `await fetchProjects()` 调用，直接使用全局 `projects` 变量
+- `index.html` 第 4686 行附近
+
+---
+
+### Bug-WIKI-002: Wiki 内容区域不显示
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 (2026-04-12) |
+| **发现日期** | 2026-04-12 |
+| **版本** | v0.13.0 |
+| **测试用例** | UI-WIKI-021, UI-WIKI-022, UI-WIKI-031 |
+
+**问题描述**:
+Wiki 页面内容区域 `#wikiPageContent` 隐藏或内容为空。
+
+**根因分析**:
+- 同 Bug-WIKI-001，`loadWiki()` 函数因 `fetchProjects()` 不存在导致异常
+- 异常中断了后续 `loadWikiPage()` 调用，导致内容未加载
+
+**影响测试**:
+- UI-WIKI-021: 页面内容正确渲染 - ✅ 通过
+- UI-WIKI-022: 加载失败显示重试按钮 - ✅ 通过
+- UI-WIKI-031: 无 Wiki 时显示空状态 - ✅ 通过
+
+**修复方案**:
+- 同 Bug-WIKI-001，移除 `await fetchProjects()` 调用
+
+---
+
+### Bug-WIKI-003: Wiki 右侧信息栏不显示
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 (2026-04-12) |
+| **发现日期** | 2026-04-12 |
+| **版本** | v0.13.0 |
+| **测试用例** | UI-WIKI-060 |
+
+**问题描述**:
+Wiki 右侧"最近更新"区域 `#wikiRecentChanges` 隐藏。
+
+**根因分析**:
+- 同 Bug-WIKI-001，`loadWiki()` 函数因 `fetchProjects()` 不存在导致异常
+- 异常中断了后续 `loadWikiChanges()` 调用
+
+**影响测试**:
+- UI-WIKI-060: 右侧显示最近更新 - ✅ 通过
+
+**修复方案**:
+- 同 Bug-WIKI-001，移除 `await fetchProjects()` 调用
+
+---
+
+### 测试通过但需关注的用例
+
+以下用例虽然通过，但可能存在潜在问题：
+
+| 用例 ID | 说明 | 备注 |
+|---------|------|------|
+| UI-WIKI-012 | 当前页高亮显示 | 有条件判断 `if (count > 0)`，实际未严格验证 |
+| UI-WIKI-013 | 导航按 category 分组显示 | 分组标题验证通过，但无导航项时也通过 |
+
+---
+
+### Bug-IMPORT-001: 导入项目 Dashboard 报错 500
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 (2026-04-14) |
+| **发现日期** | 2026-04-14 |
+| **版本** | v0.12.2 |
+| **报告人** | 用户 |
+
+**问题描述**:
+导入项目后访问 Dashboard 时报错：`/api/dashboard/stats` 返回 500，错误信息 `no such table: project_progress`
+
+**根因分析**:
+- `init_project_db()` 函数在创建新项目数据库时，缺少 `project_progress` 和 `tracker_version` 表的创建
+- `project_progress` 表是 Dashboard 周环比数据的来源（v0.12.0 新增）
+- 导入旧版或外部项目时，这些表不会被自动创建
+
+**影响范围**:
+- 导入的项目 Dashboard 无法正常显示
+- 需手动为已有项目添加缺失的表
+
+**修复方案**:
+- `dev/app/api.py` 的 `init_project_db()` 函数添加：
+  - `project_progress` 表创建
+  - `tracker_version` 表创建并插入版本记录
+
+**修复文件**:
+- `dev/app/api.py` 第 210-257 行
+
+**测试验证**:
+- 新增测试 `TestProjectDatabaseSchema::test_new_project_creates_required_tables`
+- 测试用例位置: `tests/test_api/test_api_project_mode.py`

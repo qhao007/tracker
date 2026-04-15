@@ -16,6 +16,9 @@ auth_api = Blueprint("auth_api", __name__)
 # 导入认证模块
 from . import auth
 
+# 导入 Wiki 清理函数（用于项目删除时的生命周期管理）
+from .wiki import delete_project_wiki as wiki_delete_project
+
 # 项目列表文件
 PROJECTS_FILE = "data/projects.json"
 
@@ -203,6 +206,55 @@ def init_project_db(project_name):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_fc_coverage_type ON functional_coverage(coverage_type)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_fc_cp_assoc_cp ON fc_cp_association(cp_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_fc_cp_assoc_fc ON fc_cp_association(fc_id)")
+
+    # 创建项目进度快照表 (v0.12.0 - Dashboard 周环比数据)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS project_progress (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            snapshot_date TEXT NOT NULL,
+            actual_coverage REAL,
+            p0_coverage REAL,
+            p1_coverage REAL,
+            p2_coverage REAL,
+            p3_coverage REAL,
+            tc_pass_count INTEGER,
+            tc_total INTEGER,
+            cp_covered INTEGER,
+            cp_total INTEGER,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT,
+            updated_by TEXT,
+            UNIQUE(project_id, snapshot_date)
+        )
+    """)
+
+    # 创建 tracker_version 表 (v0.12.0 - 记录数据库 schema 版本)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS tracker_version (
+            version TEXT NOT NULL,
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    # 读取当前版本号
+    version_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "VERSION")
+    db_version = "0.12.0"  # 默认版本
+    if os.path.exists(version_file):
+        try:
+            with open(version_file, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if "=" in line:
+                        key, value = line.split("=", 1)
+                        if key == "VERSION":
+                            db_version = value
+                            break
+        except Exception:
+            pass
+
+    # 插入当前版本记录
+    cursor.execute("INSERT OR IGNORE INTO tracker_version (version, updated_at) VALUES (?, datetime('now'))",
+                   (db_version,))
 
     conn.commit()
     conn.close()
@@ -789,6 +841,14 @@ def delete_project(project_id):
     # 删除数据库文件
     delete_project_db(project["name"])
 
+    # 删除项目 Wiki 目录（如果存在）
+    try:
+        wiki_deleted = wiki_delete_project(project["name"])
+        if wiki_deleted:
+            print(f"项目 Wiki 已删除并归档: {project['name']}")
+    except Exception as e:
+        print(f"项目 Wiki 删除失败: {e}")
+
     return jsonify({"success": True})
 
 
@@ -1043,8 +1103,8 @@ def get_progress(project_id):
                 WHERE project_id = ?
                 ORDER BY snapshot_date
             """, (project_id,))
+            snapshot_data = []
             for row in cursor.fetchall():
-                week = row[0]
                 # 计算加权平均
                 weighted_sum = 0
                 if total_filtered_cp > 0:
@@ -1056,10 +1116,7 @@ def get_progress(project_id):
                     coverage = round(weighted_sum / total_filtered_cp, 1)
                 else:
                     coverage = row[1] if row[1] is not None else 0
-                actual.append({
-                    'week': week,
-                    'coverage': coverage
-                })
+                snapshot_data.append({'snapshot_date': row[0], 'coverage': coverage})
         else:
             cursor.execute(f"""
                 SELECT snapshot_date, {coverage_column}
@@ -1067,11 +1124,65 @@ def get_progress(project_id):
                 WHERE project_id = ?
                 ORDER BY snapshot_date
             """, (project_id,))
+            snapshot_data = []
             for row in cursor.fetchall():
-                actual.append({
-                    'week': row[0],
+                snapshot_data.append({
+                    'snapshot_date': row[0],
                     'coverage': row[1] if row[1] is not None else 0
                 })
+
+        # BUG-132 修复: 将快照映射到周（周一），同一周多个快照取最后一个
+        # 然后对没有快照的周进行线性插值
+        def date_to_monday(d):
+            """将日期转换为对应的周一"""
+            if isinstance(d, str):
+                d = datetime.strptime(d, '%Y-%m-%d').date()
+            days_since_monday = d.weekday()
+            monday = d - timedelta(days=days_since_monday)
+            return monday
+
+        # 按周一分组，每周只保留最后一个快照
+        weekly_snapshot = {}
+        for snap in snapshot_data:
+            monday = date_to_monday(snap['snapshot_date'])
+            weekly_snapshot[monday] = snap['coverage']  # 同一周后者覆盖前者
+
+        # 构建与计划曲线对齐的实际曲线（带线性插值）
+        for p in planned:
+            p_week = datetime.strptime(p['week'], '%Y-%m-%d').date()
+            if p_week in weekly_snapshot:
+                actual.append({'week': p['week'], 'coverage': weekly_snapshot[p_week]})
+            else:
+                # 线性插值：找前后最近的已知周
+                prev_week = None
+                next_week = None
+                for wk in sorted(weekly_snapshot.keys()):
+                    if wk < p_week:
+                        prev_week = wk
+                    elif wk > p_week and next_week is None:
+                        next_week = wk
+                        break
+
+                if prev_week is not None and next_week is not None:
+                    # 前后都有数据，线性插值
+                    days_diff = (next_week - prev_week).days
+                    if days_diff > 0:
+                        coverage = weekly_snapshot[prev_week] + (
+                            (weekly_snapshot[next_week] - weekly_snapshot[prev_week]) *
+                            (p_week - prev_week).days / days_diff
+                        )
+                        actual.append({'week': p['week'], 'coverage': round(coverage, 1)})
+                    else:
+                        actual.append({'week': p['week'], 'coverage': weekly_snapshot[prev_week]})
+                elif prev_week is not None:
+                    # 只有前面的数据，用前一个的值
+                    actual.append({'week': p['week'], 'coverage': weekly_snapshot[prev_week]})
+                elif next_week is not None:
+                    # 只有后面的数据，用后一个的值
+                    actual.append({'week': p['week'], 'coverage': weekly_snapshot[next_week]})
+                else:
+                    # 没有可用数据（不应该发生），跳过
+                    pass
     except Exception as e:
         print(f"Warning: Could not load actual curve: {e}")
 
@@ -4765,43 +4876,39 @@ def get_dashboard_stats():
         tc_pass_rate = round((tc_pass / tc_total * 100), 1) if tc_total > 0 else 0
 
         # v0.12.0: 周环比变化计算 (§6)
-        # 获取最近两次快照进行对比
+        # 新逻辑: 实时最新值 - 最新快照值 (更实时地反映与快照以来的变化)
+        # 获取最新快照
         cursor.execute("""
             SELECT snapshot_date, actual_coverage, cp_covered, cp_total, tc_pass_count, tc_total
             FROM project_progress
             WHERE project_id = ?
             ORDER BY snapshot_date DESC
-            LIMIT 2
+            LIMIT 1
         """, (project_id,))
-        snapshot_rows = cursor.fetchall()
+        latest_snapshot = cursor.fetchone()
 
         week_change = {
-            'covered_cp': None,  # 上周 covered_cp 变化
+            'covered_cp': None,  # 实时 covered_cp - 快照 covered_cp
             'unlinked_cp': None,  # 不显示（快照无法准确计算"无关联TC的CP"）
-            'tc_pass_rate': None  # 上周 tc_pass_rate 变化
+            'tc_pass_rate': None  # 实时 tc_pass_rate - 快照 tc_pass_rate
         }
 
-        if len(snapshot_rows) >= 2:
-            # snapshot_rows[0] = 当前/最新, snapshot_rows[1] = 上一次
-            current_row = snapshot_rows[0]
-            prev_row = snapshot_rows[1]
-
-            # 计算 covered_cp 变化 (covered = 有 ≥1 PASS TC 的 CP)
-            current_covered_cp = current_row[2]
-            prev_covered_cp = prev_row[2]
-            week_change['covered_cp'] = current_covered_cp - prev_covered_cp
+        if latest_snapshot:
+            # 实时 covered_cp 已在上面计算过 (= covered_cp 变量)
+            # 快照中的 covered_cp
+            snapshot_covered_cp = latest_snapshot[2]
+            week_change['covered_cp'] = covered_cp - snapshot_covered_cp
 
             # 注意: unlinked_cp 的 week_change 无法准确计算
             # 因为快照存储的是 cp_covered (有PASS TC的CP)，不是真正的"无关联TC的CP"
             # live unlinked_cp 是实时计算: CPs with linked_tcs = 0
             # 两者定义不同，不能直接比较
 
-            # 计算 tc_pass_rate 变化
-            current_tc_total = current_row[5] if current_row[5] > 0 else 1
-            prev_tc_total = prev_row[5] if prev_row[5] > 0 else 1
-            current_tc_pass_rate = round((current_row[4] / current_tc_total) * 100, 1)
-            prev_tc_pass_rate = round((prev_row[4] / prev_tc_total) * 100, 1)
-            week_change['tc_pass_rate'] = round(current_tc_pass_rate - prev_tc_pass_rate, 1)
+            # 实时 tc_pass_rate 已在上面计算过 (= tc_pass_rate 变量)
+            # 计算快照的 tc_pass_rate
+            snapshot_tc_total = latest_snapshot[5] if latest_snapshot[5] > 0 else 1
+            snapshot_tc_pass_rate = round((latest_snapshot[4] / snapshot_tc_total) * 100, 1)
+            week_change['tc_pass_rate'] = round(tc_pass_rate - snapshot_tc_pass_rate, 1)
 
         # 2. 按 Feature 统计
         # 新逻辑：对同一 feature 下所有 CP 的覆盖率求平均
