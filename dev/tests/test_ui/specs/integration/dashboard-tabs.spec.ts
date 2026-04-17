@@ -282,30 +282,22 @@ test.describe('Dashboard Tabs & Overview UI Tests', () => {
      */
     test('UI-OVER-003: 周环比显示 - 正确显示变化值或 "--"', async ({ page }) => {
         // 周环比可能在卡片下方显示，需要检查数据格式
-        // 根据规格说明，周环比用 -- 表示无数据或实际变化值
+        // 根据规格说明，周环比用 -- 表示无数据，↑/↓ 表示有变化，0 表示无变化
         await page.waitForTimeout(2000);
 
-        // 检查是否有环比数据（如果加载了快照数据的话）
-        const hasChangeIndicator = await page.evaluate(() => {
-            // 检查概览卡片区域是否有变化指示器
-            const cards = document.querySelectorAll('.overview-card');
-            for (const card of cards) {
-                const text = card.textContent;
-                if (text.includes('↑') || text.includes('↓') || text.includes('--')) {
-                    return true;
-                }
-            }
-            return false;
-        });
+        // 获取所有概览卡片的文本
+        const cardTexts = await page.locator('.overview-card').allTextContents();
 
-        // 如果有变化指示器，验证格式正确
-        if (hasChangeIndicator) {
-            const cardTexts = await page.locator('.overview-card').allTextContents();
-            for (const text of cardTexts) {
-                // 应该包含 ↑ 或 ↓ 或 --
-                const hasChange = text.includes('↑') || text.includes('↓') || text.includes('--');
-                expect(hasChange).toBeTruthy();
-            }
+        // 验证每张卡片：要么有变化指示器（↑、↓），要么显示 --，要么显示 0（无变化）
+        for (const text of cardTexts) {
+            const hasUpArrow = text.includes('↑');
+            const hasDownArrow = text.includes('↓');
+            const hasDashDash = text.includes('--');
+            // 变化值为 0 时只显示 "0"，这也是有效状态（无变化）
+            const hasZeroChange = text.includes('0') && !hasUpArrow && !hasDownArrow;
+            // 每张卡片应该有 ↑ 或 ↓ 或 -- 或 0（无变化）其中之一
+            const hasValidIndicator = hasUpArrow || hasDownArrow || hasDashDash || hasZeroChange;
+            expect(hasValidIndicator).toBeTruthy();
         }
     });
 
