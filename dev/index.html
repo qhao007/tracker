@@ -582,6 +582,463 @@
             .intro-progress-dots { display: none; }
             .intro-stats-row { flex-wrap: wrap; gap: 20px; }
         }
+
+        /* ========== Wiki Tab Styles (v0.13.0) ========== */
+        .wiki-sub-tabs {
+            display: flex;
+            gap: 5px;
+            padding: 10px 15px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .wiki-tab-btn {
+            padding: 8px 16px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-size: 13px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .wiki-tab-btn:hover {
+            background: #e9ecef;
+        }
+
+        .wiki-tab-btn.active {
+            background: var(--color-primary, #4f46e5);
+            color: white;
+        }
+
+        .wiki-tab-content {
+            padding: 0;
+        }
+
+        .wiki-layout {
+            display: flex;
+            height: calc(100vh - 180px);
+        }
+
+        .wiki-nav-panel {
+            width: 220px;
+            background: white;
+            border-right: 1px solid #ddd;
+            padding: 15px;
+            overflow-y: auto;
+        }
+
+        .wiki-nav-group {
+            margin-bottom: 15px;
+        }
+
+        .wiki-nav-group-title {
+            font-size: 11px;
+            font-weight: bold;
+            color: #666;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            padding-left: 8px;
+        }
+
+        .wiki-nav-item {
+            display: block;
+            padding: 6px 12px;
+            color: #333;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .wiki-nav-item:hover {
+            background: #f5f5f5;
+        }
+
+        .wiki-nav-item.active {
+            background: var(--color-primary-light, #e0e7ff);
+            color: var(--color-primary, #4f46e5);
+        }
+
+        .wiki-main-panel {
+            flex: 1;
+            background: white;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .wiki-page-content {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .wiki-info-panel {
+            width: 200px;
+            background: #f8f9fa;
+            border-left: 1px solid #ddd;
+            padding: 15px;
+            overflow-y: auto;
+        }
+
+        .wiki-info-section {
+            margin-bottom: 20px;
+        }
+
+        .wiki-info-section h4 {
+            font-size: 13px;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .wiki-recent-item {
+            padding: 6px 0;
+            border-bottom: 1px solid #eee;
+            font-size: 12px;
+        }
+
+        .wiki-recent-item:last-child {
+            border-bottom: none;
+        }
+
+        .wiki-recent-date {
+            color: #999;
+            font-size: 11px;
+        }
+
+        /* Wiki 内容样式层 */
+        .wiki-article {
+            padding: 20px;
+        }
+
+        .wiki-article h1 {
+            font-size: 24px;
+            color: var(--primary-color, #2170bb);
+            border-bottom: 2px solid var(--primary-color, #2170bb);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        .wiki-article h2 {
+            font-size: 18px;
+            color: #333;
+            margin-top: 25px;
+            margin-bottom: 10px;
+        }
+
+        .wiki-article h3 {
+            font-size: 15px;
+            color: #555;
+            margin-top: 20px;
+            margin-bottom: 8px;
+        }
+
+        .wiki-article p {
+            line-height: 1.7;
+            margin-bottom: 12px;
+        }
+
+        .wiki-article ul, .wiki-article ol {
+            margin-left: 25px;
+            margin-bottom: 12px;
+        }
+
+        .wiki-article li {
+            line-height: 1.7;
+        }
+
+        .wiki-article pre {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin-bottom: 15px;
+        }
+
+        .wiki-article code {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+
+        .wiki-article .wiki-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+
+        .wiki-article .wiki-table th {
+            background: #f5f5f5;
+            padding: 10px;
+            text-align: left;
+            border: 1px solid #ddd;
+            font-weight: bold;
+        }
+
+        .wiki-article .wiki-table td {
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
+
+        .wiki-article a {
+            color: var(--color-primary, #4f46e5);
+            text-decoration: none;
+        }
+
+        .wiki-article a:hover {
+            text-decoration: underline;
+        }
+
+        /* 加载动画 */
+        .wiki-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #ddd;
+            border-top-color: var(--color-primary, #4f46e5);
+            border-radius: 50%;
+            animation: wiki-spin 0.8s linear infinite;
+        }
+
+        @keyframes wiki-spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .wiki-loading {
+            text-align: center;
+            padding: 60px;
+            color: #666;
+        }
+
+        /* 错误状态 */
+        .wiki-error {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .wiki-error button {
+            margin-top: 15px;
+            padding: 8px 16px;
+            background: var(--color-primary, #4f46e5);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        /* 无内容/待开发状态 */
+        .wiki-empty {
+            text-align: center;
+            padding: 60px;
+            color: #999;
+        }
+        .wiki-coming-soon {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 400px;
+            padding: 40px;
+            text-align: center;
+        }
+        .wiki-coming-soon-icon {
+            font-size: 64px;
+            margin-bottom: 24px;
+            opacity: 0.8;
+        }
+        .wiki-coming-soon-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 12px;
+        }
+        .wiki-coming-soon-desc {
+            font-size: 15px;
+            color: #666;
+            max-width: 400px;
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+        .wiki-coming-soon-hint {
+            font-size: 13px;
+            color: #999;
+            padding: 12px 20px;
+            background: #f5f5f5;
+            border-radius: 6px;
+        }
+
+        /* Wiki 搜索 */
+        .wiki-search-input {
+            width: 100%;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+
+        .wiki-search-results {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .wiki-search-result-item {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+        }
+
+        .wiki-search-result-item:hover {
+            background: #f5f5f5;
+        }
+
+        .wiki-search-result-title {
+            font-weight: bold;
+            color: var(--color-primary, #4f46e5);
+        }
+
+        .wiki-search-result-tags {
+            font-size: 11px;
+            color: #999;
+            margin-top: 4px;
+        }
+
+        /* Wiki 变更历史 */
+        .wiki-changes-filter {
+            margin-bottom: 15px;
+        }
+
+        .wiki-changes-filter button {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            background: white;
+            cursor: pointer;
+            font-size: 12px;
+            margin-right: 5px;
+            border-radius: 4px;
+        }
+
+        .wiki-changes-filter button.active {
+            background: var(--color-primary, #4f46e5);
+            color: white;
+            border-color: var(--color-primary, #4f46e5);
+        }
+
+        .wiki-change-item {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+
+        .wiki-change-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .wiki-change-version {
+            font-weight: bold;
+            color: var(--color-primary, #4f46e5);
+        }
+
+        .wiki-change-date {
+            color: #999;
+            font-size: 12px;
+        }
+
+        .wiki-change-summary {
+            margin-bottom: 10px;
+        }
+
+        .wiki-change-type {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .wiki-change-type.important {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        .wiki-change-type.minor {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+
+        .wiki-change-details {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .wiki-change-details ul {
+            margin: 5px 0 0 20px;
+            padding: 0;
+        }
+
+        /* ========== 右侧边栏洞察链接 ========== */
+        .wiki-highlight-link {
+            display: block;
+            padding: 8px 10px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: transform .1s, box-shadow .1s;
+            text-decoration: none;
+        }
+        .wiki-highlight-link:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        }
+        .wiki-highlight-link.doc { background: #e0f2fe; color: #0369a1; border-left: 3px solid #0ea5e9; }
+        .wiki-highlight-link.rtl { background: #ffedd5; color: #9a3412; border-left: 3px solid #f97316; }
+        .wiki-highlight-link.tb  { background: #dcfce7; color: #166534; border-left: 3px solid #22c55e; }
+        .wiki-highlight-link.hidden { display: none; }
+
+        /* ========== 变更历史 Tab 洞察卡片 ========== */
+        .wiki-highlight-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        .wiki-highlight-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 16px;
+            cursor: pointer;
+            transition: box-shadow .15s, border-color .15s;
+            background: white;
+        }
+        .wiki-highlight-card:hover {
+            border-color: var(--color-primary, #4f46e5);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+        }
+        .wiki-highlight-card.doc { border-top: 4px solid #0ea5e9; }
+        .wiki-highlight-card.rtl { border-top: 4px solid #f97316; }
+        .wiki-highlight-card.tb  { border-top: 4px solid #22c55e; }
+        .wiki-highlight-icon { font-size: 22px; margin-bottom: 8px; }
+        .wiki-highlight-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; color: #111827; }
+        .wiki-highlight-desc  { font-size: 12px; color: #6b7280; line-height: 1.5; }
+        .wiki-highlight-card.hidden { display: none; }
+
+        /* ========== 版本列表中的可点击变更类型标签 ========== */
+        .wiki-change-details a.change-link {
+            color: var(--color-primary, #4f46e5);
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .wiki-change-details a.change-link:hover {
+            color: #3730a3;
+        }
     </style>
     <!-- Chart.js for Progress Charts (v0.8.0) - CDN优先，超时自动切换本地 -->
     <script>
@@ -931,11 +1388,12 @@
             <div class="stat-item"><span class="stat-value" id="statCoverage">0%</span><span class="stat-label">覆盖率</span></div>
         </div>
         <div class="tabs">
-            <button class="tab active" onclick="switchTab('cp', event)">Cover Points</button>
-            <button class="tab" onclick="switchTab('tc', event)">Test Cases</button>
-            <button class="tab" onclick="switchTab('progress', event)">Progress Charts</button>
-            <button class="tab" id="fcTab" onclick="switchTab('fc', event)" style="display: none;">Functional Coverage</button>
-            <button class="tab" id="dashboardTab" onclick="switchTab('dashboard', event)">Dashboard</button>
+            <button class="tab active" onclick="switchTab('cp', event)">🎯 Cover Points</button>
+            <button class="tab" onclick="switchTab('tc', event)">🧪 Test Cases</button>
+            <button class="tab" onclick="switchTab('progress', event)">📊 Progress Charts</button>
+            <button class="tab" id="fcTab" onclick="switchTab('fc', event)" style="display: none;">🔄 Functional Coverage</button>
+            <button class="tab" id="dashboardTab" onclick="switchTab('dashboard', event)">📈 Dashboard</button>
+            <button class="tab" id="wikiTab" onclick="switchTab('wiki', event)" style="display: none;">📚 Wiki</button>
         </div>
         <div id="cpPanel">
             <div class="toolbar">
@@ -1130,6 +1588,51 @@
                 <div id="holes-tab-content">
                     <!-- JS dynamic render -->
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Wiki Panel (v0.13.0) -->
+    <div id="wikiPanel" style="display: none;">
+        <!-- 子导航栏 -->
+        <div class="wiki-sub-tabs" role="tablist">
+            <button class="wiki-tab-btn active" onclick="switchWikiTab('docs', this)">📄 文档</button>
+            <button class="wiki-tab-btn" onclick="switchWikiTab('changes', this)">📊 变更历史</button>
+            <button class="wiki-tab-btn" onclick="switchWikiTab('search', this)">🔍 搜索</button>
+        </div>
+
+        <!-- 三栏布局 -->
+        <div class="wiki-tab-content">
+            <div class="wiki-layout">
+                <!-- 左侧导航 -->
+                <aside class="wiki-nav-panel" id="wikiNavPanel">
+                    <!-- 动态渲染 -->
+                </aside>
+
+                <!-- 中间内容 -->
+                <main class="wiki-main-panel">
+                    <div id="wikiPageContent" class="wiki-page-content">
+                        <!-- 动态加载 -->
+                    </div>
+                </main>
+
+                <!-- 右侧信息栏 -->
+                <aside class="wiki-info-panel">
+                    <!-- 洞察快速入口 -->
+                    <div class="wiki-info-section">
+                        <h4>🔍 变更洞察</h4>
+                        <div id="wikiHighlightLinks">
+                            <a class="wiki-highlight-link doc" onclick="loadWikiPage('changes/doc_change_highlight.html')">📄 文档洞察</a>
+                            <a class="wiki-highlight-link rtl" onclick="loadWikiPage('changes/rtl_change_highlight.html')">🧩 RTL 洞察</a>
+                            <a class="wiki-highlight-link tb" onclick="loadWikiPage('changes/tb_change_highlight.html')">🧪 TB 洞察</a>
+                        </div>
+                    </div>
+                    <!-- 版本历史 -->
+                    <div class="wiki-info-section">
+                        <h4>📢 最近更新</h4>
+                        <div id="wikiRecentChanges"></div>
+                    </div>
+                </aside>
             </div>
         </div>
     </div>
@@ -1740,11 +2243,26 @@
             if (backupBtn) {
                 backupBtn.style.display = isAdmin ? 'inline-block' : 'none';
             }
+
+            // Wiki Tab：登录用户可见，guest 隐藏
+            const wikiTab = document.getElementById('wikiTab');
+            if (wikiTab) {
+                wikiTab.style.display = isGuest ? 'none' : '';
+            }
         }
         
         function updateUIForLoggedOut() {
             document.getElementById('loginHeaderBtn').style.display = 'inline-block';
             document.getElementById('userInfo').style.display = 'none';
+            // v0.13.0: 隐藏 Wiki Tab
+            const wikiTab = document.getElementById('wikiTab');
+            if (wikiTab) {
+                wikiTab.style.display = 'none';
+            }
+            // 如果当前在 Wiki Tab，切换到 CP Tab
+            if (currentTab === 'wiki') {
+                switchTab('cp', null);
+            }
             showLoginModal();
         }
         
@@ -1939,6 +2457,12 @@
                 updateProjectSelector();
                 updateFCTabVisibility();  // v0.11.0: 更新 FC Tab 显示状态
                 await loadData();
+                // v0.13.0: 如果当前在 Wiki Tab，刷新 Wiki 内容
+                if (currentTab === 'wiki') {
+                    currentWikiSlug = null;  // 重置 slug 以强制刷新
+                    wikiIndexData = null;
+                    loadWiki();
+                }
             }
         }
         
@@ -2617,28 +3141,38 @@
         
         function renderProgressChart(data) {
             const ctx = document.getElementById('progressChart').getContext('2d');
-            
+
             // 如果已有图表，先销毁
             if (progressChart) {
                 progressChart.destroy();
             }
-            
+
             // 准备数据
             const planned = data.planned || [];
             const actual = data.actual || [];
-            
+
             // 使用计划曲线的 labels，如果没有则用实际的
             let labels = planned.map(p => p.week);
             if (labels.length === 0) {
                 labels = actual.map(a => a.week);
             }
-            
+
+            // v0.13.0: 构建 week -> coverage 的映射，确保 actual 数据与正确的 week label 对齐
+            const actualCoverageByWeek = {};
+            for (const a of actual) {
+                actualCoverageByWeek[a.week] = a.coverage;
+            }
+
+            // 按计划周的顺序构建 actualData，确保每个点都对齐到正确的 week
+            const actualData = labels.map(label => {
+                return actualCoverageByWeek.hasOwnProperty(label) ? actualCoverageByWeek[label] : null;
+            });
+
             const plannedData = planned.map(p => p.coverage);
-            const actualData = actual.map(a => a.coverage);
-            
+
             // 构建 datasets
             const datasets = [];
-            
+
             // 计划曲线（蓝色虚线）
             if (plannedData.length > 0) {
                 datasets.push({
@@ -2651,16 +3185,19 @@
                     tension: 0.1
                 });
             }
-            
+
             // v0.8.2: 实际曲线（绿色实线）
-            if (actualData.length > 0) {
+            // v0.13.0: 只包含有实际数据的点（排除 null 值）
+            const validActualData = actualData.map((v, i) => v !== null ? v : NaN);
+            if (actual.length > 0) {
                 datasets.push({
                     label: '实际曲线',
-                    data: actualData,
+                    data: validActualData,
                     borderColor: '#28a745',
                     backgroundColor: 'rgba(40, 167, 69, 0.1)',
                     fill: true,
-                    tension: 0.1
+                    tension: 0.1,
+                    spanGaps: true  // 允许断点
                 });
             }
             
@@ -3108,9 +3645,11 @@
             document.getElementById('progressPanel').style.display = tab === 'progress' ? 'block' : 'none';
             document.getElementById('fcPanel').style.display = tab === 'fc' ? 'block' : 'none';
             document.getElementById('dashboard-content').style.display = tab === 'dashboard' ? 'block' : 'none';
+            document.getElementById('wikiPanel').style.display = tab === 'wiki' ? 'block' : 'none';
             if (tab === 'progress') loadProgressChart();
             if (tab === 'fc') loadFC();
             if (tab === 'dashboard' && currentProjectId) initDashboard(currentProjectId);
+            if (tab === 'wiki') loadWiki();
         }
         // 切换版本对话框中的标签页
         function switchVersionTab(tab, event) {
@@ -4218,6 +4757,502 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        // ========== Wiki Functions (v0.13.0) ==========
+        let currentWikiSlug = null;
+        let currentWikiPage = null;
+        let currentWikiTab = 'docs';
+        let wikiIndexData = null;
+
+        // 项目名转 slug
+        function getProjectSlug(projectName) {
+            return projectName
+                .toLowerCase()
+                .trim()
+                .replace(/[^\w\s-]/g, '')      // 移除特殊字符
+                .replace(/[-\s]+/g, '_')       // 空格/连字符转下划线
+                .replace(/^_+|_+$/g, '');      // 移除首尾下划线
+        }
+
+        // 加载 Wiki 内容
+        async function loadWiki() {
+            if (!currentProjectId) {
+                renderWikiNoContent('请先选择项目');
+                return;
+            }
+
+            const project = projects.find(p => p.id === currentProjectId);
+            if (!project) {
+                renderWikiNoContent('项目不存在');
+                return;
+            }
+
+            const slug = getProjectSlug(project.name);
+
+            // 如果 slug 没变且已加载，不重复加载
+            if (slug === currentWikiSlug && wikiIndexData) {
+                return;
+            }
+
+            currentWikiSlug = slug;
+            currentWikiTab = 'docs';
+            renderWikiLoading();
+
+            try {
+                // 加载 Wiki 索引
+                const indexRes = await fetchWithRetry(`/wiki/${slug}/index.json`, 3);
+                if (!indexRes.ok) {
+                    if (indexRes.status === 404) {
+                        // Wiki 不存在
+                        wikiIndexData = null;
+                        renderWikiNoContent('暂无 Wiki 文档');
+                        return;
+                    }
+                    throw new Error('Failed to load wiki index');
+                }
+                wikiIndexData = await indexRes.json();
+                renderWikiNav(wikiIndexData.pages || []);
+
+                // 加载第一页
+                if (wikiIndexData.pages && wikiIndexData.pages.length > 0) {
+                    loadWikiPage(wikiIndexData.pages[0].path);
+                } else {
+                    document.getElementById('wikiPageContent').innerHTML = '<div class="wiki-empty">暂无 Wiki 文档</div>';
+                }
+
+                // 加载变更历史
+                loadWikiChanges();
+
+            } catch (e) {
+                console.error('Wiki load error:', e);
+                renderWikiError(() => loadWiki());
+            }
+        }
+
+        // 加载 Wiki 页面
+        async function loadWikiPage(path) {
+            if (!currentWikiSlug) return;
+
+            currentWikiPage = path;
+            document.getElementById('wikiPageContent').innerHTML = '<div class="wiki-loading"><div class="wiki-spinner"></div><br>加载中...</div>';
+
+            try {
+                const pageRes = await fetchWithRetry(`/wiki/${currentWikiSlug}/pages/${path}`, 3);
+                if (!pageRes.ok) {
+                    if (pageRes.status === 404) {
+                        renderWikiError(() => loadWikiPage(path), '页面不存在');
+                    } else {
+                        throw new Error('Failed to load wiki page');
+                    }
+                    return;
+                }
+                const html = await pageRes.text();
+                renderWikiPageContent(html);
+                updateNavHighlight(path);
+            } catch (e) {
+                console.error('Wiki page load error:', e);
+                renderWikiError(() => loadWikiPage(path));
+            }
+        }
+
+        // 渲染 Wiki 导航（按 category 分组）
+        function renderWikiNav(pages) {
+            const navPanel = document.getElementById('wikiNavPanel');
+            if (!pages || pages.length === 0) {
+                navPanel.innerHTML = '<div class="wiki-empty">暂无导航</div>';
+                return;
+            }
+
+            // 按 category 分组
+            const groups = {};
+            pages.forEach(page => {
+                // 排除 changes 目录下的独立洞察页面，避免出现在文档导航
+                if (page.path.startsWith('changes/') && page.path.endsWith('_change_highlight.html')) {
+                    return;
+                }
+                const category = page.category || 'root';
+                if (!groups[category]) {
+                    groups[category] = [];
+                }
+                groups[category].push(page);
+            });
+
+            // 排序每个分组内的页面
+            Object.values(groups).forEach(pages => {
+                pages.sort((a, b) => (a.order || 0) - (b.order || 0));
+            });
+
+            // 渲染
+            const categoryNames = {
+                'root': '📖 快速开始',
+                'concepts': '💡 核心概念',
+                'guides': '📋 使用指南',
+                'help': '❓ 帮助',
+                'verification': '🔬 验证',
+                'testplans': '📊 测试计划',
+                'default': '📁 其他'
+            };
+
+            let html = '';
+            Object.entries(groups).forEach(([category, categoryPages]) => {
+                const categoryName = categoryNames[category] || categoryNames.default;
+                html += `<div class="wiki-nav-group">
+                    <div class="wiki-nav-group-title">${categoryName}</div>`;
+                categoryPages.forEach(page => {
+                    const isActive = page.path === currentWikiPage ? ' active' : '';
+                    html += `<a class="wiki-nav-item${isActive}" onclick="loadWikiPage('${page.path}')">${page.title}</a>`;
+                });
+                html += '</div>';
+            });
+
+            navPanel.innerHTML = html;
+        }
+
+        // 渲染 Wiki 页面内容
+        function renderWikiPageContent(html) {
+            const container = document.getElementById('wikiPageContent');
+
+            // 清理导入的 HTML：移除 <html>, <head>, <body> 标签和 <style> 标签
+            // 防止外部样式泄漏影响 Tracker 页面布局
+            let cleaned = html
+                .replace(/<\/?(html|head|body)[^>]*>/gi, '')  // 移除 html/head/body 标签
+                .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');  // 移除 style 标签
+
+            // 如果内容被包裹在 <article> 标签内，直接使用
+            // 否则用 wiki-article class 包裹
+            if (/<article[\s>]/i.test(cleaned)) {
+                container.innerHTML = cleaned;
+            } else {
+                container.innerHTML = `<div class="wiki-article">${cleaned}</div>`;
+            }
+
+            // 处理 wikilink 内部链接：点击时调用 loadWikiPage() 而不是直接跳转
+            container.querySelectorAll('a.wikilink').forEach(link => {
+                const href = link.getAttribute('href');
+                if (href && !href.startsWith('http') && !href.startsWith('/')) {
+                    link.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        loadWikiPage(href);
+                    });
+                }
+            });
+        }
+
+        // 更新导航高亮
+        function updateNavHighlight(path) {
+            document.querySelectorAll('.wiki-nav-item').forEach(item => {
+                if (item.getAttribute('onclick') === `loadWikiPage('${path}')`) {
+                    item.classList.add('active');
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+        }
+
+        // 渲染 Wiki 加载中
+        function renderWikiLoading() {
+            document.getElementById('wikiPageContent').innerHTML = '<div class="wiki-loading"><div class="wiki-spinner"></div><br>加载中...</div>';
+        }
+
+        // 渲染 Wiki 错误
+        function renderWikiError(retryFn, message) {
+            const msg = message || '加载失败';
+            document.getElementById('wikiPageContent').innerHTML = `
+                <div class="wiki-error">
+                    <p>${msg}</p>
+                    <button onclick="retryFn()">重试</button>
+                </div>`;
+        }
+
+        // 渲染 Wiki 无内容（待开发状态）
+        function renderWikiNoContent(message) {
+            const title = message || 'Wiki 功能待开发';
+            const isSimpleMessage = !title.includes('Wiki') && !title.includes('项目');
+
+            if (isSimpleMessage) {
+                document.getElementById('wikiPageContent').innerHTML = `<div class="wiki-empty">${message}</div>`;
+            } else {
+                document.getElementById('wikiPageContent').innerHTML = `
+                    <div class="wiki-coming-soon">
+                        <div class="wiki-coming-soon-icon">📝</div>
+                        <div class="wiki-coming-soon-title">${title}</div>
+                        <div class="wiki-coming-soon-desc">
+                            这是项目的 Wiki 文档展示区域。<br>
+                            可以存放项目文档、协议规范、验证环境架构、使用指南、变更历史等技术资料。
+                        </div>
+                        <div class="wiki-coming-soon-hint">
+                            提示：Wiki 文档由项目管理员配置和维护
+                        </div>
+                    </div>`;
+            }
+            document.getElementById('wikiNavPanel').innerHTML = '';
+            document.getElementById('wikiRecentChanges').innerHTML = '';
+        }
+
+        // 加载 Wiki 变更历史
+        async function loadWikiChanges() {
+            if (!currentWikiSlug) return;
+
+            try {
+                const res = await fetch(`/wiki/${currentWikiSlug}/changes_index.json`);
+                if (!res.ok) return;
+                const data = await res.json();
+                renderWikiChanges(data.versions || []);
+            } catch (e) {
+                console.error('Wiki changes load error:', e);
+            }
+        }
+
+        // 渲染 Wiki 变更历史
+        function renderWikiChanges(versions) {
+            const container = document.getElementById('wikiRecentChanges');
+            if (!versions || versions.length === 0) {
+                container.innerHTML = '<div style="color: #999; font-size: 12px;">暂无变更记录</div>';
+                return;
+            }
+
+            // 只显示前5条
+            const recentVersions = versions.slice(0, 5);
+            let html = '';
+            recentVersions.forEach(v => {
+                html += `<div class="wiki-recent-item">
+                    <div class="wiki-recent-date">${v.version} - ${v.date}</div>
+                    <div>${v.summary}</div>
+                </div>`;
+            });
+            container.innerHTML = html;
+
+            // 新增：根据 index.json 判断哪些洞察页面真实存在
+            const hasPage = (path) => wikiIndexData && wikiIndexData.pages.some(p => p.path === path);
+            document.querySelectorAll('#wikiHighlightLinks .wiki-highlight-link').forEach(link => {
+                const onclick = link.getAttribute('onclick') || '';
+                const match = onclick.match(/loadWikiPage\('([^']+)'\)/);
+                if (match && !hasPage(match[1])) {
+                    link.classList.add('hidden');
+                } else {
+                    link.classList.remove('hidden');
+                }
+            });
+        }
+
+        // Wiki 子 Tab 切换
+        function switchWikiTab(tab, btn) {
+            currentWikiTab = tab;
+
+            // 更新按钮状态
+            document.querySelectorAll('.wiki-tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            const navPanel = document.getElementById('wikiNavPanel');
+            const pageContent = document.getElementById('wikiPageContent');
+            const infoPanel = document.querySelector('.wiki-info-panel');
+
+            if (tab === 'docs') {
+                // 文档视图 - 显示导航和内容
+                navPanel.style.display = '';
+                infoPanel.style.display = '';
+                if (wikiIndexData && wikiIndexData.pages && wikiIndexData.pages.length > 0) {
+                    if (!currentWikiPage) {
+                        loadWikiPage(wikiIndexData.pages[0].path);
+                    }
+                } else {
+                    loadWiki();
+                }
+            } else if (tab === 'changes') {
+                // 变更历史视图
+                navPanel.style.display = 'none';
+                infoPanel.style.display = 'none';
+                renderWikiChangesView();
+            } else if (tab === 'search') {
+                // 搜索视图
+                navPanel.style.display = 'none';
+                infoPanel.style.display = 'none';
+                renderWikiSearchView();
+            }
+        }
+
+        // 渲染变更历史视图
+        async function renderWikiChangesView() {
+            const pageContent = document.getElementById('wikiPageContent');
+            pageContent.innerHTML = `
+                <div class="wiki-changes-layout">
+                    <div class="wiki-changes-filter">
+                        <button class="active" onclick="filterChanges('all', this)">全部</button>
+                        <button onclick="filterChanges('important', this)">重要</button>
+                        <button onclick="filterChanges('minor', this)">次要</button>
+                    </div>
+                    <div class="wiki-highlight-cards" id="wikiHighlightCards">
+                        <div class="wiki-highlight-card doc" data-path="changes/doc_change_highlight.html">
+                            <div class="wiki-highlight-icon">📄</div>
+                            <div class="wiki-highlight-title">文档洞察</div>
+                            <div class="wiki-highlight-desc">查看每次迭代对设计文档、测试计划、用户指南的修改与技术说明</div>
+                        </div>
+                        <div class="wiki-highlight-card rtl" data-path="changes/rtl_change_highlight.html">
+                            <div class="wiki-highlight-icon">🧩</div>
+                            <div class="wiki-highlight-title">RTL 洞察</div>
+                            <div class="wiki-highlight-desc">查看每次迭代对 RTL 设计、接口、状态机的修改与影响分析</div>
+                        </div>
+                        <div class="wiki-highlight-card tb" data-path="changes/tb_change_highlight.html">
+                            <div class="wiki-highlight-icon">🧪</div>
+                            <div class="wiki-highlight-title">TB 洞察</div>
+                            <div class="wiki-highlight-desc">查看每次迭代对验证平台、序列、测试用例的修改与新增内容</div>
+                        </div>
+                    </div>
+                    <div id="wikiChangesList"></div>
+                </div>`;
+
+            // 绑定卡片点击事件
+            pageContent.querySelectorAll('.wiki-highlight-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    const path = card.getAttribute('data-path');
+                    if (path) {
+                        // 切回 docs tab 并在主内容区加载该页面（保持左右布局可见）
+                        switchWikiTab('docs', document.querySelector('.wiki-tab-btn'));
+                        loadWikiPage(path);
+                    }
+                });
+            });
+
+            // 新增：根据 index.json 显隐卡片
+            const hasPage = (path) => wikiIndexData && wikiIndexData.pages.some(p => p.path === path);
+            pageContent.querySelectorAll('.wiki-highlight-card').forEach(card => {
+                const path = card.getAttribute('data-path');
+                if (path && !hasPage(path)) {
+                    card.classList.add('hidden');
+                }
+            });
+
+            try {
+                const res = await fetch(`/wiki/${currentWikiSlug}/changes_index.json`);
+                if (!res.ok) throw new Error('Failed to load changes');
+                const data = await res.json();
+                window.wikiChangesData = data.versions || [];
+                renderChangesList(window.wikiChangesData);
+            } catch (e) {
+                pageContent.innerHTML = '<div class="wiki-error">加载失败</div>';
+            }
+        }
+
+        function renderChangesList(versions) {
+            const container = document.getElementById('wikiChangesList');
+            if (!versions || versions.length === 0) {
+                container.innerHTML = '<div class="wiki-empty">暂无变更记录</div>';
+                return;
+            }
+
+            const hasPage = (path) => wikiIndexData && wikiIndexData.pages.some(p => p.path === path);
+
+            let html = '';
+            versions.forEach(v => {
+                const docLink = hasPage('changes/doc_change_highlight.html')
+                    ? `<a class="change-link" onclick="goToWikiPage('changes/doc_change_highlight.html')">📄 文档变更</a>`
+                    : '📄 文档变更';
+                const rtlLink = hasPage('changes/rtl_change_highlight.html')
+                    ? `<a class="change-link" onclick="goToWikiPage('changes/rtl_change_highlight.html')">🧩 RTL 变更</a>`
+                    : '🧩 RTL 变更';
+                const tbLink = hasPage('changes/tb_change_highlight.html')
+                    ? `<a class="change-link" onclick="goToWikiPage('changes/tb_change_highlight.html')">🧪 TB 变更</a>`
+                    : '🧪 TB 变更';
+
+                html += `<div class="wiki-change-item">
+                    <div class="wiki-change-header">
+                        <span class="wiki-change-version">${v.version}</span>
+                        <span class="wiki-change-date">${v.date}</span>
+                    </div>
+                    <div class="wiki-change-summary">
+                        <span class="wiki-change-type ${v.type}">${v.type === 'important' ? '重要' : '次要'}</span>
+                        ${v.summary}
+                    </div>
+                    <div class="wiki-change-details">
+                        ${v.doc_changes && v.doc_changes.length ? `<div>${docLink}: ${v.doc_changes.join(', ')}</div>` : ''}
+                        ${v.rtl_changes && v.rtl_changes.length ? `<div>${rtlLink}: ${v.rtl_changes.join(', ')}</div>` : ''}
+                        ${v.tb_changes && v.tb_changes.length ? `<div>${tbLink}: ${v.tb_changes.join(', ')}</div>` : ''}
+                    </div>
+                </div>`;
+            });
+            container.innerHTML = html;
+        }
+
+        function filterChanges(type, btn) {
+            document.querySelectorAll('.wiki-changes-filter button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            if (type === 'all') {
+                renderChangesList(window.wikiChangesData);
+            } else {
+                const filtered = window.wikiChangesData.filter(v => v.type === type);
+                renderChangesList(filtered);
+            }
+        }
+
+        // 渲染搜索视图
+        function renderWikiSearchView() {
+            const pageContent = document.getElementById('wikiPageContent');
+            pageContent.innerHTML = `
+                <div style="padding: 20px;">
+                    <input type="text" class="wiki-search-input" id="wikiSearchInput"
+                        placeholder="搜索 Wiki..." oninput="searchWiki(this.value)">
+                    <ul class="wiki-search-results" id="wikiSearchResults">
+                        <li class="wiki-empty">输入关键词搜索</li>
+                    </ul>
+                </div>`;
+        }
+
+        // Wiki 搜索
+        function searchWiki(query) {
+            const resultsContainer = document.getElementById('wikiSearchResults');
+            if (!query || query.length < 2) {
+                resultsContainer.innerHTML = '<li class="wiki-empty">输入至少2个字符搜索</li>';
+                return;
+            }
+
+            if (!wikiIndexData || !wikiIndexData.pages) {
+                resultsContainer.innerHTML = '<li class="wiki-empty">无法搜索 - Wiki 数据未加载</li>';
+                return;
+            }
+
+            const q = query.toLowerCase();
+            const results = wikiIndexData.pages.filter(page => {
+                const titleMatch = page.title && page.title.toLowerCase().includes(q);
+                const tagsMatch = page.tags && page.tags.some(tag => tag.toLowerCase().includes(q));
+                return titleMatch || tagsMatch;
+            });
+
+            if (results.length === 0) {
+                resultsContainer.innerHTML = '<li class="wiki-empty">未找到匹配结果</li>';
+                return;
+            }
+
+            let html = '';
+            results.forEach(r => {
+                const tagsHtml = r.tags && r.tags.length ?
+                    `<div class="wiki-search-result-tags">标签: ${r.tags.join(', ')}</div>` : '';
+                html += `<li class="wiki-search-result-item" onclick="goToWikiPage('${r.path}')">
+                    <div class="wiki-search-result-title">${r.title}</div>
+                    ${tagsHtml}
+                </li>`;
+            });
+            resultsContainer.innerHTML = html;
+        }
+
+        // 跳转到 Wiki 页面（从搜索结果）
+        function goToWikiPage(path) {
+            switchWikiTab('docs', document.querySelector('.wiki-tab-btn'));
+            loadWikiPage(path);
+        }
+
+        // 带重试的 fetch
+        async function fetchWithRetry(url, retries) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const res = await fetch(url);
+                    return res;
+                } catch (e) {
+                    if (i === retries - 1) throw e;
+                    await new Promise(r => setTimeout(r, 500));
+                }
+            }
         }
     </script>
     <!-- Dashboard Module (v0.11.0) -->

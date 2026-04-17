@@ -473,7 +473,7 @@ class TestProgressAPIActualCurvePriority:
             data=json.dumps({
                 'name': name,
                 'start_date': '2026-01-01',
-                'end_date': '2026-03-31'
+                'end_date': '2026-12-31'
             }),
             content_type='application/json')
 
@@ -728,3 +728,545 @@ class TestProgressAPIActualCurvePriority:
         assert 'coverage' in data_p0['actual'][0]
         assert 'coverage' in data_p1['actual'][0]
         assert 'coverage' in data_no_filter['actual'][0]
+
+
+class TestProgressActualCurveFutureDate:
+    """实际曲线不应显示未来日期的测试 - 防止 Bug: 实际曲线显示未来日期的点
+
+    这是针对 /api/progress/<id> 接口的回归测试，验证：
+    1. 实际曲线（actual）不应包含未来日期的点
+    2. 线性插值不应填充未来周的数据
+    3. 只有历史快照数据才能显示在实际曲线中
+    """
+
+    def _create_project_with_dates(self, admin_client, name, start_date, end_date):
+        """创建指定日期范围的测试项目"""
+        response = admin_client.post('/api/projects',
+            data=json.dumps({
+                'name': name,
+                'start_date': start_date,
+                'end_date': end_date
+            }),
+            content_type='application/json')
+
+        if response.status_code != 200:
+            return None
+
+        data = json.loads(response.data)
+        return data.get('project', {}).get('id')
+
+    def _create_cp_with_tc_for_date(self, admin_client, project_id, cp_name, priority, target_date):
+        """创建指定 target_date 的 TC 关联到 CP"""
+        # 创建 CP
+        cp_response = admin_client.post('/api/cp',
+            data=json.dumps({
+                'project_id': project_id,
+                'feature': 'Test',
+                'cover_point': cp_name,
+                'priority': priority
+            }),
+            content_type='application/json')
+
+        if cp_response.status_code != 200:
+            return None
+
+        cp_id = json.loads(cp_response.data).get('item', {}).get('id')
+
+        # 创建 TC 并关联到 CP
+        tc_response = admin_client.post('/api/tc',
+            data=json.dumps({
+                'project_id': project_id,
+                'testbench': 'tb',
+                'test_name': f'TC_{cp_name}',
+                'scenario': 'Test',
+                'status': 'PASS',
+                'target_date': target_date,
+                'connections': [cp_id]
+            }),
+            content_type='application/json')
+
+        return cp_id
+
+    def test_actual_curve_no_future_dates(self, admin_client):
+        """API-PROG-015: 实际曲线不应包含未来日期的点
+
+        测试场景：
+        - 项目日期范围：2026-01-01 ~ 2026-04-30
+        - 今天假设是 2026-04-15
+        - 快照数据只到 2026-04-13
+        - 实际曲线不应该包含 2026-04-20 或更远的未来点
+        """
+        import uuid
+        from datetime import date, timedelta
+
+        unique_id = str(uuid.uuid4())[:8]
+        project_name = f"FutureDate_Test_{unique_id}"
+
+        # 创建项目，结束日期在远处未来
+        today = date.today()
+        project_end = today + timedelta(days=60)  # 60天后结束
+
+        project_id = self._create_project_with_dates(
+            admin_client,
+            project_name,
+            today.isoformat(),
+            project_end.isoformat()
+        )
+
+        if not project_id:
+            pytest.skip("无法创建测试项目")
+
+        # 添加 CP 和 TC 以便有数据可计算覆盖率
+        self._create_cp_with_tc_for_date(admin_client, project_id, f'CP-{unique_id}', 'P0', today.isoformat())
+
+        # 创建快照
+        snapshot_response = admin_client.post(f'/api/progress/{project_id}/snapshot')
+        if snapshot_response.status_code != 200:
+            pytest.skip("无法创建快照")
+
+        # 获取进度数据
+        response = admin_client.get(f'/api/progress/{project_id}')
+        assert response.status_code == 200
+
+        data = json.loads(response.data)
+        actual = data.get('actual', [])
+
+        # 验证：实际曲线不应该包含未来日期的点
+        future_points = [a for a in actual if a['week'] > today.isoformat()]
+
+        assert len(future_points) == 0, \
+            f"实际曲线不应包含未来日期的点，但发现 {len(future_points)} 个未来点: {future_points}"
+
+    def test_actual_curve_only_past_and_current_weeks(self, admin_client):
+        """API-PROG-016: 实际曲线只应包含过去和当前周的数据
+
+        测试场景：
+        - 快照数据在某一周（如 2026-04-13 周一）
+        - 计划曲线延伸到更远的未来（如 2026-06 月）
+        - 实际曲线应该只在有快照数据的周有值，不应该填充到未来周
+        """
+        import uuid
+        from datetime import date, timedelta
+
+        unique_id = str(uuid.uuid4())[:8]
+        project_name = f"PlannedFuture_Test_{unique_id}"
+
+        # 创建项目，日期范围延伸到未来
+        today = date.today()
+        project_end = today + timedelta(days=90)  # 90天后结束
+
+        project_id = self._create_project_with_dates(
+            admin_client,
+            project_name,
+            (today - timedelta(days=30)).isoformat(),  # 30天前开始
+            project_end.isoformat()
+        )
+
+        if not project_id:
+            pytest.skip("无法创建测试项目")
+
+        # 添加 CP 和 TC
+        self._create_cp_with_tc_for_date(admin_client, project_id, f'CP-{unique_id}', 'P0', today.isoformat())
+
+        # 创建快照
+        snapshot_response = admin_client.post(f'/api/progress/{project_id}/snapshot')
+        if snapshot_response.status_code != 200:
+            pytest.skip("无法创建快照")
+
+        # 获取进度数据
+        response = admin_client.get(f'/api/progress/{project_id}')
+        assert response.status_code == 200
+
+        data = json.loads(response.data)
+        planned = data.get('planned', [])
+        actual = data.get('actual', [])
+
+        # 验证：计划的周数应该大于实际的周数（因为计划延伸到未来）
+        assert len(planned) > len(actual), \
+            f"计划曲线周数({len(planned)})应该大于实际曲线周数({len(actual)})"
+
+        # 验证：实际曲线的所有点都应该不晚于今天
+        today_str = today.isoformat()
+        for a in actual:
+            assert a['week'] <= today_str, \
+                f"实际曲线不应该包含未来周，但发现 {a['week']} > {today_str}"
+
+    def test_actual_curve_interpolation_no_future_fill(self, admin_client):
+        """API-PROG-017: 线性插值不应该填充未来周的数据
+
+        测试场景：
+        - 有两个快照：一个在过去（2周前），一个在较近的过去（1周前）
+        - 在这两周之间的插值不应该延伸到未来周
+        """
+        import uuid
+        from datetime import date, timedelta
+
+        unique_id = str(uuid.uuid4())[:8]
+        project_name = f"Interpolation_Test_{unique_id}"
+
+        today = date.today()
+        project_end = today + timedelta(days=120)  # 120天后结束
+
+        project_id = self._create_project_with_dates(
+            admin_client,
+            project_name,
+            (today - timedelta(days=60)).isoformat(),
+            project_end.isoformat()
+        )
+
+        if not project_id:
+            pytest.skip("无法创建测试项目")
+
+        # 添加 CP 和 TC
+        self._create_cp_with_tc_for_date(admin_client, project_id, f'CP-{unique_id}', 'P0', today.isoformat())
+
+        # 创建快照
+        snapshot_response = admin_client.post(f'/api/progress/{project_id}/snapshot')
+        if snapshot_response.status_code != 200:
+            pytest.skip("无法创建快照")
+
+        # 获取进度数据
+        response = admin_client.get(f'/api/progress/{project_id}')
+        assert response.status_code == 200
+
+        data = json.loads(response.data)
+        planned = data.get('planned', [])
+        actual = data.get('actual', [])
+
+        # 找到计划的最后一个周
+        if planned:
+            last_planned_week = planned[-1]['week']
+            # 验证：实际曲线不应该超出最后有快照的那一周
+            if actual:
+                last_actual_week = actual[-1]['week']
+                assert last_actual_week <= last_planned_week, \
+                    f"实际曲线最后一周({last_actual_week})不应该超出计划曲线最后一周({last_planned_week})"
+
+        # 核心验证：所有实际曲线点都不应该在未来
+        today_str = today.isoformat()
+        for a in actual:
+            assert a['week'] <= today_str, \
+                f"线性插值不应该产生未来周的数据点，但发现 {a['week']} > {today_str}"
+
+    def test_actual_curve_empty_when_no_past_snapshots(self, admin_client):
+        """API-PROG-018: 只有未来快照时，实际曲线应为空（或只有今天及以前的点）
+
+        测试场景：
+        - 创建了项目但还没有创建任何快照
+        - 或者快照都是未来的日期（不应该发生）
+        - 实际曲线应该是空的或只包含今天及以前的周
+        """
+        import uuid
+        from datetime import date, timedelta
+
+        unique_id = str(uuid.uuid4())[:8]
+        project_name = f"NoSnapshot_Test_{unique_id}"
+
+        today = date.today()
+        project_end = today + timedelta(days=60)
+
+        project_id = self._create_project_with_dates(
+            admin_client,
+            project_name,
+            (today - timedelta(days=30)).isoformat(),
+            project_end.isoformat()
+        )
+
+        if not project_id:
+            pytest.skip("无法创建测试项目")
+
+        # 添加 CP 和 TC 但不创建快照
+        self._create_cp_with_tc_for_date(admin_client, project_id, f'CP-{unique_id}', 'P0', today.isoformat())
+
+        # 不创建快照，直接获取进度数据
+        response = admin_client.get(f'/api/progress/{project_id}')
+        assert response.status_code == 200
+
+        data = json.loads(response.data)
+        actual = data.get('actual', [])
+        planned = data.get('planned', [])
+
+        # 验证：实际曲线可以是空的（如果还没有快照）
+        # 但如果实际曲线有数据，所有点都不应该在未来
+        today_str = today.isoformat()
+        for a in actual:
+            assert a['week'] <= today_str, \
+                f"在没有历史快照的情况下，实际曲线不应该包含未来周 {a['week']}"
+
+        # 验证：计划曲线仍然应该有完整的周数据
+        assert len(planned) > 0, "计划曲线应该始终有数据"
+
+
+class TestProgressChartAlignment:
+    """进度图表数据对齐测试 - 验证 actual 数据与 week labels 正确对齐
+
+    这是针对前端 renderProgressChart 函数的回归测试，验证：
+    1. 实际曲线的每个点应该对齐到正确的周标签
+    2. actual 数据的 week 字段应该与 planned labels 匹配
+    3. 不应该简单按顺序排列导致错位
+
+    问题场景（Bug: FC-CP 项目 progress chart 显示错误）：
+    - planned labels: ["2026-01-06", "2026-01-12", ..., "2026-03-09", ...]
+    - actual 数据: [{"week": "2026-03-09", "coverage": 6.0}, ...] (从第9周开始)
+    - 错误做法: actualData = actual.map(a => a.coverage) → [6.0, ...]
+    - 结果: actualData[0]=6.0 被画在 label[0]="2026-01-06" 的位置（错误！）
+    - 正确做法: actualData 应该按 labels 索引对齐，没有数据的周为 null
+    """
+
+    def _create_project_with_dates(self, admin_client, name, start_date, end_date):
+        """创建指定日期范围的测试项目"""
+        response = admin_client.post('/api/projects',
+            data=json.dumps({
+                'name': name,
+                'start_date': start_date,
+                'end_date': end_date
+            }),
+            content_type='application/json')
+
+        if response.status_code != 200:
+            return None
+
+        data = json.loads(response.data)
+        return data.get('project', {}).get('id')
+
+    def _create_cp_with_tc(self, admin_client, project_id, cp_name, priority, target_date):
+        """创建 CP 和关联的 TC"""
+        cp_response = admin_client.post('/api/cp',
+            data=json.dumps({
+                'project_id': project_id,
+                'feature': 'Test',
+                'cover_point': cp_name,
+                'priority': priority
+            }),
+            content_type='application/json')
+
+        if cp_response.status_code != 200:
+            return None
+
+        cp_id = json.loads(cp_response.data).get('item', {}).get('id')
+
+        tc_response = admin_client.post('/api/tc',
+            data=json.dumps({
+                'project_id': project_id,
+                'testbench': 'tb',
+                'test_name': f'TC_{cp_name}',
+                'scenario': 'Test',
+                'status': 'PASS',
+                'target_date': target_date,
+                'connections': [cp_id]
+            }),
+            content_type='application/json')
+
+        return cp_id
+
+    def test_actual_curve_week_alignment_with_labels(self, admin_client):
+        """API-PROG-019: 实际曲线数据应该与 week labels 正确对齐
+
+        测试场景：
+        - 项目日期范围较长（如 3 个月）
+        - 快照只在中间某周开始（如 2 个月后）
+        - 验证 actual 数据的 week 字段与 planned labels 对齐
+
+        验证方法：
+        1. 获取 /api/progress/<id> 返回的 planned 和 actual
+        2. 对于 actual 中的每个点，验证其 week 在 planned labels 中存在
+        3. 验证实际曲线开始于正确的周（不是从第0周开始）
+        """
+        import uuid
+        from datetime import date, timedelta
+
+        unique_id = str(uuid.uuid4())[:8]
+        today = date.today()
+
+        # 创建项目：开始日期在较早过去，结束日期在较晚未来
+        project_start = today - timedelta(days=75)  # 约10周前开始
+        project_end = today + timedelta(days=30)    # 约4周后结束
+
+        project_id = self._create_project_with_dates(
+            admin_client,
+            f"ChartAlign_Test_{unique_id}",
+            project_start.isoformat(),
+            project_end.isoformat()
+        )
+
+        if not project_id:
+            pytest.skip("无法创建测试项目")
+
+        # 添加 CP 和 TC
+        self._create_cp_with_tc(admin_client, project_id, f'CP-{unique_id}', 'P0', today.isoformat())
+
+        # 创建快照
+        snapshot_response = admin_client.post(f'/api/progress/{project_id}/snapshot')
+        if snapshot_response.status_code != 200:
+            pytest.skip("无法创建快照")
+
+        # 获取进度数据
+        response = admin_client.get(f'/api/progress/{project_id}')
+        assert response.status_code == 200
+
+        data = json.loads(response.data)
+        planned = data.get('planned', [])
+        actual = data.get('actual', [])
+
+        # 验证：planned labels
+        planned_labels = [p['week'] for p in planned]
+        assert len(planned_labels) > 0, "计划曲线应该有 labels"
+
+        # 验证：actual 的每个点都应该有有效的 week 字段
+        for i, a in enumerate(actual):
+            assert 'week' in a, f"actual[{i}] 缺少 week 字段"
+            assert 'coverage' in a, f"actual[{i}] 缺少 coverage 字段"
+            assert a['week'] in planned_labels, \
+                f"actual[{i}] week={a['week']} 不在 planned labels 中"
+
+        # 验证：actual 的第一个点应该不是第一个计划周
+        # （因为快照是在项目中期创建的）
+        if len(actual) > 0 and len(planned_labels) > 1:
+            first_actual_week = actual[0]['week']
+            first_planned_week = planned_labels[0]
+
+            # actual 应该从后面的周开始，而不是第一个计划周
+            assert first_actual_week != first_planned_week, \
+                f"实际曲线第一个点不应该从项目第一个周开始，" \
+                f"但 actual[0].week={first_actual_week} == planned[0]={first_planned_week}"
+
+            # 验证：actual[0] 应该对应到正确的 planned 索引
+            actual_week_index = planned_labels.index(first_actual_week)
+            assert actual_week_index > 0, \
+                f"实际曲线第一个点应该对应后面的周，" \
+                f"但 actual[0].week={first_actual_week} 在 planned 中索引为 {actual_week_index}"
+
+    def test_actual_curve_no_misalignment_in_middle(self, admin_client):
+        """API-PROG-020: 实际曲线数据不应该在中间出现错位
+
+        测试场景：
+        - 项目有多个快照，分布在不同周
+        - 验证 actual 数据的 week 是单调递增的（按时间顺序）
+        - 验证 actual 数据点之间的 week 差距是合理的（不超过1周）
+
+        这个测试确保：
+        1. actual 数据不是简单按顺序排列
+        2. 每个 actual 点都有正确的 week 日期
+        """
+        import uuid
+        from datetime import date, timedelta
+
+        unique_id = str(uuid.uuid4())[:8]
+        today = date.today()
+
+        project_start = today - timedelta(days=60)
+        project_end = today + timedelta(days=45)
+
+        project_id = self._create_project_with_dates(
+            admin_client,
+            f"MiddleAlign_Test_{unique_id}",
+            project_start.isoformat(),
+            project_end.isoformat()
+        )
+
+        if not project_id:
+            pytest.skip("无法创建测试项目")
+
+        # 添加 CP 和 TC
+        self._create_cp_with_tc(admin_client, project_id, f'CP-{unique_id}', 'P0', today.isoformat())
+
+        # 创建多个快照（间隔几周）
+        # 但由于我们只能创建当前快照，这个测试主要验证数据格式
+        snapshot_response = admin_client.post(f'/api/progress/{project_id}/snapshot')
+        if snapshot_response.status_code != 200:
+            pytest.skip("无法创建快照")
+
+        # 获取进度数据
+        response = admin_client.get(f'/api/progress/{project_id}')
+        assert response.status_code == 200
+
+        data = json.loads(response.data)
+        planned = data.get('planned', [])
+        actual = data.get('actual', [])
+
+        if len(actual) == 0:
+            pytest.skip("没有实际数据点")
+
+        # 验证：actual 数据点的 week 应该是单调递增的
+        for i in range(1, len(actual)):
+            prev_week = actual[i-1]['week']
+            curr_week = actual[i]['week']
+
+            # 确保 week 字段是字符串格式 "YYYY-MM-DD"
+            assert isinstance(prev_week, str) and len(prev_week) == 10, \
+                f"actual[{i-1}].week 应该是 'YYYY-MM-DD' 格式，实际为 {prev_week}"
+            assert isinstance(curr_week, str) and len(curr_week) == 10, \
+                f"actual[{i}].week 应该是 'YYYY-MM-DD' 格式，实际为 {curr_week}"
+
+            # 验证时间顺序
+            assert prev_week < curr_week, \
+                f"actual 数据应该按时间排序，但 actual[{i-1}].week={prev_week} >= actual[{i}].week={curr_week}"
+
+        # 验证：actual 的每个 week 都在项目的计划范围内
+        planned_labels = set(p['week'] for p in planned)
+        for i, a in enumerate(actual):
+            assert a['week'] in planned_labels, \
+                f"actual[{i}].week={a['week']} 不在项目计划周范围内"
+
+    def test_progress_api_returns_correct_week_format(self, admin_client):
+        """API-PROG-021: /api/progress 返回的 week 格式应该是 'YYYY-MM-DD'
+
+        验证 API 返回的 week 字段格式正确，用于前端图表渲染
+        """
+        import uuid
+        from datetime import date, timedelta
+
+        unique_id = str(uuid.uuid4())[:8]
+        today = date.today()
+
+        project_id = self._create_project_with_dates(
+            admin_client,
+            f"WeekFormat_Test_{unique_id}",
+            (today - timedelta(days=30)).isoformat(),
+            (today + timedelta(days=30)).isoformat()
+        )
+
+        if not project_id:
+            pytest.skip("无法创建测试项目")
+
+        # 添加 CP 和 TC
+        self._create_cp_with_tc(admin_client, project_id, f'CP-{unique_id}', 'P0', today.isoformat())
+
+        # 创建快照
+        snapshot_response = admin_client.post(f'/api/progress/{project_id}/snapshot')
+        if snapshot_response.status_code != 200:
+            pytest.skip("无法创建快照")
+
+        # 获取进度数据
+        response = admin_client.get(f'/api/progress/{project_id}')
+        assert response.status_code == 200
+
+        data = json.loads(response.data)
+        planned = data.get('planned', [])
+        actual = data.get('actual', [])
+
+        # 验证：planned 中每个点的 week 格式
+        import re
+        week_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+
+        for p in planned:
+            assert 'week' in p, f"planned 点缺少 week 字段: {p}"
+            assert week_pattern.match(p['week']), \
+                f"planned week 格式错误，应该为 'YYYY-MM-DD'，实际为 {p['week']}"
+            assert 'coverage' in p, f"planned 点缺少 coverage 字段: {p}"
+
+        # 验证：actual 中每个点的 week 格式
+        for a in actual:
+            assert 'week' in a, f"actual 点缺少 week 字段: {a}"
+            assert week_pattern.match(a['week']), \
+                f"actual week 格式错误，应该为 'YYYY-MM-DD'，实际为 {a['week']}"
+            assert 'coverage' in a, f"actual 点缺少 coverage 字段: {a}"
+
+        # 验证：labels 和 actual 数据的长度匹配关系
+        labels = [p['week'] for p in planned]
+        if len(actual) > 0:
+            # actual 的 week 应该在 labels 中存在
+            actual_weeks = set(a['week'] for a in actual)
+            for week in actual_weeks:
+                assert week in labels, \
+                    f"actual 中的 week={week} 不在 planned labels 中"

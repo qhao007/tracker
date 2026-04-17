@@ -3,6 +3,7 @@ Tracker Flask 应用 - v0.7.1 用户认证版本
 """
 from flask import Flask, g, request, session
 from .api import api
+from .wiki import wiki
 import os
 import secrets
 import time
@@ -100,6 +101,7 @@ def create_app(testing=False):
 
     # 注册蓝图
     app.register_blueprint(api, url_prefix='/')
+    app.register_blueprint(wiki, url_prefix='/')
 
     # 手动添加 /manual 路由（因为模板在 base_dir）
     from flask import render_template, send_from_directory, render_template_string

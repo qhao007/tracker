@@ -9,6 +9,8 @@ import pytest
 import sys
 import os
 import time
+import sqlite3
+import datetime
 
 # 确保导入路径正确
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -545,6 +547,173 @@ class TestDashboardStatsV012:
         overview = data['data']['overview']
         assert overview['total_cp'] >= 0
         assert overview['coverage_rate'] >= 0
+
+
+class TestDashboardStatsWeekChange:
+    """API-DASH-014~016: 测试 week_change = 实时值 - 最新快照值"""
+
+    TEST_PROJECT_ID = 3  # SOC_DV
+    # SOC_DV 数据库路径
+    DB_PATH = '/projects/management/tracker/dev/data/SOC_DV.db'
+
+    def _get_db_path(self):
+        """获取测试项目数据库路径"""
+        return self.DB_PATH
+
+    def _insert_snapshot_with_known_values(self, cp_covered, cp_total, tc_pass_count, tc_total):
+        """插入一个已知值的快照，用于测试 week_change 计算"""
+        conn = sqlite3.connect(self._get_db_path())
+        cursor = conn.cursor()
+        today = datetime.date.today().isoformat()
+        # 清除当天的旧快照，避免 unique constraint
+        cursor.execute(
+            "DELETE FROM project_progress WHERE project_id = ? AND snapshot_date = ?",
+            (self.TEST_PROJECT_ID, today)
+        )
+        cursor.execute("""
+            INSERT INTO project_progress (
+                project_id, snapshot_date, actual_coverage,
+                p0_coverage, p1_coverage, p2_coverage, p3_coverage,
+                tc_pass_count, tc_total, cp_covered, cp_total, progress_data
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            self.TEST_PROJECT_ID, today, 0.0,
+            0, 0, 0, 0,
+            tc_pass_count, tc_total, cp_covered, cp_total, '{}'
+        ))
+        conn.commit()
+        conn.close()
+
+    def _update_tc_status(self, delta_pass):
+        """通过修改 TC 状态来改变实时 covered_cp（间接方式）
+        注意: covered_cp 是有 PASS TC 的 CP 数量，需要操作关联关系
+        这里改 tc_pass_count 来间接验证 tc_pass_rate 的 week_change
+        """
+        conn = sqlite3.connect(self._get_db_path())
+        cursor = conn.cursor()
+        # 获取当前 PASS 数量的 TC id
+        cursor.execute(
+            "SELECT id FROM test_case WHERE project_id = ? AND status = 'PASS' LIMIT ?",
+            (self.TEST_PROJECT_ID, delta_pass)
+        )
+        # 把一些 TC 改成 PASS（假设有可改的 TC）
+        cursor.execute(
+            "UPDATE test_case SET status = 'PASS' WHERE project_id = ? AND status != 'PASS' LIMIT ?",
+            (self.TEST_PROJECT_ID, delta_pass)
+        )
+        conn.commit()
+        affected = cursor.rowcount
+        conn.close()
+        return affected
+
+    def test_week_change_covered_cp_is_realtime_minus_snapshot(self, admin_client):
+        """API-DASH-014: week_change.covered_cp = 实时 covered_cp - 快照 cp_covered
+
+        步骤:
+        1. 插入快照 cp_covered=10
+        2. 验证实时 covered_cp
+        3. 调用 API，确认 week_change.covered_cp = 实时 - 10
+        """
+        # 先获取实时数据，确定当前 covered_cp
+        response = admin_client.get(f'/api/dashboard/stats?project_id={self.TEST_PROJECT_ID}')
+        data = json.loads(response.data)
+        real_covered_cp = data['data']['overview']['covered_cp']
+        real_total_cp = data['data']['overview']['total_cp']
+
+        # 快照值设为比实时少2
+        snapshot_covered_cp = max(0, real_covered_cp - 2)
+        self._insert_snapshot_with_known_values(
+            cp_covered=snapshot_covered_cp,
+            cp_total=real_total_cp,
+            tc_pass_count=0,
+            tc_total=1
+        )
+
+        # 再次调用 API
+        response = admin_client.get(f'/api/dashboard/stats?project_id={self.TEST_PROJECT_ID}')
+        data = json.loads(response.data)
+        week_change = data['data']['overview']['week_change']
+
+        # 验证: week_change.covered_cp = 实时 - 快照
+        expected = real_covered_cp - snapshot_covered_cp
+        assert week_change['covered_cp'] == expected, \
+            f"week_change.covered_cp 应为 {expected}，实际为 {week_change['covered_cp']}"
+
+    def test_week_change_tc_pass_rate_is_realtime_minus_snapshot(self, admin_client):
+        """API-DASH-015: week_change.tc_pass_rate = 实时 tc_pass_rate - 快照 tc_pass_rate
+
+        步骤:
+        1. 插入快照 tc_pass_rate=60%
+        2. 调用 API，确认 week_change.tc_pass_rate = 实时 - 60
+        """
+        # 先获取实时数据
+        response = admin_client.get(f'/api/dashboard/stats?project_id={self.TEST_PROJECT_ID}')
+        data = json.loads(response.data)
+        real_tc_pass = data['data']['overview']['tc_pass']
+        real_tc_total = data['data']['overview']['tc_total']
+
+        # 快照值: tc_pass=6, tc_total=10 => 60%
+        snapshot_tc_pass = 6
+        snapshot_tc_total = 10
+        self._insert_snapshot_with_known_values(
+            cp_covered=0,
+            cp_total=1,
+            tc_pass_count=snapshot_tc_pass,
+            tc_total=snapshot_tc_total
+        )
+
+        # 再次调用 API
+        response = admin_client.get(f'/api/dashboard/stats?project_id={self.TEST_PROJECT_ID}')
+        data = json.loads(response.data)
+        week_change = data['data']['overview']['week_change']
+
+        # 实时 tc_pass_rate
+        real_rate = round((real_tc_pass / real_tc_total * 100), 1) if real_tc_total > 0 else 0
+        snapshot_rate = round((snapshot_tc_pass / snapshot_tc_total * 100), 1)
+        expected = round(real_rate - snapshot_rate, 1)
+
+        assert week_change['tc_pass_rate'] == expected, \
+            f"week_change.tc_pass_rate 应为 {expected}，实际为 {week_change['tc_pass_rate']}"
+
+    def test_week_change_none_when_no_snapshot(self, admin_client):
+        """API-DASH-016: 无快照时 week_change 各项为 None"""
+        # 找一个没有快照的项目，或者临时删除项目3的快照再恢复
+        conn = sqlite3.connect(self._get_db_path())
+        cursor = conn.cursor()
+        # 临时备份项目3的快照
+        cursor.execute("SELECT * FROM project_progress WHERE project_id = ?", (self.TEST_PROJECT_ID,))
+        original_snapshots = cursor.fetchall()
+        # 删除所有快照
+        cursor.execute("DELETE FROM project_progress WHERE project_id = ?", (self.TEST_PROJECT_ID,))
+        conn.commit()
+        conn.close()
+
+        try:
+            response = admin_client.get(f'/api/dashboard/stats?project_id={self.TEST_PROJECT_ID}')
+            data = json.loads(response.data)
+            week_change = data['data']['overview']['week_change']
+            assert week_change['covered_cp'] is None
+            assert week_change['tc_pass_rate'] is None
+            assert week_change['unlinked_cp'] is None
+        finally:
+            # 恢复快照
+            if original_snapshots:
+                conn = sqlite3.connect(self._get_db_path())
+                cursor = conn.cursor()
+                for snap in original_snapshots:
+                    cursor.execute("""
+                        INSERT INTO project_progress (
+                            project_id, snapshot_date, actual_coverage,
+                            p0_coverage, p1_coverage, p2_coverage, p3_coverage,
+                            tc_pass_count, tc_total, cp_covered, cp_total, progress_data
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        snap[1], snap[2], snap[3],
+                        snap[4], snap[5], snap[6], snap[7],
+                        snap[8], snap[9], snap[10], snap[11], snap[12]
+                    ))
+                conn.commit()
+                conn.close()
 
 
 # ============ 运行测试 ============

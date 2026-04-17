@@ -325,3 +325,53 @@ class TestProjectModeBoundary:
         # 清理
         project_id = project['id']
         admin_client.delete(f"/api/projects/{project_id}")
+
+
+class TestProjectDatabaseSchema:
+    """测试项目数据库 schema 创建 - v0.12.0"""
+
+    def test_new_project_creates_required_tables(self, admin_client):
+        """API-SCHEMA-001: 新建项目时创建 project_progress 和 tracker_version 表"""
+        name = f"Schema_Test_{int(time.time())}"
+
+        # 创建项目
+        response = admin_client.post('/api/projects',
+            data=json.dumps({
+                'name': name,
+                'start_date': '2026-01-01',
+                'end_date': '2026-12-31'
+            }),
+            content_type='application/json')
+
+        assert response.status_code == 200
+        result = json.loads(response.data)
+        project_id = result['project']['id']
+
+        try:
+            # 直接检查数据库表结构
+            import sqlite3
+            from app.api import get_db_path
+
+            db_path = get_db_path(name)
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+
+            # 验证 project_progress 表存在
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='project_progress'")
+            assert cursor.fetchone() is not None, "project_progress 表未创建"
+
+            # 验证 tracker_version 表存在
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='tracker_version'")
+            assert cursor.fetchone() is not None, "tracker_version 表未创建"
+
+            # 验证 tracker_version 表有版本记录
+            cursor.execute("SELECT version FROM tracker_version")
+            version_row = cursor.fetchone()
+            assert version_row is not None, "tracker_version 表无版本记录"
+            assert version_row[0] is not None, "tracker_version 版本为空"
+
+            conn.close()
+
+        finally:
+            # 清理
+            admin_client.delete(f"/api/projects/{project_id}")

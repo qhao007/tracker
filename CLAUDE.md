@@ -34,10 +34,11 @@ cd /projects/management/tracker/dev && ./start_server_test.sh
 ```
 
 **测试服务器管理**:
-- 使用 `./start_server_test.sh` 启动测试服务器（8081 端口）
-- 测试服务器使用 gunicorn 运行，修改代码后需要重启:
+- **必须使用 `./start_server_test.sh` 启动测试服务器（8081 端口）**
+- **禁止直接使用 `gunicorn` 命令启动**，因为日志路径权限问题会导致启动失败
+- 修改代码后需要重启:
   ```bash
-  pkill -9 gunicorn && gunicorn -w 2 -b 0.0.0.0:8081 'app:create_app()' --daemon
+  ./start_server_test.sh
   ```
 
 ### 测试
@@ -49,10 +50,10 @@ cd /projects/management/tracker/dev && ./start_server_test.sh
 cd /projects/management/tracker/dev && PYTHONPATH=. pytest tests/test_api/ -v
 
 # UI 冒烟测试 (需先设置环境变量)
-cd /projects/management/tracker/dev && HOME=/root XDG_RUNTIME_DIR=/tmp npx playwright test tests/test_ui/specs/smoke/ --project=firefox
+cd /projects/management/tracker/dev && PLAYWRIGHT_BROWSERS_PATH=/projects/management/tracker/dev/.playwright-browsers HOME=/tmp XDG_RUNTIME_DIR=/tmp XDG_CONFIG_HOME=/tmp/xdg npx playwright test tests/test_ui/specs/smoke/ --project=firefox
 
 # UI 集成测试
-cd /projects/management/tracker/dev && HOME=/root XDG_RUNTIME_DIR=/tmp npx playwright test tests/test_ui/specs/integration/ --project=firefox
+cd /projects/management/tracker/dev && PLAYWRIGHT_BROWSERS_PATH=/projects/management/tracker/dev/.playwright-browsers HOME=/tmp XDG_RUNTIME_DIR=/tmp XDG_CONFIG_HOME=/tmp/xdg npx playwright test tests/test_ui/specs/integration/ --project=firefox
 ```
 
 ### UI 测试调试
@@ -64,12 +65,17 @@ python3 scripts/tracker_ops.py clean
 
 **Playwright 沙箱环境**: 如遇 Firefox 启动失败，添加环境变量:
 ```bash
-HOME=/root XDG_RUNTIME_DIR=/tmp npx playwright test ...
+PLAYWRIGHT_BROWSERS_PATH=/projects/management/tracker/dev/.playwright-browsers HOME=/tmp XDG_RUNTIME_DIR=/tmp XDG_CONFIG_HOME=/tmp/xdg npx playwright test ...
 ```
 或在 `playwright.config.ts` 中配置:
 ```typescript
 launchOptions: {
-  env: { HOME: '/root', XDG_RUNTIME_DIR: '/tmp' }
+  env: {
+    PLAYWRIGHT_BROWSERS_PATH: '/projects/management/tracker/dev/.playwright-browsers',
+    HOME: '/tmp',
+    XDG_RUNTIME_DIR: '/tmp',
+    XDG_CONFIG_HOME: '/tmp/xdg'
+  }
 }
 ```
 
