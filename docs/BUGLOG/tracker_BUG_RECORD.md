@@ -821,6 +821,40 @@ Dashboard load error: Error: Failed to load dashboard data
 
 ---
 
+### BUG-133: Dashboard 概览卡片 Unlinked 显示 week_change 数值
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-04-17 |
+| **报告人** | 小栗子 |
+| **修复日期** | 2026-04-17 |
+| **修复人** | Claude Code |
+
+**描述**: Dashboard 概览卡片的 Unlinked 行显示 week_change 具体数值（如 +3, -2），但在 TC-CP 模式下这些数值语义不明确。
+
+**原因**:
+- unlinked_cp 的 week_change 语义与 covered_cp、tc_pass_rate 相反
+- TC-CP 模式下 unlinked 增加可能是关联了 TC，也可能是其他 CP 被删除
+- FC-CP 模式下 unlinked 的语义更是完全不同
+- 因此 unlinked 的 week_change 无法准确反映系统健康状况
+
+**修复方案** (`dev/static/js/dashboard.js`):
+```javascript
+// 修改前：FC-CP 模式才显示 '--'
+const unlinkedChangeDisplay = isFcCpMode
+    ? { text: '--', cls: '' }
+    : unlinkedChange;
+
+// 修改后：所有模式都显示 '--'
+const unlinkedChangeDisplay = { text: '--', cls: '' };
+```
+
+**验证**: Dashboard 概览卡片的 Unlinked 行现在显示 "--" 而非具体数值。
+
+---
+
 ## 2. 功能增强
 
 ### FEAT-001: CP 覆盖率计算
