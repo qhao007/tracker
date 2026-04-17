@@ -221,11 +221,11 @@ const Dashboard = {
         const mode = this.currentMode;
         const isFcCpMode = mode === 'fc_cp';
 
-        // v0.13.0: FC-CP 模式下 unlinked 的 week_change 不显示（语义：无有效 FC 关联的 CP）
-        // 因为 unlinked_cp 在 FC-CP 和 TC-CP 语义不同，week_change 无法准确比较
-        const unlinkedChangeDisplay = isFcCpMode
-            ? { text: '--', cls: '' }
-            : unlinkedChange;
+        // v0.13.0: unlinked 的 week_change 不显示（语义不明确）
+        // - TC-CP 模式：unlinked = 没有关联 TC 的 CP
+        // - FC-CP 模式：unlinked = 没有关联 FC 的 CP
+        // 两种模式下 unlinked 变化都不能准确反映系统健康状况
+        const unlinkedChangeDisplay = { text: '--', cls: '' };
 
         // 第三个卡片：统一显示 TC Pass Rate（TC-CP 和 FC-CP 模式都显示 TC 数据）
         const thirdCardLabel = 'TC Pass Rate';
