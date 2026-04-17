@@ -4377,3 +4377,30 @@ Wiki 右侧"最近更新"区域 `#wikiRecentChanges` 隐藏。
 **测试验证**:
 - 新增测试 `TestProjectDatabaseSchema::test_new_project_creates_required_tables`
 - 测试用例位置: `tests/test_api/test_api_project_mode.py`
+
+---
+
+## FC-CP Dashboard API 测试 (v0.13.0)
+
+### 测试通过记录
+
+| 测试 ID | 测试方法 | 结果 | 说明 |
+|---------|----------|------|------|
+| API-DASH-FC-001 | test_dashboard_stats_fc_cp_mode | ✅ PASS | FC-CP 模式返回 FC 统计数据 |
+| API-DASH-FC-002 | test_dashboard_stats_tc_cp_mode | ✅ PASS | TC-CP 模式行为保持不变 |
+| API-DASH-FC-003 | test_dashboard_stats_response_contains_mode | ✅ PASS | 响应包含 mode 字段 |
+| API-DASH-FC-004 | test_dashboard_stats_fc_cp_count_correct | ✅ PASS | FC 统计数量正确 |
+| API-DASH-FC-010 | test_dashboard_matrix_fc_cp_mode | ✅ PASS | FC-CP 模式返回 FC-CP 矩阵 |
+| API-DASH-FC-011 | test_dashboard_matrix_tc_cp_mode | ✅ PASS | TC-CP 模式行为不变 |
+| API-DASH-FC-012 | test_dashboard_matrix_response_contains_mode | ✅ PASS | 响应包含 mode 字段 |
+| API-DASH-FC-013 | test_dashboard_matrix_fc_cp_mapping_correct | ✅ PASS | FC-CP 关联关系正确 |
+| API-DASH-FC-020 | test_dashboard_coverage_holes_fc_cp_unchanged | ✅ PASS | Coverage Holes FC-CP 回归 |
+| API-DASH-FC-020b | test_dashboard_coverage_holes_tc_cp_unchanged | ✅ PASS | Coverage Holes TC-CP 回归 |
+| API-DASH-FC-021 | test_dashboard_owner_stats_unchanged | ✅ PASS | Owner Stats 行为不变 |
+| API-DASH-FC-022 | test_dashboard_stats_tc_cp_backward_compat | ✅ PASS | TC-CP 响应格式兼容 |
+
+**测试执行时间**: 2026-04-15
+**测试用例位置**: `dev/tests/test_api/test_api_dashboard_fc_cp.py`
+**测试报告位置**: `docs/REPORTS/TEST_REPORT_v0.13.0_DASHBOARD_FC_CP_20260415.md`
+
+**结论**: 12/12 测试通过，无应用代码 Bug 发现。

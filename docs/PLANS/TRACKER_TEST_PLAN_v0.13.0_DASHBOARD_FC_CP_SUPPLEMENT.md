@@ -4,7 +4,7 @@
 > **对应规格书**: `tracker_SPECS_v0.13.0_DASHBOARD_FC_CP_SUPPLEMENT.md`
 > **创建日期**: 2026-04-15
 > **状态**: 待开发
-> **预估开发时间**: 6 小时
+> **预估开发时间**: 8 小时
 
 ---
 
@@ -29,6 +29,8 @@
 | REQ-D002 | `/api/dashboard/stats` 支持 FC-CP 模式 | P0 | 2h |
 | REQ-D003 | `/api/dashboard/coverage-matrix` 支持 FC-CP 模式 | P0 | 3h |
 | REQ-D004 | 前端 Dashboard 根据模式切换数据展示 | P0 | 2h |
+| REQ-D005 | 快照系统支持 FC-CP 模式 | P0 | 3h |
+| REQ-D006 | week_change 计算修复（FC-CP 模式） | P0 | 1h |
 
 ---
 
@@ -93,13 +95,31 @@ dev/tests/test_api/
 | API-DASH-FC-012 | test_dashboard_matrix_response_contains_mode | 响应包含 mode 字段 | 验证 mode 字段存在 | REQ-D003 |
 | API-DASH-FC-013 | test_dashboard_matrix_fc_cp_mapping_correct | FC-CP 关联关系正确 | 验证矩阵数据准确 | REQ-D003 |
 
-#### 4.2.3 回归测试
+#### 4.2.3 FC-CP 模式 week_change 测试
+
+| 测试 ID | 测试方法 | 测试目标 | 场景 | 对应规格 |
+|---------|----------|----------|------|----------|
+| API-DASH-FC-015 | test_dashboard_week_change_fc_cp_covered_cp | FC-CP 模式 week_change.covered_cp 计算正确 | 验证 covered_cp 变化 | REQ-D006 |
+| API-DASH-FC-016 | test_dashboard_week_change_fc_cp_unlinked_cp | FC-CP 模式 week_change.unlinked_cp 计算正确 | 验证 unlinked_cp 变化 | REQ-D006 |
+| API-DASH-FC-017 | test_dashboard_week_change_fc_cp_tc_pass_rate | FC-CP 模式 week_change.tc_pass_rate 计算正确 | 验证 TC 通过率变化 | REQ-D006 |
+
+#### 4.2.4 快照系统 FC-CP 测试
+
+| 测试 ID | 测试方法 | 测试目标 | 场景 | 对应规格 |
+|---------|----------|----------|------|----------|
+| API-DASH-FC-025 | test_calculate_current_coverage_fc_cp | FC-CP 模式 calculate_current_coverage 正确 | 验证 cp_covered 计算 | REQ-D005 |
+| API-DASH-FC-026 | test_snapshot_fc_cp_cp_covered | FC-CP 快照 cp_covered 正确 | 验证快照数据 | REQ-D005 |
+| API-DASH-FC-027 | test_snapshot_fc_cp_no_zero_coverage_fc | FC-CP coverage_pct=0 的 FC 不算 covered | 边界测试 | REQ-D005 |
+
+#### 4.2.5 回归测试
 
 | 测试 ID | 测试方法 | 测试目标 | 场景 | 对应规格 |
 |---------|----------|----------|------|----------|
 | API-DASH-FC-020 | test_dashboard_coverage_holes_fc_cp_unchanged | Coverage Holes FC-CP 仍正常 | 回归验证 | - |
 | API-DASH-FC-021 | test_dashboard_owner_stats_unchanged | Owner Stats 行为不变 | 回归验证 | - |
 | API-DASH-FC-022 | test_dashboard_stats_tc_cp_backward_compat | TC-CP 响应格式兼容 | 回归验证 | REQ-D002 |
+| API-DASH-FC-023 | test_week_change_tc_cp_unchanged | TC-CP 模式 week_change 不变 | 回归验证 | REQ-D006 |
+| API-DASH-FC-024 | test_calculate_current_coverage_tc_cp_unchanged | TC-CP 模式 calculate_current_coverage 不变 | 回归验证 | REQ-D005 |
 
 ### 4.3 测试数据准备
 
@@ -120,12 +140,14 @@ def fc_cp_test_data(fc_cp_project):
     project_id = fc_cp_project
 
     # 创建 FC（Functional Coverage）
+    # 注意：FC 需要有 coverage_pct 字段
     fc_ids = []
     for i in range(5):
         fc_id = create_functional_coverage(
             project_id=project_id,
             name=f"FC_{i+1}",
-            owner=f"Owner_{i+1}"
+            owner=f"Owner_{i+1}",
+            coverage_pct=50.0 + i * 10  # coverage_pct: 50, 60, 70, 80, 90
         )
         fc_ids.append(fc_id)
 
@@ -139,6 +161,8 @@ def fc_cp_test_data(fc_cp_project):
         cp_ids.append(cp_id)
 
     # 创建 FC-CP 关联（部分关联）
+    # FC_0 (coverage_pct=50) -> CP_0, CP_1
+    # FC_1 (coverage_pct=60) -> CP_0
     create_fc_cp_connection(project_id, fc_ids[0], cp_ids[0])
     create_fc_cp_connection(project_id, fc_ids[0], cp_ids[1])
     create_fc_cp_connection(project_id, fc_ids[1], cp_ids[0])
@@ -146,7 +170,8 @@ def fc_cp_test_data(fc_cp_project):
     return {
         "project_id": project_id,
         "fc_ids": fc_ids,
-        "cp_ids": cp_ids
+        "cp_ids": cp_ids,
+        "fc_coverage_pcts": [50.0, 60.0, 70.0, 80.0, 90.0]
     }
 ```
 

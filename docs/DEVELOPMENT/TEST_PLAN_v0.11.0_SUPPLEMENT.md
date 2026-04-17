@@ -194,12 +194,12 @@ PYTHONPATH=. pytest tests/test_api/test_api_fc_batch.py -v
 PYTHONPATH=. pytest tests/test_api/ -k "fc_batch or fc_cpids or proj_fccount" -v
 
 # UI 测试
-PLAYWRIGHT_BROWSERS_PATH=/tmp/.playwright HOME=/home/hqi XDG_RUNTIME_DIR=/tmp \
+PLAYWRIGHT_BROWSERS_PATH=/projects/management/tracker/dev/.playwright-browsers HOME=/tmp XDG_RUNTIME_DIR=/tmp XDG_CONFIG_HOME=/tmp/xdg \
   npx playwright test tests/test_ui/specs/integration/fc_supplement.spec.ts --project=firefox
 
 # 完整补充测试套件
 PYTHONPATH=. pytest tests/test_api/ -v
-PLAYWRIGHT_BROWSERS_PATH=/tmp/.playwright HOME=/home/hqi XDG_RUNTIME_DIR=/tmp \
+PLAYWRIGHT_BROWSERS_PATH=/projects/management/tracker/dev/.playwright-browsers HOME=/tmp XDG_RUNTIME_DIR=/tmp XDG_CONFIG_HOME=/tmp/xdg \
   npx playwright test tests/test_ui/specs/integration/fc_supplement.spec.ts --project=firefox
 ```
 

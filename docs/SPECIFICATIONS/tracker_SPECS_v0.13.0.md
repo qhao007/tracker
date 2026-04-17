@@ -654,11 +654,45 @@ function getProjectSlug(projectName) {
     color: #666;
 }
 
-/* 无内容状态 */
+/* 无内容/待开发状态 */
 .wiki-empty {
     text-align: center;
     padding: 60px;
     color: #999;
+}
+.wiki-coming-soon {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+    padding: 40px;
+    text-align: center;
+}
+.wiki-coming-soon-icon {
+    font-size: 64px;
+    margin-bottom: 24px;
+    opacity: 0.8;
+}
+.wiki-coming-soon-title {
+    font-size: 24px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 12px;
+}
+.wiki-coming-soon-desc {
+    font-size: 15px;
+    color: #666;
+    max-width: 400px;
+    line-height: 1.6;
+    margin-bottom: 24px;
+}
+.wiki-coming-soon-hint {
+    font-size: 13px;
+    color: #999;
+    padding: 12px 20px;
+    background: #f5f5f5;
+    border-radius: 6px;
 }
 ```
 
@@ -677,10 +711,35 @@ function getProjectSlug(projectName) {
 | `renderWikiPageContent(html)` | 渲染页面 HTML 内容 |
 | `renderWikiChanges(data)` | 渲染变更历史列表 |
 | `renderWikiSearchResults(results)` | 渲染搜索结果列表 |
-| `renderWikiNoContent()` | 显示无 Wiki 状态 |
+| `renderWikiNoContent()` | 显示无 Wiki 状态（待开发页面） |
 | `renderWikiLoading()` | 显示加载动画 |
 | `renderWikiError()` | 显示错误状态 + 重试按钮 |
 | `updateNavHighlight(path)` | 更新导航高亮 |
+
+### 5.5 Wiki 待开发状态页面
+
+当项目没有配置 Wiki 文档时，显示通用的"待开发"状态页面，不包含任何具体协议或项目的字样。
+
+**页面结构**:
+```html
+<div class="wiki-coming-soon">
+    <div class="wiki-coming-soon-icon">📝</div>
+    <div class="wiki-coming-soon-title">Wiki 功能待开发</div>
+    <div class="wiki-coming-soon-desc">
+        这是项目的 Wiki 文档展示区域。<br>
+        可以存放项目文档、协议规范、验证环境架构、使用指南、变更历史等技术资料。
+    </div>
+    <div class="wiki-coming-soon-hint">
+        提示：Wiki 文档由项目管理员配置和维护
+    </div>
+</div>
+```
+
+**设计要点**:
+- 图标使用通用 emoji 📝，不涉及具体协议
+- 标题可配置，默认显示"Wiki 功能待开发"
+- 描述为通用说明，不提及任何具体协议名称
+- 底部提示说明 Wiki 由管理员维护
 
 ---
 

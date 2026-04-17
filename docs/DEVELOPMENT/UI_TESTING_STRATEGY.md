@@ -397,7 +397,7 @@ launchOptions: {
 
 **运行命令**:
 ```bash
-PLAYWRIGHT_BROWSERS_PATH=/tmp/.playwright HOME=/home/hqi XDG_RUNTIME_DIR=/tmp npx playwright test --project=firefox
+PLAYWRIGHT_BROWSERS_PATH=/projects/management/tracker/dev/.playwright-browsers HOME=/tmp XDG_RUNTIME_DIR=/tmp XDG_CONFIG_HOME=/tmp/xdg npx playwright test --project=firefox
 ```
 
 ---
