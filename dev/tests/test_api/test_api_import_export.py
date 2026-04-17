@@ -211,14 +211,15 @@ class TestImportAPI:
     
     def test_import_cp_duplicate(self, admin_client, test_project):
         """测试导入重复的 CP"""
-        # 先创建一个 CP
+        # 先创建一个 CP (sub_feature 需要与导入数据一致才能检测到重复)
         admin_client.post('/api/cp', json={
             'project_id': test_project['id'],
             'feature': 'Feature1',
+            'sub_feature': 'SubFeature1',
             'cover_point': 'CP_Duplicate_Test',
             'priority': 'P0'
         })
-        
+
         # 尝试导入相同的 CP
         wb = Workbook()
         ws = wb.active
