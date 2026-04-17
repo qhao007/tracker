@@ -1175,11 +1175,12 @@ def get_progress(project_id):
                     else:
                         actual.append({'week': p['week'], 'coverage': weekly_snapshot[prev_week]})
                 elif prev_week is not None:
-                    # 只有前面的数据，用前一个的值
-                    actual.append({'week': p['week'], 'coverage': weekly_snapshot[prev_week]})
+                    # 只有前面的数据，用前一个的值（不填充未来周）
+                    if p_week <= max(weekly_snapshot.keys()):
+                        actual.append({'week': p['week'], 'coverage': weekly_snapshot[prev_week]})
                 elif next_week is not None:
-                    # 只有后面的数据，用后一个的值
-                    actual.append({'week': p['week'], 'coverage': weekly_snapshot[next_week]})
+                    # 只有后面的数据，不用（不填充未来周，避免显示未发生的"实际"）
+                    pass
                 else:
                     # 没有可用数据（不应该发生），跳过
                     pass
@@ -1268,11 +1269,16 @@ def ensure_progress_table_exists(project_name):
     return True
 
 
-def calculate_current_coverage(project_name):
+def calculate_current_coverage(project_name, coverage_mode='tc_cp'):
     """
     计算当前覆盖率（用于快照）
     v0.10.0: 扩展支持各 Priority 覆盖率计算
     v0.12.0: 扩展支持 cp_states 和 tc_states
+    v0.13.0: 支持 FC-CP 模式
+
+    Args:
+        project_name: 项目名称
+        coverage_mode: 'tc_cp' 或 'fc_cp'
 
     Returns:
         dict: {actual_coverage, p0_coverage, p1_coverage, p2_coverage, p3_coverage,
@@ -1292,10 +1298,12 @@ def calculate_current_coverage(project_name):
     if not project:
         return None
 
+    is_fc_cp_mode = coverage_mode == 'fc_cp'
+
     conn = get_db(project_name)
     cursor = conn.cursor()
 
-    # 获取总 CP 数
+    # 获取总 CP 数（两种模式相同）
     cursor.execute("SELECT COUNT(*) FROM cover_point")
     total_cp = cursor.fetchone()[0]
 
@@ -1315,20 +1323,18 @@ def calculate_current_coverage(project_name):
             'tc_states': {}
         }
 
-    # 获取 Pass 状态的 TC
+    # v0.13.0: TC 统计（FC-CP 模式下 TC 数据仍然存在）
     cursor.execute("SELECT COUNT(*) FROM test_case WHERE status = 'PASS'")
     tc_pass = cursor.fetchone()[0]
 
-    # 获取 Fail 状态的 TC (v0.12.0: 新增)
     cursor.execute("SELECT COUNT(*) FROM test_case WHERE status = 'FAIL'")
     tc_fail = cursor.fetchone()[0]
 
-    # 获取总 TC 数
     cursor.execute("SELECT COUNT(*) FROM test_case")
     tc_total = cursor.fetchone()[0]
 
     # v0.12.0: 收集 cp_states 和 tc_states
-    # CP States: {cp_id: {name, coverage_rate, linked_tcs}}
+    # CP States: {cp_id: {name, coverage_rate, linked_items}}
     cp_states = {}
     # TC States: {tc_id: status}
     tc_states = {}
@@ -1342,39 +1348,71 @@ def calculate_current_coverage(project_name):
     all_cps = cursor.fetchall()
 
     total_coverage_rate = 0.0
-    covered_cps = 0  # 有至少一个 PASS TC 的 CP 数
+    covered_cps = 0  # 根据模式不同，含义不同
 
-    for cp_row in all_cps:
-        cp_id = cp_row[0]
-        cp_name = cp_row[1] if cp_row[1] else ''
+    if is_fc_cp_mode:
+        # FC-CP 模式: covered_cp = 有 coverage_pct > 0 的 FC 关联的 CP
+        for cp_row in all_cps:
+            cp_id = cp_row[0]
+            cp_name = cp_row[1] if cp_row[1] else ''
 
-        cursor.execute("""
-            SELECT tc.id, tc.status FROM test_case tc
-            INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
-            WHERE tcc.cp_id = ?
-        """, (cp_id,))
-        connected_tcs = cursor.fetchall()
+            cursor.execute("""
+                SELECT fc.coverage_pct
+                FROM functional_coverage fc
+                INNER JOIN fc_cp_association fcca ON fc.id = fcca.fc_id
+                WHERE fcca.cp_id = ?
+            """, (cp_id,))
+            linked_fcs = cursor.fetchall()
 
-        total_tc = len(connected_tcs)
-        if total_tc == 0:
-            cp_rate = 0.0
-            linked_tcs = []
-        else:
-            pass_tc = sum(1 for tc in connected_tcs if tc[1] == 'PASS')
-            cp_rate = (pass_tc / total_tc) * 100
-            if pass_tc > 0:
-                covered_cps += 1
-            # linked_tcs: list of {tc_id, status}
-            linked_tcs = [{'tc_id': tc[0], 'status': tc[1]} for tc in connected_tcs]
+            linked_fc_count = len(linked_fcs)
+            if linked_fc_count == 0:
+                cp_rate = 0.0
+            else:
+                cp_rate = sum(fc[0] for fc in linked_fcs) / linked_fc_count
+                if cp_rate > 0:
+                    covered_cps += 1
 
-        total_coverage_rate += cp_rate
+            total_coverage_rate += cp_rate
 
-        # v0.12.0: 存储 CP 状态
-        cp_states[str(cp_id)] = {
-            'name': cp_name,
-            'coverage_rate': round(cp_rate, 1),
-            'linked_tcs': len(linked_tcs)
-        }
+            # v0.13.0: 存储 CP 状态（使用 linked_fc_count）
+            cp_states[str(cp_id)] = {
+                'name': cp_name,
+                'coverage_rate': round(cp_rate, 1),
+                'linked_items': linked_fc_count  # FC count instead of TC count
+            }
+    else:
+        # TC-CP 模式: covered_cp = 有至少一个 PASS TC 的 CP
+        for cp_row in all_cps:
+            cp_id = cp_row[0]
+            cp_name = cp_row[1] if cp_row[1] else ''
+
+            cursor.execute("""
+                SELECT tc.id, tc.status FROM test_case tc
+                INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+                WHERE tcc.cp_id = ?
+            """, (cp_id,))
+            connected_tcs = cursor.fetchall()
+
+            total_tc = len(connected_tcs)
+            if total_tc == 0:
+                cp_rate = 0.0
+                linked_tcs = []
+            else:
+                pass_tc = sum(1 for tc in connected_tcs if tc[1] == 'PASS')
+                cp_rate = (pass_tc / total_tc) * 100
+                if pass_tc > 0:
+                    covered_cps += 1
+                # linked_tcs: list of {tc_id, status}
+                linked_tcs = [{'tc_id': tc[0], 'status': tc[1]} for tc in connected_tcs]
+
+            total_coverage_rate += cp_rate
+
+            # v0.12.0: 存储 CP 状态
+            cp_states[str(cp_id)] = {
+                'name': cp_name,
+                'coverage_rate': round(cp_rate, 1),
+                'linked_tcs': len(linked_tcs)
+            }
 
     # v0.12.0: 收集 TC States
     cursor.execute("SELECT id, status FROM test_case WHERE project_id = ?", (project['id'],))
@@ -1384,6 +1422,7 @@ def calculate_current_coverage(project_name):
     coverage = round(total_coverage_rate / total_cp, 1) if total_cp > 0 else 0
 
     # v0.11.0: 计算各 Priority 的覆盖率（新逻辑：对每个 CP 的覆盖率求平均）
+    # v0.13.0: FC-CP 和 TC-CP 模式使用不同的关联表
     priority_coverages = {}
     for priority in ['P0', 'P1', 'P2', 'P3']:
         # 获取该 Priority 的总 CP 数
@@ -1402,21 +1441,40 @@ def calculate_current_coverage(project_name):
         p_covered = 0
 
         for cp_id in priority_cp_ids:
-            cursor.execute("""
-                SELECT tc.status FROM test_case tc
-                INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
-                WHERE tcc.cp_id = ?
-            """, (cp_id,))
-            connected_tcs = cursor.fetchall()
+            if is_fc_cp_mode:
+                # FC-CP 模式: 使用 fc_cp_association 和 FC 的 coverage_pct
+                cursor.execute("""
+                    SELECT fc.coverage_pct
+                    FROM functional_coverage fc
+                    INNER JOIN fc_cp_association fcca ON fc.id = fcca.fc_id
+                    WHERE fcca.cp_id = ?
+                """, (cp_id,))
+                linked_fcs = cursor.fetchall()
 
-            total_tc = len(connected_tcs)
-            if total_tc == 0:
-                cp_rate = 0.0
+                linked_fc_count = len(linked_fcs)
+                if linked_fc_count == 0:
+                    cp_rate = 0.0
+                else:
+                    cp_rate = sum(fc[0] for fc in linked_fcs) / linked_fc_count
+                    if cp_rate > 0:
+                        p_covered += 1
             else:
-                pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
-                cp_rate = (pass_tc / total_tc) * 100
-                if pass_tc > 0:
-                    p_covered += 1
+                # TC-CP 模式: 使用 tc_cp_connections
+                cursor.execute("""
+                    SELECT tc.status FROM test_case tc
+                    INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+                    WHERE tcc.cp_id = ?
+                """, (cp_id,))
+                connected_tcs = cursor.fetchall()
+
+                total_tc = len(connected_tcs)
+                if total_tc == 0:
+                    cp_rate = 0.0
+                else:
+                    pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
+                    cp_rate = (pass_tc / total_tc) * 100
+                    if pass_tc > 0:
+                        p_covered += 1
 
             p_total_coverage += cp_rate
 
@@ -1453,8 +1511,9 @@ def create_snapshot(project_id):
     # 确保表存在
     ensure_progress_table_exists(project["name"])
 
-    # 计算当前覆盖率
-    coverage_data = calculate_current_coverage(project["name"])
+    # 计算当前覆盖率（v0.13.0: 传递 coverage_mode）
+    coverage_mode = project.get('coverage_mode', 'tc_cp')
+    coverage_data = calculate_current_coverage(project["name"], coverage_mode)
     if coverage_data is None:
         return jsonify({"error": "数据库未初始化"}), 500
 
@@ -1745,9 +1804,10 @@ def cron_progress_snapshot():
             errors.append({"project_id": project_id, "error": str(e)})
             continue
 
-        # 计算覆盖率
+        # 计算覆盖率（v0.13.0: 传递 coverage_mode）
         try:
-            coverage_data = calculate_current_coverage(project_name)
+            coverage_mode = project.get('coverage_mode', 'tc_cp')
+            coverage_data = calculate_current_coverage(project_name, coverage_mode)
         except Exception as e:
             errors.append({"project_id": project_id, "error": str(e)})
             continue
@@ -4826,58 +4886,99 @@ def get_dashboard_stats():
     conn = get_db(project_name)
     cursor = conn.cursor()
 
+    # v0.13.0: 检查 coverage_mode
+    coverage_mode = project.get('coverage_mode', 'tc_cp')
+    is_fc_cp_mode = coverage_mode == 'fc_cp'
+
     try:
         # 1. 概览统计
-        # 新逻辑：先计算每个 CP 的覆盖率（PASS TC数 / 关联 TC总数），再对所有 CP 求平均
-        cursor.execute("SELECT id, priority, feature FROM cover_point WHERE project_id = ?", (project_id,))
-        all_cps = cursor.fetchall()
+        # v0.13.0: FC-CP 模式和 TC-CP 模式使用不同的统计逻辑
+        if is_fc_cp_mode:
+            # FC-CP 模式: 使用 functional_coverage 和 fc_cp_association 表
+            # 总 CP 数
+            cursor.execute("SELECT COUNT(*) FROM cover_point WHERE project_id = ?", (project_id,))
+            total_cp = cursor.fetchone()[0] or 0
 
-        total_cp = len(all_cps)
-        unlinked_cp = 0
-        total_coverage_rate = 0.0  # 所有 CP 的覆盖率累加，用于计算平均
+            # 获取所有 CP（用于后续遍历计算 covered_cp）
+            cursor.execute("SELECT id, priority, feature FROM cover_point WHERE project_id = ?", (project_id,))
+            all_cps = cursor.fetchall()
 
-        # 获取所有 CP 及其关联的 TC
-        for cp_row in all_cps:
-            cp_id = cp_row[0]
-            cursor.execute("""
-                SELECT tc.status FROM test_case tc
-                INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
-                WHERE tcc.cp_id = ?
-            """, (cp_id,))
-            connected_tcs = cursor.fetchall()
+            # FC-CP 模式: covered_cp = 有 coverage_pct > 0 的 FC 关联的 CP
+            # 遍历每个 CP，检查是否有 coverage_pct > 0 的 FC 关联
+            covered_cp = 0
+            for cp_row in all_cps:
+                cp_id = cp_row[0]
+                cursor.execute("""
+                    SELECT fc.coverage_pct
+                    FROM functional_coverage fc
+                    INNER JOIN fc_cp_association fcca ON fc.id = fcca.fc_id
+                    WHERE fcca.cp_id = ?
+                """, (cp_id,))
+                linked_fcs = cursor.fetchall()
+                if linked_fcs:
+                    avg_coverage = sum(fc[0] for fc in linked_fcs) / len(linked_fcs)
+                    if avg_coverage > 0:
+                        covered_cp += 1
 
-            total_tc = len(connected_tcs)
-            if total_tc == 0:
-                unlinked_cp += 1
-                cp_rate = 0.0
-            else:
-                pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
-                cp_rate = (pass_tc / total_tc) * 100
+            unlinked_cp = total_cp - covered_cp
+            coverage_rate = round((covered_cp / total_cp * 100), 1) if total_cp > 0 else 0
 
-            total_coverage_rate += cp_rate
+            # TC 统计在 FC-CP 模式下仍然存在（用于参考）
+            cursor.execute("SELECT COUNT(*) FROM test_case WHERE project_id = ?", (project_id,))
+            tc_total = cursor.fetchone()[0] or 0
+            cursor.execute("SELECT COUNT(*) FROM test_case WHERE project_id = ? AND status = 'PASS'", (project_id,))
+            tc_pass = cursor.fetchone()[0] or 0
+            tc_pass_rate = round((tc_pass / tc_total * 100), 1) if tc_total > 0 else 0
+        else:
+            # TC-CP 模式（现有逻辑）
+            # 新逻辑：先计算每个 CP 的覆盖率（PASS TC数 / 关联 TC总数），再对所有 CP 求平均
+            cursor.execute("SELECT id, priority, feature FROM cover_point WHERE project_id = ?", (project_id,))
+            all_cps = cursor.fetchall()
 
-        # 覆盖率 = 所有 CP 覆盖率的平均值
-        coverage_rate = round(total_coverage_rate / total_cp, 1) if total_cp > 0 else 0
-        # covered_cp = 有至少一个 PASS TC 的 CP 数量
-        covered_cp = sum(1 for cp in all_cps if any(
-            tc[0] == 'PASS' for tc in
-            cursor.execute("""
-                SELECT tc.status FROM test_case tc
-                INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
-                WHERE tcc.cp_id = ?
-            """, (cp[0],)).fetchall()
-        ))
+            total_cp = len(all_cps)
+            unlinked_cp = 0
+            total_coverage_rate = 0.0  # 所有 CP 的覆盖率累加，用于计算平均
 
-        # v0.12.0: TC 统计（用于 Dashboard Overview 显示 TC Pass Rate）
-        cursor.execute("SELECT COUNT(*) FROM test_case WHERE project_id = ?", (project_id,))
-        tc_total = cursor.fetchone()[0]
-        cursor.execute("SELECT COUNT(*) FROM test_case WHERE project_id = ? AND status = 'PASS'", (project_id,))
-        tc_pass = cursor.fetchone()[0]
-        tc_pass_rate = round((tc_pass / tc_total * 100), 1) if tc_total > 0 else 0
+            # 获取所有 CP 及其关联的 TC
+            for cp_row in all_cps:
+                cp_id = cp_row[0]
+                cursor.execute("""
+                    SELECT tc.status FROM test_case tc
+                    INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+                    WHERE tcc.cp_id = ?
+                """, (cp_id,))
+                connected_tcs = cursor.fetchall()
 
-        # v0.12.0: 周环比变化计算 (§6)
-        # 新逻辑: 实时最新值 - 最新快照值 (更实时地反映与快照以来的变化)
-        # 获取最新快照
+                total_tc = len(connected_tcs)
+                if total_tc == 0:
+                    unlinked_cp += 1
+                    cp_rate = 0.0
+                else:
+                    pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
+                    cp_rate = (pass_tc / total_tc) * 100
+
+                total_coverage_rate += cp_rate
+
+            # 覆盖率 = 所有 CP 覆盖率的平均值
+            coverage_rate = round(total_coverage_rate / total_cp, 1) if total_cp > 0 else 0
+            # covered_cp = 有至少一个 PASS TC 的 CP 数量
+            covered_cp = sum(1 for cp in all_cps if any(
+                tc[0] == 'PASS' for tc in
+                cursor.execute("""
+                    SELECT tc.status FROM test_case tc
+                    INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+                    WHERE tcc.cp_id = ?
+                """, (cp[0],)).fetchall()
+            ))
+
+            # v0.12.0: TC 统计（用于 Dashboard Overview 显示 TC Pass Rate）
+            cursor.execute("SELECT COUNT(*) FROM test_case WHERE project_id = ?", (project_id,))
+            tc_total = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM test_case WHERE project_id = ? AND status = 'PASS'", (project_id,))
+            tc_pass = cursor.fetchone()[0]
+            tc_pass_rate = round((tc_pass / tc_total * 100), 1) if tc_total > 0 else 0
+
+        # 获取最新快照（用于 week_change 计算）
         cursor.execute("""
             SELECT snapshot_date, actual_coverage, cp_covered, cp_total, tc_pass_count, tc_total
             FROM project_progress
@@ -4887,22 +4988,27 @@ def get_dashboard_stats():
         """, (project_id,))
         latest_snapshot = cursor.fetchone()
 
+        # v0.12.0: 周环比变化计算 (§6)
+        # 新逻辑: 实时最新值 - 最新快照值 (更实时地反映与快照以来的变化)
+        # v0.13.0: FC-CP 模式下 unlinked_cp 的 week_change 不显示（语义与快照不兼容）
         week_change = {
-            'covered_cp': None,  # 实时 covered_cp - 快照 covered_cp
-            'unlinked_cp': None,  # 不显示（快照无法准确计算"无关联TC的CP"）
-            'tc_pass_rate': None  # 实时 tc_pass_rate - 快照 tc_pass_rate
+            'covered_cp': None,
+            'unlinked_cp': None,
+            'tc_pass_rate': None
         }
 
         if latest_snapshot:
-            # 实时 covered_cp 已在上面计算过 (= covered_cp 变量)
-            # 快照中的 covered_cp
-            snapshot_covered_cp = latest_snapshot[2]
+            snapshot_covered_cp = latest_snapshot[2] or 0
+
+            # v0.13.0: covered_cp 的 week_change 在 FC-CP 模式下仍然计算
+            # 因为 FC-CP 的 covered_cp（有 coverage_pct>0 FC 的 CP）与快照的 cp_covered 可能兼容
             week_change['covered_cp'] = covered_cp - snapshot_covered_cp
 
-            # 注意: unlinked_cp 的 week_change 无法准确计算
-            # 因为快照存储的是 cp_covered (有PASS TC的CP)，不是真正的"无关联TC的CP"
-            # live unlinked_cp 是实时计算: CPs with linked_tcs = 0
-            # 两者定义不同，不能直接比较
+            # v0.13.0: unlinked_cp 的 week_change 在 FC-CP 模式下返回 None
+            # 因为 FC-CP 的 unlinked_cp（无有效 FC 关联的 CP）与快照的 cp_covered 语义完全不同
+            # 不进行计算，让前端显示 '--'
+            if not is_fc_cp_mode:
+                week_change['unlinked_cp'] = unlinked_cp - (total_cp - snapshot_covered_cp)
 
             # 实时 tc_pass_rate 已在上面计算过 (= tc_pass_rate 变量)
             # 计算快照的 tc_pass_rate
@@ -4911,7 +5017,7 @@ def get_dashboard_stats():
             week_change['tc_pass_rate'] = round(tc_pass_rate - snapshot_tc_pass_rate, 1)
 
         # 2. 按 Feature 统计
-        # 新逻辑：对同一 feature 下所有 CP 的覆盖率求平均
+        # v0.13.0: FC-CP 和 TC-CP 模式使用不同的覆盖率计算逻辑
         cursor.execute("""
             SELECT feature, COUNT(*) as cnt
             FROM cover_point
@@ -4936,21 +5042,40 @@ def get_dashboard_stats():
             feature_covered = 0
 
             for cp_id in feature_cp_ids:
-                cursor.execute("""
-                    SELECT tc.status FROM test_case tc
-                    INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
-                    WHERE tcc.cp_id = ?
-                """, (cp_id,))
-                connected_tcs = cursor.fetchall()
+                if is_fc_cp_mode:
+                    # FC-CP 模式: 使用 fc_cp_association 和 FC 的 coverage_pct
+                    cursor.execute("""
+                        SELECT fc.coverage_pct FROM functional_coverage fc
+                        INNER JOIN fc_cp_association fcca ON fc.id = fcca.fc_id
+                        WHERE fcca.cp_id = ?
+                    """, (cp_id,))
+                    linked_fcs = cursor.fetchall()
 
-                total_tc = len(connected_tcs)
-                if total_tc == 0:
-                    cp_rate = 0.0
+                    linked_fc_count = len(linked_fcs)
+                    if linked_fc_count == 0:
+                        cp_rate = 0.0
+                    else:
+                        # FC 的 coverage_pct 即为该 CP 的覆盖率
+                        cp_rate = sum(fc[0] for fc in linked_fcs) / linked_fc_count
+                        if cp_rate > 0:
+                            feature_covered += 1
                 else:
-                    pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
-                    cp_rate = (pass_tc / total_tc) * 100
-                    if pass_tc > 0:
-                        feature_covered += 1
+                    # TC-CP 模式: 使用 tc_cp_connections
+                    cursor.execute("""
+                        SELECT tc.status FROM test_case tc
+                        INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+                        WHERE tcc.cp_id = ?
+                    """, (cp_id,))
+                    connected_tcs = cursor.fetchall()
+
+                    total_tc = len(connected_tcs)
+                    if total_tc == 0:
+                        cp_rate = 0.0
+                    else:
+                        pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
+                        cp_rate = (pass_tc / total_tc) * 100
+                        if pass_tc > 0:
+                            feature_covered += 1
 
                 feature_total_coverage += cp_rate
 
@@ -4967,7 +5092,7 @@ def get_dashboard_stats():
         by_feature.sort(key=lambda x: x['rate'], reverse=True)
 
         # 3. 按 Priority 统计
-        # 新逻辑：对同一 priority 下所有 CP 的覆盖率求平均
+        # v0.13.0: FC-CP 和 TC-CP 模式使用不同的覆盖率计算逻辑
         by_priority = {}
         for p in ['P0', 'P1', 'P2']:
             cursor.execute("""
@@ -4981,21 +5106,39 @@ def get_dashboard_stats():
             p_covered = 0
 
             for cp_id in p_cp_ids:
-                cursor.execute("""
-                    SELECT tc.status FROM test_case tc
-                    INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
-                    WHERE tcc.cp_id = ?
-                """, (cp_id,))
-                connected_tcs = cursor.fetchall()
+                if is_fc_cp_mode:
+                    # FC-CP 模式: 使用 fc_cp_association 和 FC 的 coverage_pct
+                    cursor.execute("""
+                        SELECT fc.coverage_pct FROM functional_coverage fc
+                        INNER JOIN fc_cp_association fcca ON fc.id = fcca.fc_id
+                        WHERE fcca.cp_id = ?
+                    """, (cp_id,))
+                    linked_fcs = cursor.fetchall()
 
-                total_tc = len(connected_tcs)
-                if total_tc == 0:
-                    cp_rate = 0.0
+                    linked_fc_count = len(linked_fcs)
+                    if linked_fc_count == 0:
+                        cp_rate = 0.0
+                    else:
+                        cp_rate = sum(fc[0] for fc in linked_fcs) / linked_fc_count
+                        if cp_rate > 0:
+                            p_covered += 1
                 else:
-                    pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
-                    cp_rate = (pass_tc / total_tc) * 100
-                    if pass_tc > 0:
-                        p_covered += 1
+                    # TC-CP 模式: 使用 tc_cp_connections
+                    cursor.execute("""
+                        SELECT tc.status FROM test_case tc
+                        INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+                        WHERE tcc.cp_id = ?
+                    """, (cp_id,))
+                    connected_tcs = cursor.fetchall()
+
+                    total_tc = len(connected_tcs)
+                    if total_tc == 0:
+                        cp_rate = 0.0
+                    else:
+                        pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
+                        cp_rate = (pass_tc / total_tc) * 100
+                        if pass_tc > 0:
+                            p_covered += 1
 
                 p_total_coverage += cp_rate
 
@@ -5018,22 +5161,40 @@ def get_dashboard_stats():
             # 表不存在时返回空趋势数据
             trend = []
 
-        # 5. Top 5 未覆盖 CP (未关联 TC 的 CP，按 priority 排序)
-        cursor.execute("""
-            SELECT cp.id, cp.cover_point, cp.priority, cp.feature
-            FROM cover_point cp
-            LEFT JOIN tc_cp_connections tcc ON cp.id = tcc.cp_id
-            WHERE cp.project_id = ? AND tcc.id IS NULL
-            ORDER BY
-                CASE cp.priority
-                    WHEN 'P0' THEN 1
-                    WHEN 'P1' THEN 2
-                    WHEN 'P2' THEN 3
-                    ELSE 4
-                END,
-                cp.created_at DESC
-            LIMIT 5
-        """, (project_id,))
+        # 5. Top 5 未覆盖 CP (未关联 TC/FC 的 CP，按 priority 排序)
+        # v0.13.0: FC-CP 模式使用 fc_cp_association，TC-CP 模式使用 tc_cp_connections
+        if is_fc_cp_mode:
+            cursor.execute("""
+                SELECT cp.id, cp.cover_point, cp.priority, cp.feature
+                FROM cover_point cp
+                LEFT JOIN fc_cp_association fcca ON cp.id = fcca.cp_id
+                WHERE cp.project_id = ? AND fcca.id IS NULL
+                ORDER BY
+                    CASE cp.priority
+                        WHEN 'P0' THEN 1
+                        WHEN 'P1' THEN 2
+                        WHEN 'P2' THEN 3
+                        ELSE 4
+                    END,
+                    cp.created_at DESC
+                LIMIT 5
+            """, (project_id,))
+        else:
+            cursor.execute("""
+                SELECT cp.id, cp.cover_point, cp.priority, cp.feature
+                FROM cover_point cp
+                LEFT JOIN tc_cp_connections tcc ON cp.id = tcc.cp_id
+                WHERE cp.project_id = ? AND tcc.id IS NULL
+                ORDER BY
+                    CASE cp.priority
+                        WHEN 'P0' THEN 1
+                        WHEN 'P1' THEN 2
+                        WHEN 'P2' THEN 3
+                        ELSE 4
+                    END,
+                    cp.created_at DESC
+                LIMIT 5
+            """, (project_id,))
         uncovered_rows = cursor.fetchall()
 
         top_uncovered = []
@@ -5073,6 +5234,8 @@ def get_dashboard_stats():
         return jsonify({
             'success': True,
             'data': {
+                'mode': 'fc_cp' if is_fc_cp_mode else 'tc_cp',
+                'item_type': 'FC' if is_fc_cp_mode else 'TC',
                 'overview': {
                     'total_cp': total_cp,
                     'covered_cp': covered_cp,
@@ -5412,8 +5575,12 @@ def get_dashboard_coverage_matrix():
     conn = get_db(project_name)
     cursor = conn.cursor()
 
+    # v0.13.0: 检查 coverage_mode
+    coverage_mode = project.get('coverage_mode', 'tc_cp')
+    is_fc_cp_mode = coverage_mode == 'fc_cp'
+
     try:
-        # 获取所有 CP 及其关联 TC
+        # 获取所有 CP 及其关联 TC/FC
         cursor.execute("""
             SELECT cp.id, cp.cover_point, cp.feature, cp.priority
             FROM cover_point cp
@@ -5442,20 +5609,36 @@ def get_dashboard_coverage_matrix():
 
             matrix[feature][priority]['total'] += 1
 
-            # 计算该 CP 的覆盖率
-            cursor.execute("""
-                SELECT tc.status FROM test_case tc
-                INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
-                WHERE tcc.cp_id = ?
-            """, (cp_id,))
-            connected_tcs = cursor.fetchall()
+            # v0.13.0: 计算该 CP 的覆盖率 (根据模式使用不同的关联表)
+            if is_fc_cp_mode:
+                # FC-CP 模式: 使用 fc_cp_association 和 FC 的 coverage_pct
+                cursor.execute("""
+                    SELECT fc.coverage_pct FROM functional_coverage fc
+                    INNER JOIN fc_cp_association fcca ON fc.id = fcca.fc_id
+                    WHERE fcca.cp_id = ?
+                """, (cp_id,))
+                linked_fcs = cursor.fetchall()
 
-            cp_coverage_rate = 0
-            if len(connected_tcs) > 0:
-                pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
-                cp_coverage_rate = round((pass_tc / len(connected_tcs)) * 100, 1)
-                if pass_tc > 0:
-                    matrix[feature][priority]['covered'] += 1
+                cp_coverage_rate = 0
+                if len(linked_fcs) > 0:
+                    cp_coverage_rate = round(sum(fc[0] for fc in linked_fcs) / len(linked_fcs), 1)
+                    if cp_coverage_rate > 0:
+                        matrix[feature][priority]['covered'] += 1
+            else:
+                # TC-CP 模式: 使用 tc_cp_connections
+                cursor.execute("""
+                    SELECT tc.status FROM test_case tc
+                    INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+                    WHERE tcc.cp_id = ?
+                """, (cp_id,))
+                connected_tcs = cursor.fetchall()
+
+                cp_coverage_rate = 0
+                if len(connected_tcs) > 0:
+                    pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
+                    cp_coverage_rate = round((pass_tc / len(connected_tcs)) * 100, 1)
+                    if pass_tc > 0:
+                        matrix[feature][priority]['covered'] += 1
 
             # 添加 CP 详情到列表
             matrix[feature][priority]['cp_list'].append({
@@ -5508,6 +5691,7 @@ def get_dashboard_coverage_matrix():
         return jsonify({
             'success': True,
             'data': {
+                'mode': 'fc_cp' if is_fc_cp_mode else 'tc_cp',
                 'matrix': matrix,
                 'features': sorted(list(features_set)),
                 'priorities': priorities,

@@ -11,7 +11,7 @@ export default defineConfig({
   testIgnore: '**/smoke/archives/**',
 
   // 测试输出目录
-  outputDir: './test-results/playwright-output',
+  outputDir: '/tmp/pw-output',
 
   // 全局超时 - 沙箱环境需要更长超时
   timeout: 180000,
@@ -32,8 +32,8 @@ export default defineConfig({
 
   // 报告配置
   reporter: [
-    ['html', { outputFolder: 'test-results/playwright-html' }],
-    ['json', { outputFile: 'test-results/playwright-json/report.json' }],
+    ['html', { outputFolder: '/tmp/pw-html' }],
+    ['json', { outputFile: '/tmp/pw-json/report.json' }],
     ['list']
   ],
 
@@ -60,6 +60,8 @@ export default defineConfig({
     // 沙箱环境：使用当前用户的 HOME 目录
     launchOptions: {
       env: {
+        PLAYWRIGHT_BROWSERS_PATH: '/projects/management/tracker/dev/.playwright-browsers',
+        HOME: '/tmp',
         XDG_RUNTIME_DIR: '/tmp',
         XDG_CONFIG_HOME: '/tmp/xdg',
         FONTCONFIG_PATH: '/etc/fonts',

@@ -6,6 +6,7 @@
 const Dashboard = {
     currentProjectId: null,
     currentTab: 'overview',
+    currentMode: 'tc_cp',  // v0.13.0: 'tc_cp' or 'fc_cp'
     data: null,
     holesData: null,
     ownerData: null,
@@ -88,7 +89,11 @@ const Dashboard = {
                 matrixRes.json()
             ]);
 
-            if (stats.success) this.data = stats.data;
+            if (stats.success) {
+                this.data = stats.data;
+                // v0.13.0: 设置当前模式
+                this.currentMode = stats.data.mode || 'tc_cp';
+            }
             if (holes.success) {
                 this.holesData = holes.data;
                 this.tabBadges.holes.critical = holes.data.critical?.length || 0;
@@ -210,6 +215,22 @@ const Dashboard = {
         const unlinkedChange = getChangeDisplay(weekChange.unlinked_cp, '', false); // false = 上升是坏的
         const passRateChange = getChangeDisplay(weekChange.tc_pass_rate, '%');
 
+        // v0.13.0: 根据模式设置标签
+        // 规格书节 4.1: 前端展示标签保持一致（CP Covered, Unlinked, TC Pass Rate）
+        // 不区分 TC-CP/FC-CP 模式
+        const mode = this.currentMode;
+        const isFcCpMode = mode === 'fc_cp';
+
+        // v0.13.0: FC-CP 模式下 unlinked 的 week_change 不显示（语义：无有效 FC 关联的 CP）
+        // 因为 unlinked_cp 在 FC-CP 和 TC-CP 语义不同，week_change 无法准确比较
+        const unlinkedChangeDisplay = isFcCpMode
+            ? { text: '--', cls: '' }
+            : unlinkedChange;
+
+        // 第三个卡片：统一显示 TC Pass Rate（TC-CP 和 FC-CP 模式都显示 TC 数据）
+        const thirdCardLabel = 'TC Pass Rate';
+        const thirdCardChange = passRateChange;
+
         const cards = [
             {
                 key: 'covered',
@@ -225,16 +246,16 @@ const Dashboard = {
                 label: 'Unlinked',
                 value: overview.unlinked_cp || 0,
                 suffix: '',
-                change: unlinkedChange,
+                change: unlinkedChangeDisplay,
                 class: 'unlinked',
                 icon: '○'
             },
             {
                 key: 'pass_rate',
-                label: 'TC Pass Rate',
+                label: thirdCardLabel,
                 value: tcPassRate,
                 suffix: '%',
-                change: passRateChange,
+                change: thirdCardChange,
                 class: 'pass-rate',
                 icon: '%'
             }
@@ -692,7 +713,11 @@ const Dashboard = {
         const { matrix, features, priorities, weak_areas, row_totals, column_totals } = this.matrixData;
 
         if (features.length === 0) {
-            container.innerHTML = '<div class="dashboard-empty">No Cover Point data</div>';
+            // v0.13.0: 根据模式显示不同的空状态消息
+            const emptyMsg = this.currentMode === 'fc_cp'
+                ? 'No Functional Coverage data'
+                : 'No Cover Point data';
+            container.innerHTML = `<div class="dashboard-empty">${emptyMsg}</div>`;
             return;
         }
 

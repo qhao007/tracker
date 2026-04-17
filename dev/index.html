@@ -826,11 +826,45 @@
             cursor: pointer;
         }
 
-        /* 无内容状态 */
+        /* 无内容/待开发状态 */
         .wiki-empty {
             text-align: center;
             padding: 60px;
             color: #999;
+        }
+        .wiki-coming-soon {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 400px;
+            padding: 40px;
+            text-align: center;
+        }
+        .wiki-coming-soon-icon {
+            font-size: 64px;
+            margin-bottom: 24px;
+            opacity: 0.8;
+        }
+        .wiki-coming-soon-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 12px;
+        }
+        .wiki-coming-soon-desc {
+            font-size: 15px;
+            color: #666;
+            max-width: 400px;
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+        .wiki-coming-soon-hint {
+            font-size: 13px;
+            color: #999;
+            padding: 12px 20px;
+            background: #f5f5f5;
+            border-radius: 6px;
         }
 
         /* Wiki 搜索 */
@@ -946,6 +980,64 @@
         .wiki-change-details ul {
             margin: 5px 0 0 20px;
             padding: 0;
+        }
+
+        /* ========== 右侧边栏洞察链接 ========== */
+        .wiki-highlight-link {
+            display: block;
+            padding: 8px 10px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: transform .1s, box-shadow .1s;
+            text-decoration: none;
+        }
+        .wiki-highlight-link:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        }
+        .wiki-highlight-link.doc { background: #e0f2fe; color: #0369a1; border-left: 3px solid #0ea5e9; }
+        .wiki-highlight-link.rtl { background: #ffedd5; color: #9a3412; border-left: 3px solid #f97316; }
+        .wiki-highlight-link.tb  { background: #dcfce7; color: #166534; border-left: 3px solid #22c55e; }
+        .wiki-highlight-link.hidden { display: none; }
+
+        /* ========== 变更历史 Tab 洞察卡片 ========== */
+        .wiki-highlight-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        .wiki-highlight-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 16px;
+            cursor: pointer;
+            transition: box-shadow .15s, border-color .15s;
+            background: white;
+        }
+        .wiki-highlight-card:hover {
+            border-color: var(--color-primary, #4f46e5);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+        }
+        .wiki-highlight-card.doc { border-top: 4px solid #0ea5e9; }
+        .wiki-highlight-card.rtl { border-top: 4px solid #f97316; }
+        .wiki-highlight-card.tb  { border-top: 4px solid #22c55e; }
+        .wiki-highlight-icon { font-size: 22px; margin-bottom: 8px; }
+        .wiki-highlight-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; color: #111827; }
+        .wiki-highlight-desc  { font-size: 12px; color: #6b7280; line-height: 1.5; }
+        .wiki-highlight-card.hidden { display: none; }
+
+        /* ========== 版本列表中的可点击变更类型标签 ========== */
+        .wiki-change-details a.change-link {
+            color: var(--color-primary, #4f46e5);
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .wiki-change-details a.change-link:hover {
+            color: #3730a3;
         }
     </style>
     <!-- Chart.js for Progress Charts (v0.8.0) - CDN优先，超时自动切换本地 -->
@@ -1526,6 +1618,16 @@
 
                 <!-- 右侧信息栏 -->
                 <aside class="wiki-info-panel">
+                    <!-- 洞察快速入口 -->
+                    <div class="wiki-info-section">
+                        <h4>🔍 变更洞察</h4>
+                        <div id="wikiHighlightLinks">
+                            <a class="wiki-highlight-link doc" onclick="loadWikiPage('changes/doc_change_highlight.html')">📄 文档洞察</a>
+                            <a class="wiki-highlight-link rtl" onclick="loadWikiPage('changes/rtl_change_highlight.html')">🧩 RTL 洞察</a>
+                            <a class="wiki-highlight-link tb" onclick="loadWikiPage('changes/tb_change_highlight.html')">🧪 TB 洞察</a>
+                        </div>
+                    </div>
+                    <!-- 版本历史 -->
                     <div class="wiki-info-section">
                         <h4>📢 最近更新</h4>
                         <div id="wikiRecentChanges"></div>
@@ -3039,28 +3141,38 @@
         
         function renderProgressChart(data) {
             const ctx = document.getElementById('progressChart').getContext('2d');
-            
+
             // 如果已有图表，先销毁
             if (progressChart) {
                 progressChart.destroy();
             }
-            
+
             // 准备数据
             const planned = data.planned || [];
             const actual = data.actual || [];
-            
+
             // 使用计划曲线的 labels，如果没有则用实际的
             let labels = planned.map(p => p.week);
             if (labels.length === 0) {
                 labels = actual.map(a => a.week);
             }
-            
+
+            // v0.13.0: 构建 week -> coverage 的映射，确保 actual 数据与正确的 week label 对齐
+            const actualCoverageByWeek = {};
+            for (const a of actual) {
+                actualCoverageByWeek[a.week] = a.coverage;
+            }
+
+            // 按计划周的顺序构建 actualData，确保每个点都对齐到正确的 week
+            const actualData = labels.map(label => {
+                return actualCoverageByWeek.hasOwnProperty(label) ? actualCoverageByWeek[label] : null;
+            });
+
             const plannedData = planned.map(p => p.coverage);
-            const actualData = actual.map(a => a.coverage);
-            
+
             // 构建 datasets
             const datasets = [];
-            
+
             // 计划曲线（蓝色虚线）
             if (plannedData.length > 0) {
                 datasets.push({
@@ -3073,16 +3185,19 @@
                     tension: 0.1
                 });
             }
-            
+
             // v0.8.2: 实际曲线（绿色实线）
-            if (actualData.length > 0) {
+            // v0.13.0: 只包含有实际数据的点（排除 null 值）
+            const validActualData = actualData.map((v, i) => v !== null ? v : NaN);
+            if (actual.length > 0) {
                 datasets.push({
                     label: '实际曲线',
-                    data: actualData,
+                    data: validActualData,
                     borderColor: '#28a745',
                     backgroundColor: 'rgba(40, 167, 69, 0.1)',
                     fill: true,
-                    tension: 0.1
+                    tension: 0.1,
+                    spanGaps: true  // 允许断点
                 });
             }
             
@@ -4752,6 +4867,10 @@
             // 按 category 分组
             const groups = {};
             pages.forEach(page => {
+                // 排除 changes 目录下的独立洞察页面，避免出现在文档导航
+                if (page.path.startsWith('changes/') && page.path.endsWith('_change_highlight.html')) {
+                    return;
+                }
                 const category = page.category || 'root';
                 if (!groups[category]) {
                     groups[category] = [];
@@ -4792,7 +4911,32 @@
 
         // 渲染 Wiki 页面内容
         function renderWikiPageContent(html) {
-            document.getElementById('wikiPageContent').innerHTML = html;
+            const container = document.getElementById('wikiPageContent');
+
+            // 清理导入的 HTML：移除 <html>, <head>, <body> 标签和 <style> 标签
+            // 防止外部样式泄漏影响 Tracker 页面布局
+            let cleaned = html
+                .replace(/<\/?(html|head|body)[^>]*>/gi, '')  // 移除 html/head/body 标签
+                .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');  // 移除 style 标签
+
+            // 如果内容被包裹在 <article> 标签内，直接使用
+            // 否则用 wiki-article class 包裹
+            if (/<article[\s>]/i.test(cleaned)) {
+                container.innerHTML = cleaned;
+            } else {
+                container.innerHTML = `<div class="wiki-article">${cleaned}</div>`;
+            }
+
+            // 处理 wikilink 内部链接：点击时调用 loadWikiPage() 而不是直接跳转
+            container.querySelectorAll('a.wikilink').forEach(link => {
+                const href = link.getAttribute('href');
+                if (href && !href.startsWith('http') && !href.startsWith('/')) {
+                    link.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        loadWikiPage(href);
+                    });
+                }
+            });
         }
 
         // 更新导航高亮
@@ -4821,10 +4965,27 @@
                 </div>`;
         }
 
-        // 渲染 Wiki 无内容
+        // 渲染 Wiki 无内容（待开发状态）
         function renderWikiNoContent(message) {
-            message = message || '暂无 Wiki 文档';
-            document.getElementById('wikiPageContent').innerHTML = `<div class="wiki-empty">${message}</div>`;
+            const title = message || 'Wiki 功能待开发';
+            const isSimpleMessage = !title.includes('Wiki') && !title.includes('项目');
+
+            if (isSimpleMessage) {
+                document.getElementById('wikiPageContent').innerHTML = `<div class="wiki-empty">${message}</div>`;
+            } else {
+                document.getElementById('wikiPageContent').innerHTML = `
+                    <div class="wiki-coming-soon">
+                        <div class="wiki-coming-soon-icon">📝</div>
+                        <div class="wiki-coming-soon-title">${title}</div>
+                        <div class="wiki-coming-soon-desc">
+                            这是项目的 Wiki 文档展示区域。<br>
+                            可以存放项目文档、协议规范、验证环境架构、使用指南、变更历史等技术资料。
+                        </div>
+                        <div class="wiki-coming-soon-hint">
+                            提示：Wiki 文档由项目管理员配置和维护
+                        </div>
+                    </div>`;
+            }
             document.getElementById('wikiNavPanel').innerHTML = '';
             document.getElementById('wikiRecentChanges').innerHTML = '';
         }
@@ -4861,6 +5022,18 @@
                 </div>`;
             });
             container.innerHTML = html;
+
+            // 新增：根据 index.json 判断哪些洞察页面真实存在
+            const hasPage = (path) => wikiIndexData && wikiIndexData.pages.some(p => p.path === path);
+            document.querySelectorAll('#wikiHighlightLinks .wiki-highlight-link').forEach(link => {
+                const onclick = link.getAttribute('onclick') || '';
+                const match = onclick.match(/loadWikiPage\('([^']+)'\)/);
+                if (match && !hasPage(match[1])) {
+                    link.classList.add('hidden');
+                } else {
+                    link.classList.remove('hidden');
+                }
+            });
         }
 
         // Wiki 子 Tab 切换
@@ -4903,12 +5076,52 @@
         async function renderWikiChangesView() {
             const pageContent = document.getElementById('wikiPageContent');
             pageContent.innerHTML = `
-                <div class="wiki-changes-filter">
-                    <button class="active" onclick="filterChanges('all', this)">全部</button>
-                    <button onclick="filterChanges('important', this)">重要</button>
-                    <button onclick="filterChanges('minor', this)">次要</button>
-                </div>
-                <div id="wikiChangesList"></div>`;
+                <div class="wiki-changes-layout">
+                    <div class="wiki-changes-filter">
+                        <button class="active" onclick="filterChanges('all', this)">全部</button>
+                        <button onclick="filterChanges('important', this)">重要</button>
+                        <button onclick="filterChanges('minor', this)">次要</button>
+                    </div>
+                    <div class="wiki-highlight-cards" id="wikiHighlightCards">
+                        <div class="wiki-highlight-card doc" data-path="changes/doc_change_highlight.html">
+                            <div class="wiki-highlight-icon">📄</div>
+                            <div class="wiki-highlight-title">文档洞察</div>
+                            <div class="wiki-highlight-desc">查看每次迭代对设计文档、测试计划、用户指南的修改与技术说明</div>
+                        </div>
+                        <div class="wiki-highlight-card rtl" data-path="changes/rtl_change_highlight.html">
+                            <div class="wiki-highlight-icon">🧩</div>
+                            <div class="wiki-highlight-title">RTL 洞察</div>
+                            <div class="wiki-highlight-desc">查看每次迭代对 RTL 设计、接口、状态机的修改与影响分析</div>
+                        </div>
+                        <div class="wiki-highlight-card tb" data-path="changes/tb_change_highlight.html">
+                            <div class="wiki-highlight-icon">🧪</div>
+                            <div class="wiki-highlight-title">TB 洞察</div>
+                            <div class="wiki-highlight-desc">查看每次迭代对验证平台、序列、测试用例的修改与新增内容</div>
+                        </div>
+                    </div>
+                    <div id="wikiChangesList"></div>
+                </div>`;
+
+            // 绑定卡片点击事件
+            pageContent.querySelectorAll('.wiki-highlight-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    const path = card.getAttribute('data-path');
+                    if (path) {
+                        // 切回 docs tab 并在主内容区加载该页面（保持左右布局可见）
+                        switchWikiTab('docs', document.querySelector('.wiki-tab-btn'));
+                        loadWikiPage(path);
+                    }
+                });
+            });
+
+            // 新增：根据 index.json 显隐卡片
+            const hasPage = (path) => wikiIndexData && wikiIndexData.pages.some(p => p.path === path);
+            pageContent.querySelectorAll('.wiki-highlight-card').forEach(card => {
+                const path = card.getAttribute('data-path');
+                if (path && !hasPage(path)) {
+                    card.classList.add('hidden');
+                }
+            });
 
             try {
                 const res = await fetch(`/wiki/${currentWikiSlug}/changes_index.json`);
@@ -4928,8 +5141,20 @@
                 return;
             }
 
+            const hasPage = (path) => wikiIndexData && wikiIndexData.pages.some(p => p.path === path);
+
             let html = '';
             versions.forEach(v => {
+                const docLink = hasPage('changes/doc_change_highlight.html')
+                    ? `<a class="change-link" onclick="goToWikiPage('changes/doc_change_highlight.html')">📄 文档变更</a>`
+                    : '📄 文档变更';
+                const rtlLink = hasPage('changes/rtl_change_highlight.html')
+                    ? `<a class="change-link" onclick="goToWikiPage('changes/rtl_change_highlight.html')">🧩 RTL 变更</a>`
+                    : '🧩 RTL 变更';
+                const tbLink = hasPage('changes/tb_change_highlight.html')
+                    ? `<a class="change-link" onclick="goToWikiPage('changes/tb_change_highlight.html')">🧪 TB 变更</a>`
+                    : '🧪 TB 变更';
+
                 html += `<div class="wiki-change-item">
                     <div class="wiki-change-header">
                         <span class="wiki-change-version">${v.version}</span>
@@ -4940,9 +5165,9 @@
                         ${v.summary}
                     </div>
                     <div class="wiki-change-details">
-                        ${v.doc_changes && v.doc_changes.length ? `<div>📄 文档变更: ${v.doc_changes.join(', ')}</div>` : ''}
-                        ${v.rtl_changes && v.rtl_changes.length ? `<div>🔧 RTL 变更: ${v.rtl_changes.join(', ')}</div>` : ''}
-                        ${v.tb_changes && v.tb_changes.length ? `<div>🧪 TB 变更: ${v.tb_changes.join(', ')}</div>` : ''}
+                        ${v.doc_changes && v.doc_changes.length ? `<div>${docLink}: ${v.doc_changes.join(', ')}</div>` : ''}
+                        ${v.rtl_changes && v.rtl_changes.length ? `<div>${rtlLink}: ${v.rtl_changes.join(', ')}</div>` : ''}
+                        ${v.tb_changes && v.tb_changes.length ? `<div>${tbLink}: ${v.tb_changes.join(', ')}</div>` : ''}
                     </div>
                 </div>`;
             });
