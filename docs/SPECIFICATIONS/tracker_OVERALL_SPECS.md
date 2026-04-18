@@ -1,6 +1,6 @@
-# 芯片验证 Tracker v0.12.0 总体规格书
+# 芯片验证 Tracker v0.13.0 总体规格书
 
-> **版本**: v0.12.0 | **更新日期**: 2026-04-08 | **状态**: 🔄 开发中
+> **版本**: v0.13.0 | **更新日期**: 2026-04-17 | **状态**: 🔄 开发中
 
 ---
 
@@ -56,6 +56,8 @@
 | **v0.10.2 Intro 引导页** | |
 | **v0.11.0 FC/Dashboard** | |
 | **v0.12.0 Dashboard 增强** | |
+| **v0.13.0 Wiki 集成** | |
+| **v0.13.0 FC-CP Dashboard 支持** | |
 
 ### 1.4 v0.9.0 重大变更
 
@@ -451,6 +453,17 @@ python3 scripts/data_manager.py clean
 | **F061** | **快照 CP+TC 状态增强** | 新增 cp_states 和 tc_states 字段 | P1 |
 | **F062** | **周环比变化计算** | Dashboard 卡片显示周环比指示器 | P1 |
 | **F063** | **FC Group 覆盖率显示** | Cover Group 行显示组覆盖率 | P2 |
+| **F064** | **Wiki Tab 按钮** | Wiki Tab 界面（子导航：文档/变更历史/搜索） | P0 |
+| **F065** | **Wiki 后端路由** | `/wiki/*` Blueprint 路由 | P0 |
+| **F066** | **Wiki 文档视图** | 三栏布局（导航/内容/信息栏） | P0 |
+| **F067** | **Wiki 项目切换联动** | 切换项目时 Wiki 内容同步刷新 | P0 |
+| **F068** | **Wiki 变更历史视图** | 按版本分组显示变更记录 | P1 |
+| **F069** | **Wiki 搜索功能** | 基于 index.json 的 title/tags 搜索 | P1 |
+| **F070** | **Wiki 环境隔离** | 生产/测试 Wiki 内容完全隔离 | P0 |
+| **F071** | **Wiki 生命周期管理** | 项目删除时 Wiki 内容一并清理 | P0 |
+| **F072** | **Dashboard FC-CP 模式支持** | Dashboard API 支持 FC-CP 模式项目 | P0 |
+| **F073** | **快照 FC-CP 模式支持** | calculate_current_coverage 支持 FC-CP 模式 | P0 |
+| **F074** | **week_change FC-CP 修复** | FC-CP 模式下 week_change 正确计算 | P0 |
 
 ### 3.2 Cover Point 字段
 
@@ -1142,6 +1155,18 @@ coverage = (CP1覆盖率 + CP2覆盖率 + ... + CPn覆盖率) / n
 | 方法 | 路径 | 功能 | 权限 |
 |------|------|------|------|
 | GET | `/api/dashboard/stats` | 获取 Dashboard 统计数据 | 登录 |
+| GET | `/api/dashboard/coverage-holes` | 覆盖空洞数据 | 登录 |
+| GET | `/api/dashboard/owner-stats` | Owner 统计数据 | 登录 |
+| GET | `/api/dashboard/coverage-matrix` | Feature×Priority 矩阵 | 登录 |
+
+### 4.11 Wiki API (v0.13.0 新增)
+
+| 方法 | 路径 | 功能 | 状态 |
+|------|------|------|------|
+| GET | `/wiki/<slug>/index.json` | 获取 Wiki 索引 | ⏳ 待实现 |
+| GET | `/wiki/<slug>/pages/<path>` | 获取 Wiki 页面 HTML | ⏳ 待实现 |
+| GET | `/wiki/<slug>/changes_index.json` | 获取变更历史 | ⏳ 待实现 |
+| GET | `/wiki/exists/<slug>` | 检查 Wiki 是否存在 | ⏳ 待实现 |
 
 #### 4.8.1 GET /api/progress/<project_id>
 
@@ -1926,6 +1951,8 @@ journalctl -u tracker -f
 | **v0.10.2** | **2026-03-23** | **Intro 引导页**：首次访问引导页、5 slides 介绍功能 |
 | **v0.11.0** | **2026-04-03** | **FC/Dashboard**：FC 功能、CP Dashboard、定时快照修复、覆盖率算法修复 |
 | **v0.12.0** | **2026-04-08** | **Dashboard 增强**：4 Tab 重构、覆盖率空洞看板、Owner 分布、Feature×Priority 矩阵、快照状态增强、周环比 |
+| **v0.13.0** | **2026-04-17** | **Wiki 集成**：Wiki Tab、三栏布局、项目切换联动、变更历史、搜索功能、环境隔离、生命周期管理 |
+| **v0.13.0** | **2026-04-17** | **FC-CP Dashboard 支持**：Dashboard API 支持 FC-CP 模式、快照系统 FC-CP 模式支持、week_change 修复 |
 
 ### v0.8.3 详细变更
 
@@ -2294,6 +2321,78 @@ journalctl -u tracker -f
    - `dev/index.html` - 集成 Intro overlay
    - `dev/tracker-intro.html` - 独立引导页（保留）
    - `dev/static/images/slides/` - 截图图片目录
+
+### v0.13.0 详细变更 (2026-04-17)
+
+#### 1. Wiki 集成功能 (v0.13.0)
+
+**Wiki Tab 界面**：
+- 新增"📚 Wiki" Tab 按钮（位于 Dashboard 后）
+- 子导航：文档/变更历史/搜索
+- 仅登录用户可见，guest 用户隐藏
+
+**Wiki 三栏布局**：
+- 左侧导航栏（220px）：按 category 分组显示页面列表
+- 中间内容区（flex: 1）：显示 Wiki 页面 HTML 内容
+- 右侧信息栏（200px）：显示最近更新列表
+
+**Wiki 后端路由**：
+- Flask Blueprint 提供 `/wiki/*` 路由
+- 路径遍历防护 + CSP Header
+- 项目无 Wiki 时降级到 `_global/` 全局 Wiki
+
+**Wiki 项目切换联动**：
+- 切换 Tracker 项目时，Wiki 内容同步刷新
+- slug 生成规则：`getProjectSlug(projectName)`
+
+**Wiki 搜索功能**：
+- 基于 `index.json` 的 `title`、`tags` 字段过滤
+- 搜索结果点击跳转到对应页面
+
+**Wiki 环境隔离**：
+- 生产环境（port 8080）加载 `shared/data/user_data/wiki/`
+- 测试环境（port 8081）加载 `shared/data/test_data/wiki/`
+
+**Wiki 生命周期管理**：
+- 项目删除时 Wiki 内容跟随删除
+- 删除前自动创建归档备份
+
+#### 2. Dashboard FC-CP 模式支持 (v0.13.0)
+
+**问题背景**：
+- Tracker Dashboard 仅支持 TC-CP 模式项目的展示
+- FC-CP 模式项目（functional_coverage → cover_point）的 Dashboard 数据不正确
+
+**TC-CP vs FC-CP 模式**：
+| 项目模式 | 说明 | Dashboard 支持状态 |
+|----------|------|-------------------|
+| TC-CP | 测试用例 (TC) 关联覆盖点 (CP) | ✅ 完整支持 |
+| FC-CP | 功能覆盖点 (FC) 关联覆盖点 (CP) | ❌ 仅 Coverage Holes 支持 |
+
+**covered_cp / cp_covered 语义定义**：
+| 字段 | TC-CP 语义 | FC-CP 语义 |
+|------|-----------|-----------|
+| `covered_cp` | 有 **PASS TC** 关联的 CP 数量 | 有 **coverage_pct > 0 的 FC** 关联的 CP 数量 |
+| `unlinked_cp` | 总 CP - `covered_cp` | 总 CP - `covered_cp`（相同计算逻辑） |
+| `total_cp` | 总 CP 数量 | 总 CP 数量（不变） |
+
+**需要修改的 API**：
+| Dashboard Tab | API Endpoint | 当前状态 | 需要修改 |
+|--------------|--------------|----------|----------|
+| Overview | `/api/dashboard/stats` | ❌ 不支持 FC-CP | ✅ 需要 |
+| Coverage Holes | `/api/dashboard/coverage-holes` | ✅ 已支持 | ❌ 无需 |
+| Owner Distribution | `/api/dashboard/owner-stats` | ✅ 无需修改 | ❌ 无需 |
+| Coverage Matrix | `/api/dashboard/coverage-matrix` | ❌ 不支持 FC-CP | ✅ 需要 |
+
+**快照系统改造**：
+- `calculate_current_coverage()` 函数支持 FC-CP 模式计算
+- FC-CP 项目快照 `cp_covered` 数据准确
+- `week_change` 计算能够跨模式工作
+
+**week_change 计算修复**：
+- FC-CP 模式下 `week_change.covered_cp` 正确计算
+- FC-CP 模式下 `week_change.unlinked_cp` 正确计算
+- FC-CP 模式下 `week_change.tc_pass_rate` 正确计算
 
 ### v0.12.0 详细变更 (2026-04-08)
 
