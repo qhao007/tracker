@@ -11,7 +11,7 @@ export default defineConfig({
   testIgnore: '**/smoke/archives/**',
 
   // 测试输出目录
-  outputDir: '/tmp/pw-output',
+  outputDir: '/projects/management/tracker/dev/test-results/pw-output',
 
   // 全局超时 - 沙箱环境需要更长超时
   timeout: 180000,
@@ -32,8 +32,8 @@ export default defineConfig({
 
   // 报告配置
   reporter: [
-    ['html', { outputFolder: '/tmp/pw-html' }],
-    ['json', { outputFile: '/tmp/pw-json/report.json' }],
+    ['html', { outputFolder: '/projects/management/tracker/dev/test-results/pw-html' }],
+    ['json', { outputFile: '/projects/management/tracker/dev/test-results/pw-json/report.json' }],
     ['list']
   ],
 

@@ -4414,6 +4414,42 @@ Wiki 右侧"最近更新"区域 `#wikiRecentChanges` 隐藏。
 
 ---
 
+## Bug-USER-001: 添加用户表单密码字段 ID 冲突
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-05-06 |
+| **修复日期** | 2026-05-06 |
+| **版本** | v0.13.1 |
+| **文件** | `dev/index.html` |
+
+**问题描述**:
+通过前端界面创建用户时，填写用户名和密码后点击创建按钮，弹出提示"用户名和密码不能为空"或无响应。
+
+**根因分析**:
+`changePasswordModal`（首次登录强制修改密码弹窗，第1657行）和 `addUserModal`（添加用户弹窗，第1857行）中的密码输入框使用了相同的 ID `newPassword`。
+
+HTML 中 ID 应该唯一，当调用 `document.getElementById('newPassword')` 时，浏览器返回 DOM 中第一个匹配的元素。如果 `changePasswordModal` 中的空输入框在 DOM 中更靠前，则获取到空值，导致验证失败。
+
+**触发条件**:
+1. 用户首次登录后被迫修改密码（`must_change_password=1`）
+2. 修改密码后打开用户管理添加用户
+3. 此时 `changePasswordModal` 的 `#newPassword` 元素仍在 DOM 中
+
+**修复方案**:
+将 `changePasswordModal` 中的密码输入框 ID 修改为唯一值：
+- `id="newPassword"` → `id="changePasswordNewPwd"`
+- `id="confirmPassword"` → `id="changePasswordConfirmPwd"`
+- 更新 `submitChangePassword()` 函数中的 ID 引用
+
+**修复文件**:
+- `dev/index.html` 第 1657-1661 行（HTML）
+- `dev/index.html` 第 2323-2324 行（JS）
+
+---
+
 ## FC-CP Dashboard API 测试 (v0.13.0)
 
 ### 测试通过记录
@@ -4438,3 +4474,76 @@ Wiki 右侧"最近更新"区域 `#wikiRecentChanges` 隐藏。
 **测试报告位置**: `docs/REPORTS/TEST_REPORT_v0.13.0_DASHBOARD_FC_CP_20260415.md`
 
 **结论**: 12/12 测试通过，无应用代码 Bug 发现。
+
+---
+
+## batch_update_tc_status 重复更新同一状态时覆盖 pass_date (v0.14.0)
+
+### Bug 描述
+
+通过 API `POST /api/tc/batch/status` 批量更新 TC 状态时，如果新状态与当前状态相同（如 PASS → PASS），会错误地重置对应的状态日期（pass_date）。
+
+### 问题影响
+
+- 场景：用户对已 PASS 的 TC 再次标记为 PASS（常见于确认操作）
+- 影响：`pass_date` 被重置为当前日期，丢失原始通过时间
+- 数据篡改：导致 Dashboard 中 PASS 趋势图的日期不连续
+
+### 根因分析
+
+`batch_update_tc_status` 函数（`api.py` 第 2688 行起）更新逻辑存在缺陷：
+
+```python
+# 清除所有状态日期
+cursor.execute("""
+    UPDATE test_case SET 
+        coded_date=NULL, 
+        fail_date=NULL, 
+        pass_date=NULL, 
+        removed_date=NULL 
+    WHERE id=?
+""", (tc_id,))
+
+# 设置新状态对应的日期
+if new_status in status_dates:
+    date_field = status_dates[new_status]
+    cursor.execute(f"UPDATE test_case SET {date_field}=? WHERE id=?", (today, tc_id))
+```
+
+每次更新都先清除所有状态日期，再设置新状态日期。即使新旧状态相同，也会执行"清除 → 设置"操作，导致日期被覆盖。
+
+### 触发条件
+
+1. TC 状态已为 PASS（或 CODED/FAIL）
+2. 通过 API `POST /api/tc/batch/status` 再次更新为相同状态
+3. `pass_date`（或对应状态日期）被重置为今天
+
+### 修复方案
+
+在清除日期前检查新旧状态，仅当状态发生变化时才清除和重置日期：
+
+```python
+current_status = row[0]
+
+# 如果状态没变，跳过日期更新
+if current_status == new_status:
+    success_count += 1
+    continue
+
+# 清除所有状态日期
+cursor.execute("""...")
+```
+
+### 修复文件
+
+- `dev/app/api.py` 第 2721-2733 行
+
+### 测试验证
+
+| 测试场景 | 预期结果 | 实际结果 |
+|----------|----------|----------|
+| OPEN → PASS → PASS (相同状态) | pass_date 保持首次 PASS 的日期 | ✅ pass_date 保持不变 |
+| OPEN → CODED → CODED (相同状态) | coded_date 保持首次 CODED 的日期 | ✅ coded_date 保持不变 |
+| CODED → PASS (状态变化) | pass_date 更新为今天 | ✅ pass_date 正确更新 |
+
+**测试时间**: 2026-05-06

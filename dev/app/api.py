@@ -2726,14 +2726,21 @@ def batch_update_tc_status():
         if not row:
             continue
 
+        current_status = row[0]
+
+        # 如果状态没变，跳过日期更新
+        if current_status == new_status:
+            success_count += 1
+            continue
+
         # 清除所有状态日期
         cursor.execute(
             """
-            UPDATE test_case SET 
-                coded_date=NULL, 
-                fail_date=NULL, 
-                pass_date=NULL, 
-                removed_date=NULL 
+            UPDATE test_case SET
+                coded_date=NULL,
+                fail_date=NULL,
+                pass_date=NULL,
+                removed_date=NULL
             WHERE id=?
         """,
             (tc_id,),
