@@ -1,6 +1,6 @@
-# 芯片验证 Tracker v0.13.0 总体规格书
+# 芯片验证 Tracker v0.14.0 总体规格书
 
-> **版本**: v0.13.0 | **更新日期**: 2026-04-17 | **状态**: 🔄 开发中
+> **版本**: v0.14.0 | **更新日期**: 2026-05-12 | **状态**: 🔄 开发中
 
 ---
 
@@ -58,6 +58,7 @@
 | **v0.12.0 Dashboard 增强** | |
 | **v0.13.0 Wiki 集成** | |
 | **v0.13.0 FC-CP Dashboard 支持** | |
+| **v0.14.0 项目材料包导出** | |
 
 ### 1.4 v0.9.0 重大变更
 
@@ -1953,6 +1954,7 @@ journalctl -u tracker -f
 | **v0.12.0** | **2026-04-08** | **Dashboard 增强**：4 Tab 重构、覆盖率空洞看板、Owner 分布、Feature×Priority 矩阵、快照状态增强、周环比 |
 | **v0.13.0** | **2026-04-17** | **Wiki 集成**：Wiki Tab、三栏布局、项目切换联动、变更历史、搜索功能、环境隔离、生命周期管理 |
 | **v0.13.0** | **2026-04-17** | **FC-CP Dashboard 支持**：Dashboard API 支持 FC-CP 模式、快照系统 FC-CP 模式支持、week_change 修复 |
+| **v0.14.0** | **2026-05-12** | **项目材料包导出**：一键导出项目材料包（项目概览、覆盖率趋势、TC/CP统计、Dashboard数据、Feature列表、快照历史、Wiki内容）ZIP打包下载、仅管理员可用 |
 
 ### v0.8.3 详细变更
 
@@ -2393,6 +2395,66 @@ journalctl -u tracker -f
 - FC-CP 模式下 `week_change.covered_cp` 正确计算
 - FC-CP 模式下 `week_change.unlinked_cp` 正确计算
 - FC-CP 模式下 `week_change.tc_pass_rate` 正确计算
+
+### v0.14.0 详细变更 (2026-05-12)
+
+#### 1. 项目材料包导出功能 (v0.14.0)
+
+**背景**：
+Tracker 目前是纯数据管理工具，用户需要手动从系统中提取数据来制作项目汇报PPT。这个过程耗时且容易出错。
+
+**功能目标**：
+提供一键导出项目材料包的功能，包含所有必要的信息（md文档、Excel表格等），便于快速生成项目汇报材料。
+
+**导出内容**：
+| 文件 | 说明 |
+|------|------|
+| README.md | 材料包说明 |
+| project_overview.md/.xlsx | 项目概览（名称、日期、coverage_mode） |
+| coverage_trend.md/.xlsx | 覆盖率趋势（里程碑、历史数据） |
+| tc_cp_statistics.md/.xlsx | TC/CP统计（状态分布、通过率、Owner分布） |
+| dashboard_feature_matrix.md/.xlsx | Feature×Priority矩阵 |
+| dashboard_owner_distribution.md/.xlsx | Owner分布表 |
+| dashboard_coverage_matrix.md/.xlsx | Coverage Matrix |
+| feature_list.md/.xlsx | Feature列表统计汇总 |
+| snapshots.md/.xlsx | 快照历史 |
+| wiki/index.json | Wiki索引 |
+| wiki/changes_index.json | Wiki变更历史 |
+| wiki/pages/*.html | Wiki页面HTML |
+
+**API 端点**：
+- `GET /api/export/project/<project_id>/package` - 导出项目材料包 (ZIP)
+- 权限：仅管理员可用（@admin_required）
+- 响应：application/zip 二进制流
+
+**ZIP 文件名格式**：
+`project_export_{project_name}_{YYYYMMDD_HHMMSS}.zip`
+
+**前端导出按钮**：
+- 位置：项目列表页面，每行末的操作按钮列
+- 可见性：仅 admin 角色可见
+- 按钮样式："📦 导出材料包"
+- 导出中显示加载状态，成功后显示 toast 提示
+
+#### 2. 权限控制 (v0.14.0)
+
+**后端权限**：
+- API 使用 `@admin_required` 装饰器
+- 非管理员调用返回 403 FORBIDDEN
+- 项目不存在返回 404 PROJECT_NOT_FOUND
+
+**前端权限**：
+- 导出按钮仅 admin 角色可见
+- 非管理员用户看不到导出按钮
+
+**错误响应**：
+```json
+// 项目不存在
+{"error": "项目不存在", "code": "PROJECT_NOT_FOUND"}
+
+// 无权访问（非管理员）
+{"error": "无权限执行此操作", "code": "FORBIDDEN"}
+```
 
 ### v0.12.0 详细变更 (2026-04-08)
 

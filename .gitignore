@@ -61,6 +61,7 @@ dev/archives/*.json
 # ========== 开发临时文件 ==========
 CLAUDE_TODO.md
 dev/cookies.txt
+cookies.txt
 archives/
 smoke/archives/
 *.bak
