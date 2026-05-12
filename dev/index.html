@@ -4379,8 +4379,9 @@
             const isAdmin = currentUser && currentUser.role === 'admin';
             list.innerHTML = projects.map(p => {
                 const isActive = currentProject && currentProject.id === p.id;
-                const deleteBtn = isAdmin ? `<button class="action-btn delete" onclick="event.stopPropagation(); showDeleteProjectConfirm(${p.id}, '${escapeHtml(p.name)}')" title="删除项目">🗑️ 删除</button>` : '';
+                const exportBtn = isAdmin ? `<button class="action-btn export" onclick="event.stopPropagation(); exportProjectPackage(${p.id}, '${escapeHtml(p.name)}')" title="导出材料包">📦 导出</button>` : '';
                 const editBtn = isAdmin ? `<button class="action-btn edit" onclick="event.stopPropagation(); showEditProjectDate(${p.id}, '${escapeHtml(p.name)}', '${p.start_date || ''}', '${p.end_date || ''}')" title="编辑项目日期">✏️ 编辑</button>` : '';
+                const deleteBtn = isAdmin ? `<button class="action-btn delete" onclick="event.stopPropagation(); showDeleteProjectConfirm(${p.id}, '${escapeHtml(p.name)}')" title="删除项目">🗑️ 删除</button>` : '';
                 // v0.11.0 supplement: 根据 coverage_mode 显示不同信息
                 const metaParts = [`CP: ${p.cp_count}`];
                 if (p.coverage_mode === 'fc_cp') {
@@ -4392,9 +4393,57 @@
                 if (p.start_date) {
                     metaParts.push(`${p.start_date} ~ ${p.end_date}`);
                 }
-                return `<div class="project-item ${isActive ? 'active' : ''}" onclick="selectProject(${p.id}); closeModal('projectModal');"><div class="project-info"><span class="project-name">${p.name}</span><span class="project-meta">${metaParts.join(' | ')}</span></div><div class="action-btns">${editBtn}${deleteBtn}</div></div>`;
+                return `<div class="project-item ${isActive ? 'active' : ''}" onclick="selectProject(${p.id}); closeModal('projectModal');"><div class="project-info"><span class="project-name">${p.name}</span><span class="project-meta">${metaParts.join(' | ')}</span></div><div class="action-btns">${exportBtn}${editBtn}${deleteBtn}</div></div>`;
             }).join('');
             document.getElementById('projectModal').classList.add('active');
+        }
+
+        // v0.14.0: 导出项目材料包
+        async function exportProjectPackage(projectId, projectName) {
+            if (!confirm(`确定要导出项目 "${projectName}" 的材料包吗？`)) {
+                return;
+            }
+            try {
+                const response = await fetch(`/api/export/project/${projectId}/package`, {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                if (response.status === 403) {
+                    alert('无权限执行此操作，需要管理员权限');
+                    return;
+                }
+                if (response.status === 404) {
+                    alert('项目不存在');
+                    return;
+                }
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.error || '导出失败');
+                }
+                // 获取 blob 并触发下载
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                // 从 Content-Disposition 获取文件名
+                const contentDisp = response.headers.get('Content-Disposition');
+                let filename = `project_export_${projectName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().slice(0,10)}.zip`;
+                if (contentDisp) {
+                    const match = contentDisp.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/i);
+                    if (match) {
+                        filename = match[1].replace(/['"]/g, '');
+                    }
+                }
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                alert('导出成功！');
+            } catch (e) {
+                console.error('导出失败:', e);
+                alert('导出失败: ' + e.message);
+            }
         }
         
         // v0.8.0 编辑项目日期

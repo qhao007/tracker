@@ -30,18 +30,19 @@ get_pid() {
     pgrep -f "gunicorn.*8081" 2>/dev/null || pgrep -f "python3.*8081" 2>/dev/null
 }
 
+# 停止可能占用端口的进程（无论是否已运行，先清理旧进程）
+echo "停止旧进程..."
+pkill -f "gunicorn.*8081" 2>/dev/null || true
+sleep 1
+
 # 检查服务是否已运行
 if is_running; then
     echo "✅ Tracker 测试服务已在运行中，PID: $(get_pid)"
     exit 0
 fi
 
-# 停止可能占用端口的进程
-echo "停止旧进程..."
-pkill -f "server_test.py" 2>/dev/null || true
-pkill -f "gunicorn.*8081" 2>/dev/null || true
-pkill -f "python3.*8081" 2>/dev/null || true
-sleep 1
+# 确保旧进程已停止后再启动新进程
+echo "确认旧进程已停止..."
 
 # 使用 gunicorn 启动 (gevent worker 解决多进程 session 问题)
 echo "启动 Tracker 测试版服务 (v$VERSION_NUM)..."

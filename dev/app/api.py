@@ -4467,6 +4467,561 @@ def export_data():
         )
 
 
+# ============ 项目材料包导出 (v0.14.0) ============
+
+@api.route("/api/export/project/<int:project_id>/package", methods=["GET"])
+@admin_required
+def export_project_package(project_id):
+    """
+    导出项目材料包 (ZIP)
+    权限: 仅管理员可用
+    """
+    import zipfile
+    import io
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment
+    from datetime import datetime
+
+    # 获取项目信息
+    projects = load_projects()
+    project = next((p for p in projects if p["id"] == project_id), None)
+
+    if not project:
+        return jsonify({"error": "项目不存在", "code": "PROJECT_NOT_FOUND"}), 404
+
+    project_name = project.get("name", "unknown")
+    coverage_mode = project.get("coverage_mode", "tc_cp")
+
+    # 连接项目数据库
+    conn = get_db(project["name"])
+    cursor = conn.cursor()
+
+    # ========== 生成各文件内容 ==========
+
+    # 1. README.md
+    readme_content = f"""# 项目材料包 - {project_name}
+
+> 导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+> 覆盖模式: {'FC-CP' if coverage_mode == 'fc_cp' else 'TC-CP'}
+
+## 材料包内容
+
+- README.md - 本说明文件
+- project_overview.md/.xlsx - 项目概览
+- coverage_trend.md/.xlsx - 覆盖率趋势
+- tc_cp_statistics.md/.xlsx - TC/CP统计
+- dashboard_feature_matrix.md/.xlsx - Feature×Priority矩阵
+- dashboard_owner_distribution.md/.xlsx - Owner分布
+- dashboard_coverage_matrix.md/.xlsx - Coverage Matrix
+- feature_list.md/.xlsx - Feature列表
+- snapshots.md/.xlsx - 快照历史
+- wiki/ - Wiki内容 (如存在)
+
+## 项目信息
+
+| 属性 | 值 |
+|------|-----|
+| 项目名称 | {project_name} |
+| 创建日期 | {project.get('created_at', 'N/A')} |
+| 开始日期 | {project.get('start_date', 'N/A')} |
+| 结束日期 | {project.get('end_date', 'N/A')} |
+| 覆盖模式 | {'FC-CP' if coverage_mode == 'fc_cp' else 'TC-CP'} |
+"""
+
+    # 2. project_overview.md
+    # 获取统计信息
+    cursor.execute("SELECT COUNT(*) FROM cover_point")
+    total_cp = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM test_case")
+    total_tc = cursor.fetchone()[0]
+    cursor.execute('SELECT COUNT(*) FROM test_case WHERE status = "PASS"')
+    pass_tc = cursor.fetchone()[0]
+
+    project_overview_md = f"""# 项目概览 - {project_name}
+
+## 基本信息
+
+| 属性 | 值 |
+|------|-----|
+| 项目名称 | {project_name} |
+| 创建日期 | {project.get('created_at', 'N/A')} |
+| 开始日期 | {project.get('start_date', 'N/A')} |
+| 结束日期 | {project.get('end_date', 'N/A')} |
+| 覆盖模式 | {'FC-CP' if coverage_mode == 'fc_cp' else 'TC-CP'} |
+
+## 统计汇总
+
+| 指标 | 值 |
+|------|-----|
+| Cover Points (CP) 总数 | {total_cp} |
+| Test Cases (TC) 总数 | {total_tc} |
+| TC 通过数 (PASS) | {pass_tc} |
+| TC 通过率 | {round(pass_tc/total_tc*100, 1) if total_tc > 0 else 0}% |
+"""
+
+    # 3. project_overview.xlsx
+    wb_overview = Workbook()
+    ws = wb_overview.active
+    ws.title = "项目概览"
+
+    # 标题行
+    ws.append(["属性", "值"])
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(horizontal="center")
+
+    # 数据行
+    ws.append(["项目名称", project_name])
+    ws.append(["创建日期", project.get('created_at', 'N/A')])
+    ws.append(["开始日期", project.get('start_date', 'N/A')])
+    ws.append(["结束日期", project.get('end_date', 'N/A')])
+    ws.append(["覆盖模式", 'FC-CP' if coverage_mode == 'fc_cp' else 'TC-CP'])
+    ws.append(["CP 总数", total_cp])
+    ws.append(["TC 总数", total_tc])
+    ws.append(["TC 通过数", pass_tc])
+    ws.append(["TC 通过率", f"{round(pass_tc/total_tc*100, 1) if total_tc > 0 else 0}%"])
+
+    # 设置列宽
+    ws.column_dimensions['A'].width = 20
+    ws.column_dimensions['B'].width = 30
+
+    # 4. coverage_trend.md
+    cursor.execute("SELECT * FROM project_progress WHERE project_id = ? ORDER BY snapshot_date", (project_id,))
+    progress_rows = cursor.fetchall()
+
+    coverage_trend_md = f"""# 覆盖率趋势 - {project_name}
+
+## 历史快照
+
+| 日期 | 覆盖率 | P0覆盖率 | P1覆盖率 | P2覆盖率 | TC通过数 | TC总数 | CP覆盖数 | CP总数 |
+|------|--------|----------|----------|----------|----------|--------|----------|--------|
+"""
+
+    for row in progress_rows:
+        coverage_trend_md += f"| {row['snapshot_date']} | {row['actual_coverage'] or 'N/A'}% | {row['p0_coverage'] or 'N/A'}% | {row['p1_coverage'] or 'N/A'}% | {row['p2_coverage'] or 'N/A'}% | {row['tc_pass_count'] or 0} | {row['tc_total'] or 0} | {row['cp_covered'] or 0} | {row['cp_total'] or 0} |\n"
+
+    # 5. coverage_trend.xlsx
+    wb_coverage = Workbook()
+    ws_cov = wb_coverage.active
+    ws_cov.title = "覆盖率趋势"
+
+    headers_cov = ["日期", "覆盖率", "P0覆盖率", "P1覆盖率", "P2覆盖率", "TC通过数", "TC总数", "CP覆盖数", "CP总数"]
+    ws_cov.append(headers_cov)
+    for cell in ws_cov[1]:
+        cell.font = Font(bold=True)
+
+    for row in progress_rows:
+        ws_cov.append([
+            row['snapshot_date'] or '',
+            row['actual_coverage'] or '',
+            row['p0_coverage'] or '',
+            row['p1_coverage'] or '',
+            row['p2_coverage'] or '',
+            row['tc_pass_count'] or 0,
+            row['tc_total'] or 0,
+            row['cp_covered'] or 0,
+            row['cp_total'] or 0
+        ])
+
+    # 6. tc_cp_statistics.md
+    # TC 状态统计
+    cursor.execute('SELECT status, COUNT(*) as count FROM test_case GROUP BY status')
+    tc_status_stats = cursor.fetchall()
+
+    # TC Owner 分布
+    cursor.execute('SELECT owner, COUNT(*) as count FROM test_case WHERE owner IS NOT NULL AND owner != "" GROUP BY owner ORDER BY count DESC')
+    tc_owner_stats = cursor.fetchall()
+
+    # CP 按 Feature 分组
+    cursor.execute('SELECT feature, COUNT(*) as count FROM cover_point GROUP BY feature ORDER BY count DESC')
+    cp_feature_stats = cursor.fetchall()
+
+    tc_cp_stats_md = f"""# TC/CP 统计 - {project_name}
+
+## TC 状态分布
+
+| 状态 | 数量 |
+|------|------|
+"""
+
+    status_map = {"OPEN": "开启", "CODED": "已编码", "FAIL": "失败", "PASS": "通过", "REMOVED": "已移除"}
+    for row in tc_status_stats:
+        status_name = status_map.get(row['status'], row['status'])
+        tc_cp_stats_md += f"| {status_name} ({row['status']}) | {row['count']} |\n"
+
+    tc_cp_stats_md += f"\n## TC 通过率\n\n- **通过率**: {round(pass_tc/total_tc*100, 1) if total_tc > 0 else 0}%\n\n"
+
+    tc_cp_stats_md += "\n## TC Owner 分布\n\n| Owner | TC数量 |\n|-------|--------|\n"
+    for row in tc_owner_stats:
+        tc_cp_stats_md += f"| {row['owner'] or 'N/A'} | {row['count']} |\n"
+
+    tc_cp_stats_md += "\n## CP 按 Feature 分组\n\n| Feature | CP数量 |\n|---------|--------|\n"
+    for row in cp_feature_stats:
+        tc_cp_stats_md += f"| {row['feature'] or 'N/A'} | {row['count']} |\n"
+
+    # 7. tc_cp_statistics.xlsx
+    wb_tc_cp = Workbook()
+    ws_tc = wb_tc_cp.active
+    ws_tc.title = "TC状态统计"
+    ws_tc.append(["状态", "数量"])
+    for cell in ws_tc[1]:
+        cell.font = Font(bold=True)
+    for row in tc_status_stats:
+        ws_tc.append([row['status'], row['count']])
+
+    ws_owner = wb_tc_cp.create_sheet("TC Owner分布")
+    ws_owner.append(["Owner", "TC数量"])
+    for cell in ws_owner[1]:
+        cell.font = Font(bold=True)
+    for row in tc_owner_stats:
+        ws_owner.append([row['owner'] or 'N/A', row['count']])
+
+    ws_feature = wb_tc_cp.create_sheet("CP Feature分组")
+    ws_feature.append(["Feature", "CP数量"])
+    for cell in ws_feature[1]:
+        cell.font = Font(bold=True)
+    for row in cp_feature_stats:
+        ws_feature.append([row['feature'] or 'N/A', row['count']])
+
+    # 8-12. Dashboard 数据 - 从 Dashboard API 获取数据进行复用
+    # Feature×Priority Matrix
+    cursor.execute("SELECT feature, priority, COUNT(*) as total FROM cover_point WHERE feature IS NOT NULL GROUP BY feature, priority ORDER BY feature, priority")
+    feature_priority_rows = cursor.fetchall()
+
+    # 构建 matrix 数据
+    matrix = {}
+    features_set = set()
+    priorities_set = set()
+
+    for row in feature_priority_rows:
+        feature = row['feature'] or 'Unknown'
+        priority = row['priority'] or 'P0'
+        features_set.add(feature)
+        priorities_set.add(priority)
+        if feature not in matrix:
+            matrix[feature] = {}
+        matrix[feature][priority] = {'total': row['total'], 'covered': 0}
+
+    # TC-CP 模式: 根据关联表计算覆盖率
+    if coverage_mode != 'fc_cp':
+        cursor.execute("""
+            SELECT cp.feature, cp.priority, COUNT(DISTINCT tc.id) as pass_count
+            FROM test_case tc
+            JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+            JOIN cover_point cp ON tcc.cp_id = cp.id
+            WHERE tc.status = 'PASS'
+            GROUP BY cp.feature, cp.priority
+        """)
+        for row in cursor.fetchall():
+            feature = row['feature'] or 'Unknown'
+            priority = row['priority'] or 'P0'
+            if feature in matrix and priority in matrix[feature]:
+                matrix[feature][priority]['covered'] = row['pass_count']
+
+    # dashboard_feature_matrix.md
+    sorted_priorities = sorted(priorities_set)
+    dashboard_feature_md = f"""# Feature×Priority 矩阵 - {project_name}
+
+| Feature | {"| ".join(sorted_priorities)} | 合计 |
+|---------|{'|'.join(['--------' for _ in sorted_priorities])}|--------|
+"""
+
+    row_totals = {}
+    for feature in sorted(features_set):
+        row_total = 0
+        cells = []
+        for priority in sorted_priorities:
+            count = matrix.get(feature, {}).get(priority, {}).get('total', 0)
+            cells.append(str(count))
+            row_total += count
+        row_totals[feature] = row_total
+        dashboard_feature_md += f"| {feature} | {' | '.join(cells)} | {row_total} |\n"
+
+    # 列合计
+    col_totals = []
+    for priority in sorted_priorities:
+        total = sum(matrix.get(f, {}).get(priority, {}).get('total', 0) for f in features_set)
+        col_totals.append(str(total))
+    dashboard_feature_md += f"| **合计** | {' | '.join(col_totals)} | {sum(row_totals.values())} |\n"
+
+    # dashboard_feature_matrix.xlsx
+    wb_matrix = Workbook()
+    ws_matrix = wb_matrix.active
+    ws_matrix.title = "Feature×Priority矩阵"
+    ws_matrix.append(["Feature"] + sorted_priorities + ["合计"])
+    for cell in ws_matrix[1]:
+        cell.font = Font(bold=True)
+    for feature in sorted(features_set):
+        row_data = [feature]
+        for priority in sorted_priorities:
+            row_data.append(matrix.get(feature, {}).get(priority, {}).get('total', 0))
+        row_data.append(row_totals.get(feature, 0))
+        ws_matrix.append(row_data)
+    # 合计行
+    ws_matrix.append(["合计"] + col_totals + [sum(row_totals.values())])
+
+    # 9. dashboard_owner_distribution.md
+    dashboard_owner_md = f"""# Owner 分布 - {project_name}
+
+## TC Owner 分布
+
+| Owner | TC数量 | 占比 |
+|-------|--------|------|
+"""
+    total_tc_count = sum(row['count'] for row in tc_owner_stats) if tc_owner_stats else total_tc
+    for row in tc_owner_stats:
+        pct = round(row['count'] / total_tc_count * 100, 1) if total_tc_count > 0 else 0
+        dashboard_owner_md += f"| {row['owner'] or 'N/A'} | {row['count']} | {pct}% |\n"
+
+    # dashboard_owner_distribution.xlsx
+    wb_owner = Workbook()
+    ws_own = wb_owner.active
+    ws_own.title = "Owner分布"
+    ws_own.append(["Owner", "TC数量", "占比"])
+    for cell in ws_own[1]:
+        cell.font = Font(bold=True)
+    for row in tc_owner_stats:
+        pct = round(row['count'] / total_tc_count * 100, 1) if total_tc_count > 0 else 0
+        ws_own.append([row['owner'] or 'N/A', row['count'], f"{pct}%"])
+
+    # 10. dashboard_coverage_matrix.md (Feature × Priority Coverage)
+    dashboard_coverage_md = f"""# Coverage Matrix - {project_name}
+
+## CP 覆盖率矩阵 (按 Feature×Priority)
+
+| Feature | {"| ".join(sorted_priorities)} | 行合计 |
+|---------|{'|'.join(['--------' for _ in sorted_priorities])}|--------|
+"""
+    coverage_row_totals = {}
+    for feature in sorted(features_set):
+        cells = []
+        row_cov_total = 0
+        for priority in sorted_priorities:
+            total = matrix.get(feature, {}).get(priority, {}).get('total', 0)
+            covered = matrix.get(feature, {}).get(priority, {}).get('covered', 0)
+            rate = round(covered / total * 100, 1) if total > 0 else 0
+            cells.append(f"{rate}%")
+            row_cov_total += covered
+        coverage_row_totals[feature] = row_cov_total
+        dashboard_coverage_md += f"| {feature} | {' | '.join(cells)} | {row_cov_total} |\n"
+
+    # 列合计
+    cov_col_totals = []
+    for priority in sorted_priorities:
+        covered = sum(matrix.get(f, {}).get(priority, {}).get('covered', 0) for f in features_set)
+        total = sum(matrix.get(f, {}).get(priority, {}).get('total', 0) for f in features_set)
+        rate = round(covered / total * 100, 1) if total > 0 else 0
+        cov_col_totals.append(f"{rate}%")
+    dashboard_coverage_md += f"| **列合计** | {' | '.join(cov_col_totals)} | {sum(coverage_row_totals.values())} |\n"
+
+    # dashboard_coverage_matrix.xlsx
+    wb_cov_matrix = Workbook()
+    ws_cov_mat = wb_cov_matrix.active
+    ws_cov_mat.title = "Coverage Matrix"
+    ws_cov_mat.append(["Feature"] + sorted_priorities + ["行合计"])
+    for cell in ws_cov_mat[1]:
+        cell.font = Font(bold=True)
+    for feature in sorted(features_set):
+        row_data = [feature]
+        for priority in sorted_priorities:
+            total = matrix.get(feature, {}).get(priority, {}).get('total', 0)
+            covered = matrix.get(feature, {}).get(priority, {}).get('covered', 0)
+            rate = round(covered / total * 100, 1) if total > 0 else 0
+            row_data.append(f"{rate}%")
+        row_data.append(coverage_row_totals.get(feature, 0))
+        ws_cov_mat.append(row_data)
+    ws_cov_mat.append(["列合计"] + cov_col_totals + [sum(coverage_row_totals.values())])
+
+    # 11. feature_list.md
+    feature_list_md = f"""# Feature 列表 - {project_name}
+
+## 按 Feature 统计汇总
+
+| Feature | CP数量 | 覆盖率范围 | 优先级分布 |
+|---------|--------|------------|------------|
+"""
+    for row in cp_feature_stats:
+        feature = row['feature'] or 'Unknown'
+        cp_count = row['count']
+        # 获取该 Feature 的优先级分布
+        cursor.execute("SELECT priority, COUNT(*) as count FROM cover_point WHERE feature = ? GROUP BY priority", (feature,))
+        priority_dist = cursor.fetchall()
+        priority_str = ", ".join([f"{p['priority']}: {p['count']}" for p in priority_dist])
+        # 获取覆盖率范围
+        min_cov = 100
+        max_cov = 0
+        cursor.execute("""
+            SELECT cp.id, cp.priority,
+                (SELECT COUNT(*) FROM tc_cp_connections tcc JOIN test_case tc ON tcc.tc_id = tc.id WHERE tcc.cp_id = cp.id AND tc.status = 'PASS') as pass_count,
+                (SELECT COUNT(*) FROM tc_cp_connections tcc WHERE tcc.cp_id = cp.id) as total
+            FROM cover_point cp WHERE cp.feature = ?
+        """, (feature,))
+        for cp_row in cursor.fetchall():
+            total = cp_row['total'] or 0
+            if total > 0:
+                rate = cp_row['pass_count'] / total * 100
+                min_cov = min(min_cov, rate)
+                max_cov = max(max_cov, rate)
+        cov_range = f"{round(min_cov)}% - {round(max_cov)}%" if min_cov < 100 or max_cov > 0 else "N/A"
+        feature_list_md += f"| {feature} | {cp_count} | {cov_range} | {priority_str} |\n"
+
+    # feature_list.xlsx
+    wb_feature = Workbook()
+    ws_feat = wb_feature.active
+    ws_feat.title = "Feature列表"
+    ws_feat.append(["Feature", "CP数量", "覆盖率范围", "优先级分布"])
+    for cell in ws_feat[1]:
+        cell.font = Font(bold=True)
+    for row in cp_feature_stats:
+        feature = row['feature'] or 'Unknown'
+        cp_count = row['count']
+        cursor.execute("SELECT priority, COUNT(*) as count FROM cover_point WHERE feature = ? GROUP BY priority", (feature,))
+        priority_dist = cursor.fetchall()
+        priority_str = ", ".join([f"{p['priority']}: {p['count']}" for p in priority_dist])
+        min_cov, max_cov = 100, 0
+        cursor.execute("""
+            SELECT cp.id, cp.priority,
+                (SELECT COUNT(*) FROM tc_cp_connections tcc JOIN test_case tc ON tcc.tc_id = tc.id WHERE tcc.cp_id = cp.id AND tc.status = 'PASS') as pass_count,
+                (SELECT COUNT(*) FROM tc_cp_connections tcc WHERE tcc.cp_id = cp.id) as total
+            FROM cover_point cp WHERE cp.feature = ?
+        """, (feature,))
+        for cp_row in cursor.fetchall():
+            total = cp_row['total'] or 0
+            if total > 0:
+                rate = cp_row['pass_count'] / total * 100
+                min_cov = min(min_cov, rate)
+                max_cov = max(max_cov, rate)
+        cov_range = f"{round(min_cov)}% - {round(max_cov)}%" if min_cov < 100 or max_cov > 0 else "N/A"
+        ws_feat.append([feature, cp_count, cov_range, priority_str])
+
+    # 12. snapshots.md (与 coverage_trend.md 类似但包含所有字段)
+    snapshots_md = f"""# 快照历史 - {project_name}
+
+## 所有历史快照
+
+| 日期 | 覆盖率 | P0 | P1 | P2 | TC通过 | TC总数 | CP覆盖 | CP总数 | 更新人 |
+|------|--------|----|----|----|--------|--------|--------|--------|--------|
+"""
+    for row in progress_rows:
+        snapshots_md += f"| {row['snapshot_date']} | {row['actual_coverage'] or 'N/A'}% | {row['p0_coverage'] or 'N/A'}% | {row['p1_coverage'] or 'N/A'}% | {row['p2_coverage'] or 'N/A'}% | {row['tc_pass_count'] or 0} | {row['tc_total'] or 0} | {row['cp_covered'] or 0} | {row['cp_total'] or 0} | {row['updated_by'] or 'N/A'} |\n"
+
+    # snapshots.xlsx
+    wb_snap = Workbook()
+    ws_snap = wb_snap.active
+    ws_snap.title = "快照历史"
+    ws_snap.append(["日期", "覆盖率", "P0覆盖率", "P1覆盖率", "P2覆盖率", "TC通过数", "TC总数", "CP覆盖数", "CP总数", "更新人"])
+    for cell in ws_snap[1]:
+        cell.font = Font(bold=True)
+    for row in progress_rows:
+        ws_snap.append([
+            row['snapshot_date'] or '',
+            row['actual_coverage'] or '',
+            row['p0_coverage'] or '',
+            row['p1_coverage'] or '',
+            row['p2_coverage'] or '',
+            row['tc_pass_count'] or 0,
+            row['tc_total'] or 0,
+            row['cp_covered'] or 0,
+            row['cp_total'] or 0,
+            row['updated_by'] or 'N/A'
+        ])
+
+    # ========== 打包为 ZIP ==========
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        # 添加 README
+        zipf.writestr("README.md", readme_content)
+
+        # 添加各文件
+        zipf.writestr("project_overview.md", project_overview_md)
+        zipf.writestr("coverage_trend.md", coverage_trend_md)
+        zipf.writestr("tc_cp_statistics.md", tc_cp_stats_md)
+        zipf.writestr("dashboard_feature_matrix.md", dashboard_feature_md)
+        zipf.writestr("dashboard_owner_distribution.md", dashboard_owner_md)
+        zipf.writestr("dashboard_coverage_matrix.md", dashboard_coverage_md)
+        zipf.writestr("feature_list.md", feature_list_md)
+        zipf.writestr("snapshots.md", snapshots_md)
+
+        # 添加 Excel 文件
+        overview_bytes = io.BytesIO()
+        wb_overview.save(overview_bytes)
+        zipf.writestr("project_overview.xlsx", overview_bytes.getvalue())
+
+        coverage_bytes = io.BytesIO()
+        wb_coverage.save(coverage_bytes)
+        zipf.writestr("coverage_trend.xlsx", coverage_bytes.getvalue())
+
+        tc_cp_bytes = io.BytesIO()
+        wb_tc_cp.save(tc_cp_bytes)
+        zipf.writestr("tc_cp_statistics.xlsx", tc_cp_bytes.getvalue())
+
+        matrix_bytes = io.BytesIO()
+        wb_matrix.save(matrix_bytes)
+        zipf.writestr("dashboard_feature_matrix.xlsx", matrix_bytes.getvalue())
+
+        owner_bytes = io.BytesIO()
+        wb_owner.save(owner_bytes)
+        zipf.writestr("dashboard_owner_distribution.xlsx", owner_bytes.getvalue())
+
+        cov_matrix_bytes = io.BytesIO()
+        wb_cov_matrix.save(cov_matrix_bytes)
+        zipf.writestr("dashboard_coverage_matrix.xlsx", cov_matrix_bytes.getvalue())
+
+        feature_bytes = io.BytesIO()
+        wb_feature.save(feature_bytes)
+        zipf.writestr("feature_list.xlsx", feature_bytes.getvalue())
+
+        snap_bytes = io.BytesIO()
+        wb_snap.save(snap_bytes)
+        zipf.writestr("snapshots.xlsx", snap_bytes.getvalue())
+
+        # Wiki 内容导出 (如果存在)
+        wiki_base = os.path.join(current_app.config["DATA_DIR"], "wiki")
+        project_wiki_dir = os.path.join(wiki_base, str(project_id))
+
+        if os.path.isdir(project_wiki_dir):
+            wiki_index = {"pages": []}
+            wiki_changes = {"changes": []}
+
+            # 导出 wiki/index.json
+            pages_dir = os.path.join(project_wiki_dir, "pages")
+            if os.path.isdir(pages_dir):
+                for page_file in os.listdir(pages_dir):
+                    if page_file.endswith(".html"):
+                        page_slug = page_file[:-5]
+                        wiki_index["pages"].append({
+                            "slug": page_slug,
+                            "filename": page_file
+                        })
+                        # 复制页面文件
+                        with open(os.path.join(pages_dir, page_file), 'r', encoding='utf-8') as f:
+                            zipf.writestr(f"wiki/pages/{page_file}", f.read())
+
+            # 导出 wiki/index.json
+            zipf.writestr("wiki/index.json", json.dumps(wiki_index, ensure_ascii=False, indent=2))
+
+            # 导出 wiki/changes_index.json (如果存在)
+            changes_file = os.path.join(project_wiki_dir, "changes_index.json")
+            if os.path.isfile(changes_file):
+                with open(changes_file, 'r', encoding='utf-8') as f:
+                    zipf.writestr("wiki/changes_index.json", f.read())
+
+    output.seek(0)
+
+    # 生成文件名: project_export_{name}_{YYYYMMDD_HHMMSS}.zip
+    safe_name = "".join(c for c in project_name if c.isalnum() or c in (' ', '_', '-')).strip()
+    safe_name = safe_name.replace(' ', '_')
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    filename = f"project_export_{safe_name}_{timestamp}.zip"
+
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/zip",
+    )
+
+
 # ============ 认证 API ============
 
 @api.route("/api/auth/login", methods=["POST"])
