@@ -4624,3 +4624,76 @@ echo "确认旧进程已停止..."
 | 8081 端口 HTTP 响应 | 200 OK |
 
 **测试时间**: 2026-05-12
+---
+
+## BUG-XXX: 导出材料包 Coverage Matrix 计算错误
+
+**发现时间**: 2026-05-14
+
+**问题描述**:
+
+导出材料包中的 `dashboard_coverage_matrix.md/.xlsx` 文件，Coverage Matrix 的覆盖率数据计算错误，导致部分 Feature/Priority 的覆盖率超过 100%。
+
+**错误示例**:
+
+| Feature | 修复前 P0/P1 | 修复后 P0/P1 |
+|---------|-------------|-------------|
+| CCB | 225.0%/140.5% | 100.0%/100.0% |
+| DDR | 100.0%/93.3% | 100.0%/86.7% |
+| IO | 185.7%/0% | 85.7%/0% |
+| POR | 116.7%/120.0% | 100.0%/100.0% |
+
+**根本原因**:
+
+`export_project_package` 函数（第 4706-4719 行）计算覆盖率时，错误地使用 `COUNT(DISTINCT tc.id)` 统计 PASS TC 的数量，而不是统计被 PASS TC 覆盖的 CP 数量。
+
+当一个 PASS TC 连接到多个同 Feature/Priority 的 CP 时，会导致重复计数，使得覆盖率超过 100%。
+
+**错误代码**:
+
+    # TC-CP 模式: 根据关联表计算覆盖率（错误）
+    cursor.execute("""
+        SELECT cp.feature, cp.priority, COUNT(DISTINCT tc.id) as pass_count
+        FROM test_case tc
+        JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+        JOIN cover_point cp ON tcc.cp_id = cp.id
+        WHERE tc.status = 'PASS'
+        GROUP BY cp.feature, cp.priority
+    """)
+
+**修复方案**:
+
+遍历 matrix 中的每个 Feature/Priority 组合，统计被 PASS TC 覆盖的 CP 数量（每个 CP 只计算一次）：
+
+    for feature in features_set:
+        for priority in priorities_set:
+            if feature in matrix and priority in matrix[feature]:
+                cursor.execute("""
+                    SELECT COUNT(DISTINCT cp.id) as covered_cp
+                    FROM cover_point cp
+                    WHERE cp.feature = ? AND cp.priority = ?
+                    AND EXISTS (
+                        SELECT 1 FROM tc_cp_connections tcc
+                        JOIN test_case tc ON tcc.tc_id = tc.id
+                        WHERE tcc.cp_id = cp.id AND tc.status = 'PASS'
+                    )
+                """, (feature if feature != 'Unknown' else None, priority))
+                result = cursor.fetchone()
+                matrix[feature][priority]['covered'] = result['covered_cp'] if result else 0
+
+**修复文件**:
+
+- `/projects/management/tracker/dev/app/api.py` (第 4706-4723 行)
+
+**验证结果**:
+
+| 测试类型 | 结果 |
+|---------|------|
+| API 测试 (431个) | 全部通过 |
+| UI 冒烟测试 (20个) | 全部通过 |
+
+**注意**:
+
+前端 Dashboard API (`/api/dashboard/coverage-matrix`) 的计算逻辑是正确的，与修复后的导出材料包一致。
+
+**测试时间**: 2026-05-14

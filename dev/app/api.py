@@ -4702,21 +4702,25 @@ def export_project_package(project_id):
             matrix[feature] = {}
         matrix[feature][priority] = {'total': row['total'], 'covered': 0}
 
-    # TC-CP 模式: 根据关联表计算覆盖率
+    # TC-CP 模式: 计算被 PASS TC 覆盖的 CP 数量
     if coverage_mode != 'fc_cp':
-        cursor.execute("""
-            SELECT cp.feature, cp.priority, COUNT(DISTINCT tc.id) as pass_count
-            FROM test_case tc
-            JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
-            JOIN cover_point cp ON tcc.cp_id = cp.id
-            WHERE tc.status = 'PASS'
-            GROUP BY cp.feature, cp.priority
-        """)
-        for row in cursor.fetchall():
-            feature = row['feature'] or 'Unknown'
-            priority = row['priority'] or 'P0'
-            if feature in matrix and priority in matrix[feature]:
-                matrix[feature][priority]['covered'] = row['pass_count']
+        # 遍历 matrix 中的每个 Feature/Priority 组合，统计被 PASS TC 覆盖的 CP 数量
+        for feature in features_set:
+            for priority in priorities_set:
+                if feature in matrix and priority in matrix[feature]:
+                    # 统计该 Feature/Priority 下有多少个 CP 被 PASS TC 覆盖
+                    cursor.execute("""
+                        SELECT COUNT(DISTINCT cp.id) as covered_cp
+                        FROM cover_point cp
+                        WHERE cp.feature = ? AND cp.priority = ?
+                        AND EXISTS (
+                            SELECT 1 FROM tc_cp_connections tcc
+                            JOIN test_case tc ON tcc.tc_id = tc.id
+                            WHERE tcc.cp_id = cp.id AND tc.status = 'PASS'
+                        )
+                    """, (feature if feature != 'Unknown' else None, priority))
+                    result = cursor.fetchone()
+                    matrix[feature][priority]['covered'] = result['covered_cp'] if result else 0
 
     # dashboard_feature_matrix.md
     sorted_priorities = sorted(priorities_set)
