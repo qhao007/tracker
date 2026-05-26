@@ -119,7 +119,7 @@ class TestSnapshotAPI:
         assert len(tc_states) > 0, "tc_states 不应为空"
 
         # 验证每个 tc_states 条目结构
-        valid_statuses = {'PASS', 'FAIL', 'OPEN', 'CODED', 'N/A'}
+        valid_statuses = {'PASS', 'FAIL', 'OPEN', 'CODED', 'REMOVED', 'N/A'}
         for tc_id, status in tc_states.items():
             assert isinstance(status, str), f"tc_id {tc_id} status 应为字符串"
             assert status in valid_statuses, \

@@ -107,13 +107,18 @@ class TestDatabaseFailure:
         data = json.loads(response.data)
         assert isinstance(data, list)
     
-    def test_nonexistent_project_stats(self, client):
+    def test_nonexistent_project_stats(self, admin_client):
         """API-EXCP-002: 访问不存在项目的统计"""
-        response = client.get('/api/stats?project_id=99999')
+        response = admin_client.get('/api/stats?project_id=99999')
         assert response.status_code == 200
         data = json.loads(response.data)
         assert 'total_tc' in data
         assert data['total_tc'] == 0
+
+    def test_unauthorized_stats(self, client):
+        """API-EXCP-002b: 未登录访问统计返回 401"""
+        response = client.get('/api/stats?project_id=99999')
+        assert response.status_code == 401
 
 
 class TestConcurrencyConflicts:

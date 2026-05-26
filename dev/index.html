@@ -1407,6 +1407,8 @@
                     <select id="cpPriorityFilter" onchange="filterCPByPriority()"><option value="">全部 Priority</option><option value="P0">P0</option><option value="P1">P1</option><option value="P2">P2</option></select>
                     <!-- REQ-005: CP未关联过滤 -->
                     <select id="cpLinkedFilter" onchange="filterCPByLinked()"><option value="">全部 关联状态</option><option value="unlinked">未关联</option></select>
+                    <select id="cpCoverageFilter" onchange="filterCPByCoverage()"><option value="">全部覆盖率</option><option value="0">0% (未覆盖)</option><option value="partial">1-99% (部分覆盖)</option><option value="100">100% (完全覆盖)</option></select>
+                    <label style="font-size: 12px; color: #666; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; margin-left: 4px;"><input type="checkbox" id="cpFailFilter" onchange="filterCPByFail()" style="cursor: pointer;"><span>含 Fail</span></label>
                     <button class="btn" onclick="resetCPFilter()" style="padding: 4px 8px; font-size: 12px;">重置</button>
                 </div>
                 <div class="toolbar-right"><span style="color: #666; font-size: 12px;">共 <span id="cpCount">0</span> 条</span> <button class="btn" id="toggleAllCPDetails" onclick="toggleAllCPDetails()" style="padding: 4px 8px; font-size: 12px;">详情 ▼</button></div>
@@ -3300,6 +3302,22 @@
                 filtered = filtered.filter(cp => !linkedCPIds.has(cp.id));
             }
 
+            // 覆盖率范围过滤
+            const coverageFilter = document.getElementById('cpCoverageFilter')?.value;
+            if (coverageFilter === '0') {
+                filtered = filtered.filter(cp => cp.coverage === 0);
+            } else if (coverageFilter === 'partial') {
+                filtered = filtered.filter(cp => cp.coverage > 0 && cp.coverage < 100);
+            } else if (coverageFilter === '100') {
+                filtered = filtered.filter(cp => cp.coverage === 100);
+            }
+
+            // 含 Fail 过滤
+            const failFilter = document.getElementById('cpFailFilter')?.checked;
+            if (failFilter) {
+                filtered = filtered.filter(cp => cp.fail_count > 0);
+            }
+
             document.getElementById('cpCount').textContent = filtered.length;
             const tbody = document.getElementById('cpList');
             if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #999; padding: 30px;">暂无数据</td></tr>'; return; }
@@ -3512,13 +3530,17 @@
         
         function renderTC(filter = '', statusFilter = '', dvFilterParam = '', sortBy = 'id') {
             let filtered = testCases;
-            
+
             // 加载过滤下拉选项（只执行一次）
             loadTCFilterOptions();
-            
+
+            // 当参数为空时，从DOM读取当前过滤状态（支持无参调用时保持过滤）
+            if (!filter) filter = document.querySelector('#tcPanel .search-input')?.value || '';
+            if (!statusFilter) statusFilter = document.getElementById('tcStatusFilter')?.value || '';
+
             // 文本搜索过滤
             if (filter) { filter = filter.toLowerCase(); filtered = filtered.filter(tc => (tc.test_name && tc.test_name.toLowerCase().includes(filter)) || (tc.testbench && tc.testbench.toLowerCase().includes(filter)) || (tc.owner && tc.owner.toLowerCase().includes(filter))); }
-            
+
             // Status 过滤
             if (statusFilter) {
                 filtered = filtered.filter(tc => tc.status === statusFilter);
@@ -3595,13 +3617,19 @@
         function filterCPByFeature() { renderCP(); }
         function filterCPByPriority() { renderCP(); }
         function filterCPByLinked() { renderCP(); }
+        function filterCPByCoverage() { renderCP(); }
+        function filterCPByFail() { renderCP(); }
         function resetCPFilter() {
             const featureSelect = document.getElementById('cpFeatureFilter');
             const prioritySelect = document.getElementById('cpPriorityFilter');
             const linkedSelect = document.getElementById('cpLinkedFilter');
+            const coverageSelect = document.getElementById('cpCoverageFilter');
+            const failCheckbox = document.getElementById('cpFailFilter');
             if (featureSelect) featureSelect.value = '';
             if (prioritySelect) prioritySelect.value = '';
             if (linkedSelect) linkedSelect.value = '';
+            if (coverageSelect) coverageSelect.value = '';
+            if (failCheckbox) failCheckbox.checked = false;
             // 重置搜索框
             const searchInput = document.querySelector('#cpPanel .search-input');
             if (searchInput) searchInput.value = '';
@@ -4193,11 +4221,24 @@
         async function updateTCStatus(id, newStatus) {
             if (!currentProject) return;
             
-            // PASS → 其他状态需要确认
             const tc = testCases.find(t => t.id === id);
-            if (tc && tc.status === 'PASS' && newStatus !== 'PASS') {
+
+            // 修改为 REMOVED 需要二次确认（会清除 CP 关联）
+            if (newStatus === 'REMOVED') {
+                const confirmed = confirm('⚠️ 确认移除\n\n将状态设为 REMOVED 会清除该 TC 与所有 Cover Points 的关联。\n此操作不可撤销。\n\n是否继续？');
+                if (!confirmed) {
+                    renderTC(); // 刷新列表恢复 select 原始值
+                    return;
+                }
+            }
+
+            // PASS → 其他状态需要确认（REMOVED 已由上方处理）
+            if (tc && tc.status === 'PASS' && newStatus !== 'PASS' && newStatus !== 'REMOVED') {
                 const confirmed = confirm('确认状态变更\n\n将状态从 PASS 改为 ' + newStatus + '？\n完成日期会被重置。');
-                if (!confirmed) return;
+                if (!confirmed) {
+                    renderTC(); // 刷新列表恢复 select 原始值
+                    return;
+                }
             }
             
             try {
@@ -4265,7 +4306,13 @@
         async function executeBatchStatus() {
             const newStatus = document.getElementById('batchStatusValue').value;
             if (!newStatus) { alert('请选择新状态'); return; }
-            
+
+            // 批量修改为 REMOVED 需要二次确认
+            if (newStatus === 'REMOVED') {
+                const confirmed = confirm(`⚠️ 确认批量移除\n\n将 ${selectedTCs.length} 个 TC 设为 REMOVED 会清除它们与所有 Cover Points 的关联。\n此操作不可撤销。\n\n是否继续？`);
+                if (!confirmed) return;
+            }
+
             try {
                 const res = await fetch('/api/tc/batch/status', {
                     method: 'POST',

@@ -350,6 +350,7 @@ def get_projects():
 
 
 @api.route("/api/projects/<int:project_id>", methods=["GET"])
+@login_required
 def get_project(project_id):
     """获取项目详情"""
     projects = load_projects()
@@ -601,6 +602,7 @@ def list_archives():
 
 
 @api.route("/api/projects/restore", methods=["POST"])
+@admin_required
 def restore_project():
     """从归档恢复项目"""
     data = request.json
@@ -688,6 +690,7 @@ def restore_project():
 
 
 @api.route("/api/projects/restore/upload", methods=["POST"])
+@admin_required
 def restore_project_upload():
     """从上传文件恢复项目"""
     # 检查是否有文件
@@ -1767,6 +1770,7 @@ def export_progress(project_id):
 # v0.8.2: 定时任务接口（需要 API Token）
 # v0.11.0: 修复 Token 验证方式、添加 Priority 覆盖率、改进响应格式
 @api.route("/api/cron/progress-snapshot", methods=["POST"])
+@admin_required
 def cron_progress_snapshot():
     """定时任务：批量创建所有项目的快照（Token 认证）"""
     # 验证 API Token
@@ -2624,6 +2628,7 @@ def delete_testcase(tc_id):
 
 
 @api.route("/api/tc/<int:tc_id>/status", methods=["POST"])
+@guest_required
 def update_status(tc_id):
     """更新状态"""
     data = request.json
@@ -3572,6 +3577,7 @@ def import_fc_cp_association():
 
 
 @api.route("/api/stats", methods=["GET"])
+@login_required
 def get_stats():
     """获取统计数据"""
     project_id = request.args.get("project_id", type=int)

@@ -485,7 +485,7 @@ const Dashboard = {
                 ${this.renderHoleColumn('critical', '🔴 Critical', critical)}
                 ${this.renderHoleColumn('warning', '🟡 Warning', warning)}
                 ${this.renderHoleColumn('attention', '🟡 Attention', attention)}
-                ${this.renderHoleColumn('risk', '🟠 At Risk', risk)}
+                ${this.renderHoleColumn('risk', '🟠 Failures', risk)}
             </div>
         `;
     },
