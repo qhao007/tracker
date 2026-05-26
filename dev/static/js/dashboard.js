@@ -472,8 +472,8 @@ const Dashboard = {
             return;
         }
 
-        const { critical, warning, attention } = this.holesData;
-        const total = (critical?.length || 0) + (warning?.length || 0) + (attention?.length || 0);
+        const { critical, warning, attention, risk } = this.holesData;
+        const total = (critical?.length || 0) + (warning?.length || 0) + (attention?.length || 0) + (risk?.length || 0);
 
         if (total === 0) {
             container.innerHTML = '<div class="dashboard-empty">No coverage holes</div>';
@@ -485,6 +485,7 @@ const Dashboard = {
                 ${this.renderHoleColumn('critical', '🔴 Critical', critical)}
                 ${this.renderHoleColumn('warning', '🟡 Warning', warning)}
                 ${this.renderHoleColumn('attention', '🟡 Attention', attention)}
+                ${this.renderHoleColumn('risk', '🟠 At Risk', risk)}
             </div>
         `;
     },
@@ -517,8 +518,8 @@ const Dashboard = {
     showHoleDetail(cpId) {
         // Find the hole data
         let hole = null;
-        const { critical, warning, attention } = this.holesData || {};
-        const allHoles = [...(critical || []), ...(warning || []), ...(attention || [])];
+        const { critical, warning, attention, risk } = this.holesData || {};
+        const allHoles = [...(critical || []), ...(warning || []), ...(attention || []), ...(risk || [])];
         hole = allHoles.find(h => h.cp_id === cpId);
 
         if (!hole) return;
@@ -835,7 +836,7 @@ const Dashboard = {
         const cpListHtml = cell.cp_list.map(cp => `
             <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--color-border);">
                 <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${this.escapeHtml(cp.name)}</span>
-                <span style="width: 60px; text-align: right; color: ${cp.coverage_rate === 0 ? 'var(--color-danger)' : 'var(--color-success)'};">${cp.coverage_rate}%</span>
+                <span style="width: 80px; text-align: right; color: ${cp.coverage_rate === 0 ? 'var(--color-danger)' : cp.fail_count > 0 ? '#f97316' : 'var(--color-success)'};">${cp.coverage_rate}%${cp.fail_count > 0 ? ' (' + cp.fail_count + 'F)' : ''}</span>
             </div>
         `).join('');
 

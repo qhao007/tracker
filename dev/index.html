@@ -34,6 +34,7 @@
         .priority-P1 { background: #ff9800; color: white; }
         .priority-P2 { background: #4caf50; color: white; }
         .bg-green { background: #4caf50; color: white; }
+        .bg-orange { background: #f97316; color: white; }
         .bg-yellow { background: #ff9800; color: white; }
         .bg-gray { background: #9e9e9e; color: white; }
         .bg-red { background: #f44336; color: white; }
@@ -3313,7 +3314,7 @@
                     <td>${escapeHtml(cp.sub_feature || '')}</td>
                     <td><strong>${cpNameHtml}</strong></td>
                     <td><span class="priority-badge">${cp.priority || 'P0'}</span></td>
-                    <td><div class="coverage-wrapper"><span class="coverage-badge ${cp.coverage === 100 ? 'bg-green' : cp.coverage > 0 ? 'bg-yellow' : 'bg-red'}">${cp.coverage}%</span><small class="coverage-detail">${cp.coverage_detail}</small></div></td>
+                    <td><div class="coverage-wrapper"><span class="coverage-badge ${cp.coverage === 100 && cp.fail_count === 0 ? 'bg-green' : cp.coverage === 100 && cp.fail_count > 0 ? 'bg-orange' : cp.coverage > 0 ? 'bg-yellow' : 'bg-red'}">${cp.coverage}%</span><small class="coverage-detail">${cp.coverage_detail}</small></div></td>
                     <td><div class="action-btns"><button class="action-btn" onclick="toggleCPDetail(${cp.id})">详情</button><button class="action-btn edit" onclick="editCP(${cp.id})">编辑</button><button class="action-btn delete" onclick="deleteCP(${cp.id})">删除</button></div></td>
                 </tr>
                 <tr id="cp-detail-${cp.id}" class="cp-detail-row" style="display: none;">
