@@ -350,6 +350,7 @@ def get_projects():
 
 
 @api.route("/api/projects/<int:project_id>", methods=["GET"])
+@login_required
 def get_project(project_id):
     """获取项目详情"""
     projects = load_projects()
@@ -601,6 +602,7 @@ def list_archives():
 
 
 @api.route("/api/projects/restore", methods=["POST"])
+@admin_required
 def restore_project():
     """从归档恢复项目"""
     data = request.json
@@ -688,6 +690,7 @@ def restore_project():
 
 
 @api.route("/api/projects/restore/upload", methods=["POST"])
+@admin_required
 def restore_project_upload():
     """从上传文件恢复项目"""
     # 检查是否有文件
@@ -1394,13 +1397,18 @@ def calculate_current_coverage(project_name, coverage_mode='tc_cp'):
             connected_tcs = cursor.fetchall()
 
             total_tc = len(connected_tcs)
+            covered_tc = 0
+            pass_tc = 0
+            fail_tc = 0
             if total_tc == 0:
                 cp_rate = 0.0
                 linked_tcs = []
             else:
+                covered_tc = sum(1 for tc in connected_tcs if tc[1] in ('PASS', 'FAIL'))
                 pass_tc = sum(1 for tc in connected_tcs if tc[1] == 'PASS')
-                cp_rate = (pass_tc / total_tc) * 100
-                if pass_tc > 0:
+                fail_tc = sum(1 for tc in connected_tcs if tc[1] == 'FAIL')
+                cp_rate = (covered_tc / total_tc) * 100
+                if covered_tc > 0:
                     covered_cps += 1
                 # linked_tcs: list of {tc_id, status}
                 linked_tcs = [{'tc_id': tc[0], 'status': tc[1]} for tc in connected_tcs]
@@ -1411,7 +1419,9 @@ def calculate_current_coverage(project_name, coverage_mode='tc_cp'):
             cp_states[str(cp_id)] = {
                 'name': cp_name,
                 'coverage_rate': round(cp_rate, 1),
-                'linked_tcs': len(linked_tcs)
+                'linked_tcs': len(linked_tcs),
+                'pass_count': pass_tc,
+                'fail_count': fail_tc,
             }
 
     # v0.12.0: 收集 TC States
@@ -1471,9 +1481,9 @@ def calculate_current_coverage(project_name, coverage_mode='tc_cp'):
                 if total_tc == 0:
                     cp_rate = 0.0
                 else:
-                    pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
-                    cp_rate = (pass_tc / total_tc) * 100
-                    if pass_tc > 0:
+                    covered_tc = sum(1 for tc in connected_tcs if tc[0] in ('PASS', 'FAIL'))
+                    cp_rate = (covered_tc / total_tc) * 100
+                    if covered_tc > 0:
                         p_covered += 1
 
             p_total_coverage += cp_rate
@@ -1760,6 +1770,7 @@ def export_progress(project_id):
 # v0.8.2: 定时任务接口（需要 API Token）
 # v0.11.0: 修复 Token 验证方式、添加 Priority 覆盖率、改进响应格式
 @api.route("/api/cron/progress-snapshot", methods=["POST"])
+@admin_required
 def cron_progress_snapshot():
     """定时任务：批量创建所有项目的快照（Token 认证）"""
     # 验证 API Token
@@ -1919,6 +1930,8 @@ def get_coverpoints():
         cp_id = row["id"]
 
         # v0.11.0: 根据 coverage_mode 计算覆盖率
+        pass_count = 0
+        fail_count = 0
         if is_fc_cp_mode:
             # FC-CP 模式: 使用 fc_cp_associations 和 FC 的 coverage_pct
             cursor.execute(
@@ -1950,10 +1963,16 @@ def get_coverpoints():
 
             connected_tcs = cursor.fetchall()
             total = len(connected_tcs)
-            passed = sum(1 for tc in connected_tcs if tc["status"] == "PASS")
+            covered_tc = sum(1 for tc in connected_tcs if tc["status"] in ('PASS', 'FAIL'))
+            pass_count = sum(1 for tc in connected_tcs if tc["status"] == 'PASS')
+            fail_count = sum(1 for tc in connected_tcs if tc["status"] == 'FAIL')
 
             # 计算覆盖率
-            coverage = round(passed / total * 100, 1) if total > 0 else 0.0
+            coverage = round(covered_tc / total * 100, 1) if total > 0 else 0.0
+            if fail_count > 0:
+                coverage_detail = f"{covered_tc}/{total} ({fail_count}F)"
+            else:
+                coverage_detail = f"{covered_tc}/{total}"
 
             # REQ-005: 判断是否关联
             is_linked = cp_id in linked_cp_ids or (total > 0)
@@ -1974,7 +1993,9 @@ def get_coverpoints():
                 "created_at": row["created_at"],
                 "created_by": dict(row).get("created_by", ""),
                 "coverage": coverage,
-                "coverage_detail": f"{passed}/{total}" if not is_fc_cp_mode else f"{coverage}",
+                "coverage_detail": coverage_detail if not is_fc_cp_mode else f"{coverage}",
+                "pass_count": pass_count,
+                "fail_count": fail_count,
                 "linked": is_linked,
             }
         )
@@ -2607,6 +2628,7 @@ def delete_testcase(tc_id):
 
 
 @api.route("/api/tc/<int:tc_id>/status", methods=["POST"])
+@guest_required
 def update_status(tc_id):
     """更新状态"""
     data = request.json
@@ -3555,6 +3577,7 @@ def import_fc_cp_association():
 
 
 @api.route("/api/stats", methods=["GET"])
+@login_required
 def get_stats():
     """获取统计数据"""
     project_id = request.args.get("project_id", type=int)
@@ -4702,13 +4725,13 @@ def export_project_package(project_id):
             matrix[feature] = {}
         matrix[feature][priority] = {'total': row['total'], 'covered': 0}
 
-    # TC-CP 模式: 计算被 PASS TC 覆盖的 CP 数量
+    # TC-CP 模式: 计算被 PASS 或 FAIL TC 覆盖的 CP 数量
     if coverage_mode != 'fc_cp':
-        # 遍历 matrix 中的每个 Feature/Priority 组合，统计被 PASS TC 覆盖的 CP 数量
+        # 遍历 matrix 中的每个 Feature/Priority 组合，统计被 PASS 或 FAIL TC 覆盖的 CP 数量
         for feature in features_set:
             for priority in priorities_set:
                 if feature in matrix and priority in matrix[feature]:
-                    # 统计该 Feature/Priority 下有多少个 CP 被 PASS TC 覆盖
+                    # 统计该 Feature/Priority 下有多少个 CP 被 PASS 或 FAIL TC 覆盖
                     cursor.execute("""
                         SELECT COUNT(DISTINCT cp.id) as covered_cp
                         FROM cover_point cp
@@ -4716,7 +4739,7 @@ def export_project_package(project_id):
                         AND EXISTS (
                             SELECT 1 FROM tc_cp_connections tcc
                             JOIN test_case tc ON tcc.tc_id = tc.id
-                            WHERE tcc.cp_id = cp.id AND tc.status = 'PASS'
+                            WHERE tcc.cp_id = cp.id AND tc.status IN ('PASS', 'FAIL')
                         )
                     """, (feature if feature != 'Unknown' else None, priority))
                     result = cursor.fetchone()
@@ -5520,16 +5543,16 @@ def get_dashboard_stats():
                     unlinked_cp += 1
                     cp_rate = 0.0
                 else:
-                    pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
-                    cp_rate = (pass_tc / total_tc) * 100
+                    covered_tc = sum(1 for tc in connected_tcs if tc[0] in ('PASS', 'FAIL'))
+                    cp_rate = (covered_tc / total_tc) * 100
 
                 total_coverage_rate += cp_rate
 
             # 覆盖率 = 所有 CP 覆盖率的平均值
             coverage_rate = round(total_coverage_rate / total_cp, 1) if total_cp > 0 else 0
-            # covered_cp = 有至少一个 PASS TC 的 CP 数量
+            # covered_cp = 有至少一个 PASS 或 FAIL TC 的 CP 数量
             covered_cp = sum(1 for cp in all_cps if any(
-                tc[0] == 'PASS' for tc in
+                tc[0] in ('PASS', 'FAIL') for tc in
                 cursor.execute("""
                     SELECT tc.status FROM test_case tc
                     INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
@@ -5885,6 +5908,7 @@ def get_dashboard_coverage_holes():
         critical = []
         warning = []
         attention = []
+        risk = []
 
         priority_order = {'P0': 0, 'P1': 1, 'P2': 2, 'P3': 3}
 
@@ -5948,26 +5972,33 @@ def get_dashboard_coverage_holes():
                 if linked_tc_count == 0:
                     continue  # 未关联 TC 的不算空洞
 
-                # 计算 TC 通过率
+                # 计算覆盖率 (PASS 或 FAIL 都算覆盖)
+                covered_tc = sum(1 for tc in linked_tcs if tc[2] in ('PASS', 'FAIL'))
                 pass_tc = sum(1 for tc in linked_tcs if tc[2] == 'PASS')
-                coverage_rate = (pass_tc / linked_tc_count) * 100 if linked_tc_count > 0 else 0
+                fail_tc = sum(1 for tc in linked_tcs if tc[2] == 'FAIL')
+                coverage_rate = (covered_tc / linked_tc_count) * 100 if linked_tc_count > 0 else 0
 
-                # tc-cp 模式空洞: linked_tcs >= 1 AND coverage_rate = 0
-                # 注意: coverage_rate=0 意味着 pass_tc=0，即所有关联 TC 都失败
-                if coverage_rate > 0:
-                    continue
-
+                # tc-cp 模式空洞: linked_tcs >= 1 AND covered_tc = 0 (即所有 TC 都是 CODED/OPEN/REMOVED)
+                # 先构建 hole_entry，因为 risk 和空洞都需要它
                 hole_entry = {
                     'cp_id': cp_id,
                     'cp_name': cp_name[:80] if cp_name else '',
                     'feature': feature,
                     'priority': priority,
                     'coverage_rate': round(coverage_rate, 1),
+                    'pass_count': pass_tc,
+                    'fail_count': fail_tc,
                     'linked_tcs': [
                         {'tc_id': tc[0], 'tc_name': tc[1][:50] if tc[1] else '', 'status': tc[2]}
                         for tc in linked_tcs
                     ]
                 }
+
+                if coverage_rate > 0:
+                    # 不是空洞，检查是否属于 risk（100%覆盖但有FAIL）
+                    if coverage_rate == 100 and fail_tc > 0:
+                        risk.append(hole_entry)
+                    continue
 
                 # tc-cp 等级判定: 按 priority 分级
                 if priority == 'P0':
@@ -5987,14 +6018,14 @@ def get_dashboard_coverage_holes():
                     -len(x.get('linked_fcs', []))
                 ))
         else:
-            for lst in [critical, warning, attention]:
+            for lst in [critical, warning, attention, risk]:
                 lst.sort(key=lambda x: (
                     priority_order.get(x['priority'], 4),
                     -len(x.get('linked_tcs', []))
                 ))
 
         # 每类最多显示 20 条
-        for lst in [critical, warning, attention]:
+        for lst in [critical, warning, attention, risk]:
             del lst[20:]
 
         return jsonify({
@@ -6004,9 +6035,11 @@ def get_dashboard_coverage_holes():
                 'critical': critical,
                 'warning': warning,
                 'attention': attention,
+                'risk': risk,
                 'total_critical': len(critical),
                 'total_warning': len(warning),
-                'total_attention': len(attention)
+                'total_attention': len(attention),
+                'total_risk': len(risk)
             }
         })
 
@@ -6201,17 +6234,23 @@ def get_dashboard_coverage_matrix():
 
                 cp_coverage_rate = 0
                 if len(connected_tcs) > 0:
+                    covered_tc = sum(1 for tc in connected_tcs if tc[0] in ('PASS', 'FAIL'))
                     pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
-                    cp_coverage_rate = round((pass_tc / len(connected_tcs)) * 100, 1)
-                    if pass_tc > 0:
+                    fail_tc = sum(1 for tc in connected_tcs if tc[0] == 'FAIL')
+                    cp_coverage_rate = round((covered_tc / len(connected_tcs)) * 100, 1)
+                    if covered_tc > 0:
                         matrix[feature][priority]['covered'] += 1
 
             # 添加 CP 详情到列表
-            matrix[feature][priority]['cp_list'].append({
+            cp_entry = {
                 'id': cp_id,
                 'name': cp_name[:80] if cp_name else '',
-                'coverage_rate': cp_coverage_rate
-            })
+                'coverage_rate': cp_coverage_rate,
+            }
+            if not is_fc_cp_mode:
+                cp_entry['pass_count'] = pass_tc
+                cp_entry['fail_count'] = fail_tc
+            matrix[feature][priority]['cp_list'].append(cp_entry)
 
         # 构建 weak_areas (覆盖率 < 50%)
         weak_areas = []

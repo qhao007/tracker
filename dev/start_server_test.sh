@@ -33,7 +33,15 @@ get_pid() {
 # 停止可能占用端口的进程（无论是否已运行，先清理旧进程）
 echo "停止旧进程..."
 pkill -f "gunicorn.*8081" 2>/dev/null || true
-sleep 1
+
+# 等待旧进程完全退出（最多5秒）
+for i in 1 2 3 4 5; do
+    sleep 1
+    if ! is_running; then
+        break
+    fi
+    echo "  等待旧进程退出... ($i/5)"
+done
 
 # 检查服务是否已运行
 if is_running; then

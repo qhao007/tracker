@@ -256,7 +256,7 @@ class TestSnapshotCreationAPI:
     def test_snapshot_per_cp_coverage_average(self):
         """
         API-ACT-014: 快照使用"每个 CP 覆盖率求平均"算法
-        验证：CP 覆盖率 = PASS TC数 / 关联TC总数
+        验证：CP 覆盖率 = (PASS + FAIL) TC数 / 关联TC总数
         """
         name = f"Snap_PerCP_{int(time.time() * 1000)}"
         resp = self.client.post('/api/projects',
@@ -336,8 +336,8 @@ class TestSnapshotCreationAPI:
 
     def test_snapshot_partial_cp_coverage(self):
         """
-        API-ACT-015: CP 部分 TC PASS 时，按比例计算覆盖率
-        验证：CP 覆盖率 = PASS TC数 / 关联TC总数
+        API-ACT-015: CP 部分 TC PASS 时，FAIL TC 也计入覆盖
+        验证：CP 覆盖率 = (PASS + FAIL) TC数 / 关联TC总数
         """
         name = f"Snap_Partial_{int(time.time() * 1000)}"
         resp = self.client.post('/api/projects',
@@ -401,9 +401,9 @@ class TestSnapshotCreationAPI:
         snap_data = json.loads(snap_resp.data)
         snapshot = snap_data.get('snapshot', {})
 
-        # CP: 1/2 = 50% (1个PASS，1个FAIL)
-        assert snapshot['actual_coverage'] == 50.0, \
-            f"CP 关联 2 个 TC（1个PASS），覆盖率应为 50%，实际为 {snapshot['actual_coverage']}%"
+        # CP: (1 PASS + 1 FAIL) / 2 = 100% (FAIL TC 也计入覆盖)
+        assert snapshot['actual_coverage'] == 100.0, \
+            f"CP 关联 2 个 TC（1个PASS, 1个FAIL），覆盖率应为 100%，实际为 {snapshot['actual_coverage']}%"
 
     def test_create_snapshot_no_auth(self):
         """测试未登录无法创建快照"""

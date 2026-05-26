@@ -221,9 +221,9 @@ class TestCPCoverageTCMode:
         cp = next((c for c in cps if c['id'] == cp_id), None)
         assert cp is not None, "应该能找到创建的CP"
 
-        # 验证覆盖率: 2 PASS / 3 Total = 66.7%
-        assert cp['coverage'] == 66.7, f"期望覆盖率 66.7，实际 {cp['coverage']}"
-        assert cp['coverage_detail'] == "2/3", f"期望 coverage_detail 为 2/3，实际 {cp['coverage_detail']}"
+        # 验证覆盖率: (2 PASS + 1 FAIL) / 3 Total = 100% (FAIL TC 也计入覆盖)
+        assert cp['coverage'] == 100.0, f"期望覆盖率 100.0（FAIL 也计入），实际 {cp['coverage']}"
+        assert cp['coverage_detail'] == "3/3 (1F)", f"期望 coverage_detail 为 3/3 (1F)，实际 {cp['coverage_detail']}"
 
     def test_cp_coverage_tc_cp_mode_no_tc(self, admin_client, tc_cp_project):
         """TC-CP模式 - CP无关联TC"""
@@ -426,9 +426,9 @@ class TestCoverageDetailFormat:
         cps = json.loads(response.data)
         cp = next((c for c in cps if c['id'] == cp_id), None)
 
-        # 验证 coverage_detail 格式为 "passed/total"
-        assert cp['coverage_detail'] == "1/2", f"期望 coverage_detail 为 1/2，实际 {cp['coverage_detail']}"
-        assert cp['coverage'] == 50.0, f"期望覆盖率 50.0，实际 {cp['coverage']}"
+        # 验证 coverage_detail 格式: FAIL TC 计入覆盖，格式为 "covered/total (fail_countF)"
+        assert cp['coverage_detail'] == "2/2 (1F)", f"期望 coverage_detail 为 2/2 (1F)，实际 {cp['coverage_detail']}"
+        assert cp['coverage'] == 100.0, f"期望覆盖率 100.0（FAIL 也计入），实际 {cp['coverage']}"
 
     def test_coverage_detail_format_zero_tc(self, admin_client, tc_cp_project):
         """coverage_detail 格式 - 0 个 TC"""
