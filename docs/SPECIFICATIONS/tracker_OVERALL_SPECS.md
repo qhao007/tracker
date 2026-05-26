@@ -1,6 +1,6 @@
-# 芯片验证 Tracker v0.14.0 总体规格书
+# 芯片验证 Tracker v0.14.1 总体规格书
 
-> **版本**: v0.14.0 | **更新日期**: 2026-05-12 | **状态**: 🔄 开发中
+> **版本**: v0.14.1 | **更新日期**: 2026-05-26 | **状态**: 🔄 开发中
 
 ---
 
@@ -59,6 +59,7 @@
 | **v0.13.0 Wiki 集成** | |
 | **v0.13.0 FC-CP Dashboard 支持** | |
 | **v0.14.0 项目材料包导出** | |
+| **v0.14.1 CP 覆盖率增强** | |
 
 ### 1.4 v0.9.0 重大变更
 
@@ -500,17 +501,18 @@ python3 scripts/data_manager.py clean
 
 ### 3.3 Cover Point 覆盖率计算规则
 
-> **v0.3.1 新增功能**
+> **v0.3.1 新增功能** | **v0.14.1 增强：FAIL 状态计入覆盖**
 
 每个 Cover Point 显示覆盖率百分比，基于关联的 Test Cases 状态计算：
 
 | 关联 TC 状态 | 覆盖率 |
 |-------------|--------|
-| 全部 PASS | **100%** ✅ |
+| 全部 PASS | **100%** ✅ (绿色) |
+| 全部 PASS/FAIL (无 OPEN/CODED) | **100%** 🟠 (橙色，含 Fail) |
 | 无关联 TC | **0%** （显示 0/0） |
-| 部分 PASS | **PASS 数量 / 关联总数 × 100%** |
+| 部分覆盖 (PASS + FAIL + OPEN/CODED) | **(PASS + FAIL) 数量 / 关联总数 × 100%** |
 
-**计算逻辑：**
+**计算逻辑（v0.14.1）：**
 
 ```python
 # 获取 CP 关联的所有 TC
@@ -522,21 +524,24 @@ cursor.execute('''
 
 connected_tcs = cursor.fetchall()
 total = len(connected_tcs)
-passed = sum(1 for tc in connected_tcs if tc['status'] == 'PASS')
+covered = sum(1 for tc in connected_tcs if tc['status'] in ('PASS', 'FAIL'))
+pass_count = sum(1 for tc in connected_tcs if tc['status'] == 'PASS')
+fail_count = sum(1 for tc in connected_tcs if tc['status'] == 'FAIL')
 
-coverage = round(passed / total * 100, 1) if total > 0 else 0.0
+coverage = round(covered / total * 100, 1) if total > 0 else 0.0
 ```
 
 **前端显示示例：**
 
-| 状态 | 覆盖率显示 |
-|------|-----------|
-| 100% | 🟢 100% (3/3) |
-| 部分 | 🟡 66.7% (2/3) |
-| 0% | ⚪ 0% (0/3) |
-| 无关联 | ⚪ 0% (0/0) |
+| 状态 | 覆盖率显示 | Badge 颜色 |
+|------|-----------|-----------|
+| 100% 全 PASS | 🟢 100% (3/3) | 绿色 |
+| 100% 含 FAIL | 🟠 100% (4/4 (1F)) | 橙色 |
+| 部分覆盖 | 🟡 66.7% (2/3) | 黄色 |
+| 0% | 🔴 0% (0/3) | 红色 |
+| 无关联 | ⚪ 0% (0/0) | 红色 |
 
-**API 返回字段：**
+**API 返回字段（v0.14.1 新增 `pass_count`, `fail_count`）：**
 
 ```json
 {
@@ -544,7 +549,9 @@ coverage = round(passed / total * 100, 1) if total > 0 else 0.0
   "feature": "...",
   "cover_point": "...",
   "coverage": 100.0,
-  "coverage_detail": "3/3"
+  "coverage_detail": "4/4 (1F)",
+  "pass_count": 3,
+  "fail_count": 1
 }
 ```
 
@@ -1955,6 +1962,7 @@ journalctl -u tracker -f
 | **v0.13.0** | **2026-04-17** | **Wiki 集成**：Wiki Tab、三栏布局、项目切换联动、变更历史、搜索功能、环境隔离、生命周期管理 |
 | **v0.13.0** | **2026-04-17** | **FC-CP Dashboard 支持**：Dashboard API 支持 FC-CP 模式、快照系统 FC-CP 模式支持、week_change 修复 |
 | **v0.14.0** | **2026-05-12** | **项目材料包导出**：一键导出项目材料包（项目概览、覆盖率趋势、TC/CP统计、Dashboard数据、Feature列表、快照历史、Wiki内容）ZIP打包下载、仅管理员可用 |
+| **v0.14.1** | **2026-05-26** | **CP 覆盖率增强**：FAIL 状态 TC 计入 CP 覆盖、Coverage Holes 新增 Failures 分类、CP 列表支持按覆盖率和含 Fail 过滤 |
 
 ### v0.8.3 详细变更
 
@@ -2455,6 +2463,56 @@ Tracker 目前是纯数据管理工具，用户需要手动从系统中提取数
 // 无权访问（非管理员）
 {"error": "无权限执行此操作", "code": "FORBIDDEN"}
 ```
+
+### v0.14.1 详细变更 (2026-05-26)
+
+#### 1. CP 覆盖率计算增强
+
+**背景**：
+TC-CP 模式下，原有覆盖率计算仅统计 PASS 状态的 TC。实际验证工作中，FAIL 状态的 TC 也表示该覆盖点已被执行和验证（只是结果未通过），应该计入覆盖率。
+
+**变更内容**：
+- FAIL 状态 TC 计入 CP 覆盖率计算（PASS + FAIL = covered）
+- 100% 覆盖的 CP 分为两类显示：
+  - 全 PASS：绿色 badge 🟢
+  - 含 FAIL：橙色 badge 🟠（一眼区分）
+- `coverage_detail` 格式扩展：
+  - 无 FAIL：`"3/3"`
+  - 含 FAIL：`"4/4 (1F)"`
+
+**影响范围**：
+| 模块 | 变更 |
+|------|------|
+| CP 列表 API | `pass_count`, `fail_count` 新增返回字段 |
+| Dashboard Stats | `covered_cp` 统计口径改为 PASS + FAIL |
+| Coverage Matrix | covered 计数改为 PASS + FAIL |
+| Coverage Holes | 空洞定义改为"无 PASS 且无 FAIL"，新增 Failures 分类 |
+| 导出材料包 | coverage_matrix SQL 改为 `IN ('PASS', 'FAIL')` |
+| 计划曲线 | **不受影响**（保持原逻辑） |
+
+#### 2. Coverage Holes 面板增强
+
+**新增 Failures 分类（原 At Risk）**：
+- 展示 100% 覆盖但包含 FAIL TC 的 CP
+- 橙色边框/背景样式
+- 列标题：`Failures`（替代原 `At Risk`）
+
+**空洞定义更新**：
+- 原定义：有关联 TC 但无 PASS（coverage_rate = 0）
+- 新定义：有关联 TC 但无 PASS 且无 FAIL（即全为 OPEN/CODED/REMOVED）
+
+#### 3. CP 列表过滤增强
+
+**新增过滤条件**：
+| 过滤项 | 选项 | 逻辑 |
+|--------|------|------|
+| 覆盖率范围 | 全部 / 0% / 1-99% / 100% | 按 `cp.coverage` 数值范围过滤 |
+| 含 Fail | Checkbox | 仅显示 `fail_count > 0` 的 CP |
+
+**交互**：
+- 所有过滤条件串联（AND 关系）
+- 支持与其他现有过滤条件组合使用（Feature、Priority、关联状态、搜索）
+- 点击"重置"按钮一并清空所有过滤条件
 
 ### v0.12.0 详细变更 (2026-04-08)
 
