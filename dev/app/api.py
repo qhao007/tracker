@@ -1394,6 +1394,9 @@ def calculate_current_coverage(project_name, coverage_mode='tc_cp'):
             connected_tcs = cursor.fetchall()
 
             total_tc = len(connected_tcs)
+            covered_tc = 0
+            pass_tc = 0
+            fail_tc = 0
             if total_tc == 0:
                 cp_rate = 0.0
                 linked_tcs = []
@@ -1923,6 +1926,8 @@ def get_coverpoints():
         cp_id = row["id"]
 
         # v0.11.0: 根据 coverage_mode 计算覆盖率
+        pass_count = 0
+        fail_count = 0
         if is_fc_cp_mode:
             # FC-CP 模式: 使用 fc_cp_associations 和 FC 的 coverage_pct
             cursor.execute(
@@ -6231,13 +6236,15 @@ def get_dashboard_coverage_matrix():
                         matrix[feature][priority]['covered'] += 1
 
             # 添加 CP 详情到列表
-            matrix[feature][priority]['cp_list'].append({
+            cp_entry = {
                 'id': cp_id,
                 'name': cp_name[:80] if cp_name else '',
                 'coverage_rate': cp_coverage_rate,
-                'pass_count': pass_tc,
-                'fail_count': fail_tc,
-            })
+            }
+            if not is_fc_cp_mode:
+                cp_entry['pass_count'] = pass_tc
+                cp_entry['fail_count'] = fail_tc
+            matrix[feature][priority]['cp_list'].append(cp_entry)
 
         # 构建 weak_areas (覆盖率 < 50%)
         weak_areas = []
