@@ -100,9 +100,9 @@ test.describe('Dashboard UI Tests - v0.12.0', () => {
     const dashboardTab = page.locator('#dashboardTab');
     await expect(dashboardTab).toBeVisible();
 
-    // 验证 Tab 文本
+    // 验证 Tab 文本 (包含 emoji 前缀)
     const tabText = await dashboardTab.textContent();
-    expect(tabText).toBe('Dashboard');
+    expect(tabText).toContain('Dashboard');
 
     // 验证 Tab 有 onclick 属性
     const onclick = await dashboardTab.getAttribute('onclick');

@@ -4697,3 +4697,104 @@ echo "确认旧进程已停止..."
 前端 Dashboard API (`/api/dashboard/coverage-matrix`) 的计算逻辑是正确的，与修复后的导出材料包一致。
 
 **测试时间**: 2026-05-14
+
+---
+
+## BUG-101: TC 页面 Status 过滤在修改 TC 后失效
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-05-26 |
+| **报告人** | 用户反馈 |
+| **修复日期** | 2026-05-26 |
+| **修复人** | Claude Code |
+
+**描述**:
+TC 页面选择 Status 过滤（如 OPEN）后，修改某个 TC 的 status，列表刷新后过滤失效——显示全部 TC，但过滤框仍显示选中了 OPEN。
+
+**根本原因**:
+`renderTC()` 函数的 `statusFilter` 参数通过调用者传入，但修改 TC 状态后多处代码直接调用 `renderTC()` 不带任何参数，导致 `statusFilter` 默认为空字符串，过滤条件丢失。
+
+DV Milestone、Owner、Category 过滤在函数内部直接从 DOM 读取，因此不受影响；只有 `statusFilter` 和文本搜索 `filter` 参数会失效。
+
+**涉及的无参调用点**:
+- 保存 TC 后：`renderTC()` (`index.html:4169`)
+- 删除 TC 后：`renderTC()` (`index.html:4206`)
+- 批量修改后：`renderTC()` (`index.html:4234`)
+- 状态修改后：`renderTC()` (`index.html:4307`, `4334`, `4361`)
+
+**修复方案**:
+在 `renderTC()` 函数开头，当参数为空时自动从 DOM 读取当前过滤状态：
+
+```javascript
+function renderTC(filter = '', statusFilter = '', dvFilterParam = '', sortBy = 'id') {
+    // 当参数为空时，从DOM读取当前过滤状态（支持无参调用时保持过滤）
+    if (!filter) filter = document.querySelector('#tcPanel .search-input')?.value || '';
+    if (!statusFilter) statusFilter = document.getElementById('tcStatusFilter')?.value || '';
+    // ...
+}
+```
+
+**验证结果**:
+- 新增 UI 测试 `tc-filter-persist.spec.ts`：选择 OPEN 过滤 → 修改 TC 为 CODED → 验证列表仍只显示 OPEN，数量减 1，过滤框保持 OPEN
+- API 回归测试：431/431 通过
+- UI 冒烟测试：20/20 通过
+
+**修复文件**:
+- `/projects/management/tracker/dev/index.html` (`renderTC` 函数)
+
+**测试时间**: 2026-05-26
+
+---
+
+## BUG-102: API 权限泄露 - 未登录用户可修改 TC 状态
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Critical |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-05-26 |
+| **报告人** | 用户反馈 |
+| **修复日期** | 2026-05-26 |
+| **修复人** | Claude Code |
+
+**描述**:
+访客（guest）用户甚至未登录用户，可通过直接调用 `/api/tc/<int:tc_id>/status` 接口修改任意 Test Case 的状态。前端 inline status select 对所有用户均可见，访客在 UI 上即可直接修改。
+
+**根本原因**:
+`update_status` 接口自 2026-02-05 创建以来始终**没有任何权限装饰器**，属于设计遗漏。
+
+**涉及的漏洞接口**:
+| 接口 | 原权限 | 风险 |
+|------|--------|------|
+| `POST /api/tc/<int:tc_id>/status` | **无** | 任意修改 TC 状态 |
+| `GET /api/projects/<int:project_id>` | **无** | 无需登录查看项目 |
+| `POST /api/projects/restore` | **无** | 任意恢复项目 |
+| `POST /api/projects/restore/upload` | **无** | 任意上传恢复 |
+| `POST /api/cron/progress-snapshot` | **无** | 触发定时任务 |
+| `GET /api/stats` | **无** | 无需登录查看统计 |
+
+**修复方案**:
+| 接口 | 新增装饰器 |
+|------|-----------|
+| `POST /api/tc/<int:tc_id>/status` | `@guest_required` |
+| `GET /api/projects/<int:project_id>` | `@login_required` |
+| `POST /api/projects/restore` | `@admin_required` |
+| `POST /api/projects/restore/upload` | `@admin_required` |
+| `POST /api/cron/progress-snapshot` | `@admin_required` |
+| `GET /api/stats` | `@login_required` |
+
+**验证结果**:
+- 新增 `test_unauthorized_stats` 验证未登录访问返回 401
+- 修复 `test_nonexistent_project_stats` 使用已登录客户端
+- API 回归测试：432/432 通过
+- UI 冒烟测试：20/20 通过
+
+**修复文件**:
+- `/projects/management/tracker/dev/app/api.py`
+- `/projects/management/tracker/dev/tests/test_api/test_api_exception.py`
+- `/projects/management/tracker/dev/tests/test_api/test_api_snapshot.py`
+
+**测试时间**: 2026-05-26

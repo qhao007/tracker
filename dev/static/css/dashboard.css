@@ -258,6 +258,12 @@
     border-bottom: 2px solid #f59e0b;
 }
 
+.hole-column-header.risk {
+    background: #fff7ed;
+    color: #f97316;
+    border-bottom: 2px solid #f97316;
+}
+
 .hole-count {
     display: inline-flex;
     align-items: center;
@@ -307,6 +313,10 @@
 
 .hole-card.attention {
     border-left-color: #eab308;
+}
+
+.hole-card.risk {
+    border-left-color: #f97316;
 }
 
 .hole-card-name {

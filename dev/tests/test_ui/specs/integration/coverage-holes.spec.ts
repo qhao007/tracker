@@ -118,15 +118,16 @@ test.describe('Coverage Holes Board UI Tests', () => {
         const kanbanVisible = await holesKanban.isVisible().catch(() => false);
 
         if (kanbanVisible) {
-            // 验证三个列
+            // 验证四个列 (Critical / Warning / Attention / At Risk)
             const holeColumns = page.locator('.hole-column');
             const columnCount = await holeColumns.count();
-            expect(columnCount).toBe(3);
+            expect(columnCount).toBe(4);
 
             // 验证列标题
             const criticalHeader = page.locator('.hole-column-header.critical');
             const warningHeader = page.locator('.hole-column-header.warning');
             const attentionHeader = page.locator('.hole-column-header.attention');
+            const riskHeader = page.locator('.hole-column-header.risk');
 
             if (await criticalHeader.isVisible()) {
                 const criticalText = await criticalHeader.textContent();
@@ -141,6 +142,11 @@ test.describe('Coverage Holes Board UI Tests', () => {
             if (await attentionHeader.isVisible()) {
                 const attentionText = await attentionHeader.textContent();
                 expect(attentionText).toContain('Attention');
+            }
+
+            if (await riskHeader.isVisible()) {
+                const riskText = await riskHeader.textContent();
+                expect(riskText).toContain('Failures');
             }
 
             // 验证空洞卡片存在
