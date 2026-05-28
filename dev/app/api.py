@@ -8,6 +8,7 @@ from urllib.parse import quote
 from functools import wraps
 import json
 import os
+import re
 import sqlite3
 
 api = Blueprint("api", __name__)
@@ -6319,8 +6320,6 @@ def _get_project_report_data(project_id):
     v0.14.3: 新增函数，复用 Dashboard 各端点的 SQL 查询逻辑，
     支持 TC-CP 和 FC-CP 两种覆盖模式。
     """
-    from datetime import datetime, timedelta
-
     # 验证项目存在
     projects = load_projects()
     project = next((p for p in projects if p['id'] == project_id), None)
@@ -6328,8 +6327,16 @@ def _get_project_report_data(project_id):
         return None
 
     project_name = project['name']
-    conn = get_db(project_name)
-    cursor = conn.cursor()
+    conn = None
+    try:
+        db_path = get_db_path(project_name)
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+    except sqlite3.Error:
+        if conn:
+            conn.close()
+        return None
 
     coverage_mode = project.get('coverage_mode', 'tc_cp')
     is_fc_cp_mode = coverage_mode == 'fc_cp'
@@ -6386,6 +6393,7 @@ def _get_project_report_data(project_id):
             unlinked_cp = 0
             total_coverage_rate = 0.0
 
+            covered_cp = 0
             for cp_row in all_cps:
                 cp_id = cp_row[0]
                 cursor.execute("""
@@ -6402,18 +6410,12 @@ def _get_project_report_data(project_id):
                 else:
                     covered_tc = sum(1 for tc in connected_tcs if tc[0] in ('PASS', 'FAIL'))
                     cp_rate = (covered_tc / total_tc) * 100
+                    if covered_tc > 0:
+                        covered_cp += 1
 
                 total_coverage_rate += cp_rate
 
             coverage_rate = round(total_coverage_rate / total_cp, 1) if total_cp > 0 else 0
-            covered_cp = sum(1 for cp in all_cps if any(
-                tc[0] in ('PASS', 'FAIL') for tc in
-                cursor.execute("""
-                    SELECT tc.status FROM test_case tc
-                    INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
-                    WHERE tcc.cp_id = ?
-                """, (cp[0],)).fetchall()
-            ))
 
             cursor.execute("SELECT COUNT(*) FROM test_case WHERE project_id = ?", (project_id,))
             tc_total = cursor.fetchone()[0] or 0
@@ -6717,6 +6719,7 @@ def _get_project_report_data(project_id):
         critical = []
         warning = []
         attention = []
+        risk = []
 
         for cp_row in cursor.fetchall():
             cp_id = cp_row[0]
@@ -6769,10 +6772,8 @@ def _get_project_report_data(project_id):
                     continue
 
                 covered_tc = sum(1 for tc in linked_tcs if tc[2] in ('PASS', 'FAIL'))
+                fail_tc = sum(1 for tc in linked_tcs if tc[2] == 'FAIL')
                 coverage_rate = (covered_tc / linked_tc_count) * 100 if linked_tc_count > 0 else 0
-
-                if coverage_rate > 0:
-                    continue
 
                 hole_entry = {
                     'cp_id': cp_id,
@@ -6781,6 +6782,12 @@ def _get_project_report_data(project_id):
                     'priority': priority,
                     'coverage_rate': round(coverage_rate, 1)
                 }
+
+                if coverage_rate > 0:
+                    # 不是空洞，检查是否属于 risk（100%覆盖但有FAIL）
+                    if coverage_rate == 100 and fail_tc > 0:
+                        risk.append(hole_entry)
+                    continue
 
                 if priority == 'P0':
                     critical.append(hole_entry)
@@ -6794,16 +6801,17 @@ def _get_project_report_data(project_id):
             for lst in [critical, warning, attention]:
                 lst.sort(key=lambda x: (priority_order.get(x['priority'], 4), x['coverage_rate']))
         else:
-            for lst in [critical, warning, attention]:
+            for lst in [critical, warning, attention, risk]:
                 lst.sort(key=lambda x: priority_order.get(x['priority'], 4))
 
-        for lst in [critical, warning, attention]:
+        for lst in [critical, warning, attention, risk]:
             del lst[20:]
 
         data['coverage_holes'] = {
             'critical': critical,
             'warning': warning,
-            'attention': attention
+            'attention': attention,
+            'risk': risk
         }
 
         # ---------- 8. Top Uncovered CPs (未关联 TC/FC 的 CP) ----------
@@ -6958,8 +6966,9 @@ def _get_project_report_data(project_id):
 
         data['full_tc_list'] = full_tc_list
 
-    except sqlite3.Error as e:
-        raise e
+    finally:
+        if conn:
+            conn.close()
 
     return data
 
@@ -7261,7 +7270,7 @@ def export_project_report(project_id):
 
         # 构建文件名
         project_name = data['project']['name']
-        safe_name = project_name.replace(' ', '_').replace('/', '_').replace('\\', '_')
+        safe_name = re.sub(r'[^\w\-_.]', '_', project_name)
         today = datetime.now().strftime('%Y%m%d')
         filename = f"{safe_name}_Report_{today}.md"
 
