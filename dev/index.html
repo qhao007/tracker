@@ -1363,6 +1363,7 @@
         <div class="header-actions" id="headerActions">
             <button class="header-btn" id="projectManageBtn" onclick="showProjectModal()">📁 项目</button>
             <button class="header-btn" id="backupBtn" onclick="showArchiveModal()">💾 备份</button>
+            <button class="header-btn" id="exportReportBtn" onclick="exportProjectReport()">📊 导出报告</button>
             <button class="header-btn" onclick="showVersionInfo()">ℹ️ 关于</button>
             <a href="/manual" target="_blank" class="header-btn" style="text-decoration: none;">❓ 帮助</a>
             <button class="header-btn" id="loginHeaderBtn" onclick="showLoginModal()">🔑 登录</button>
@@ -4008,6 +4009,52 @@
             } else {
                 window.location.href = `${API_BASE}/export?project_id=${currentProject.id}&type=${exportType}&format=${format}`;
                 closeModal('exportModal');
+            }
+        }
+        
+        /**
+         * 导出项目状态报告 (Markdown 格式)
+         * v0.14.3: 新增函数
+         */
+        async function exportProjectReport() {
+            if (!currentProject) {
+                alert('请先选择一个项目');
+                return;
+            }
+            try {
+                const res = await fetch(`${API_BASE}/export/project/${currentProject.id}/report`, {
+                    credentials: 'include'
+                });
+                if (!res.ok) {
+                    if (res.status === 401) {
+                        alert('请先登录');
+                        return;
+                    }
+                    const err = await res.json().catch(() => ({}));
+                    alert('导出报告失败: ' + (err.error || res.statusText));
+                    return;
+                }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                const filename = res.headers.get('content-disposition');
+                if (filename && filename.includes('filename=')) {
+                    const match = filename.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                    if (match) {
+                        a.download = match[1].replace(/['"]/g, '');
+                    } else {
+                        a.download = `${currentProject.project_name}_Report_${new Date().toISOString().split('T')[0]}.md`;
+                    }
+                } else {
+                    a.download = `${currentProject.project_name}_Report_${new Date().toISOString().split('T')[0]}.md`;
+                }
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                alert('导出报告失败: ' + e.message);
             }
         }
         
