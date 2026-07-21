@@ -2906,6 +2906,34 @@
         let currentProgressData = null;
         let currentChartType = 'trend'; // 'trend' | 'feature' | 'p0p1'
 
+        // v0.16.1: 图表导出渲染模式。截图导出前开启：
+        // - 动画时长归零（瞬时渲染到最终状态），避免截到动画中间帧
+        //   （否则 feature 图标签远离柱体、p0p1 图标签值与柱高不符）
+        // - 坐标轴刻度/图例字号放大，保证材料包与 PPT 中可读
+        let chartExportMode = false;
+
+        // v0.16.1: 进入/退出导出渲染模式
+        function setChartExportMode(enabled) {
+            chartExportMode = enabled;
+            if (typeof Chart !== 'undefined') {
+                Chart.defaults.animation.duration = enabled ? 0 : 1000;
+                Chart.defaults.font.size = enabled ? 13 : 12;
+            }
+        }
+
+        // v0.16.1: 导出时固定容器几何，使截图宽高比贴近 PPT 图位（feature 1.36 / p0p1 2.05）
+        function applyExportGeometry(type) {
+            const container = document.getElementById('progressChartContainer');
+            if (!container) return;
+            container.style.width = (type === 'p0p1') ? '1000px' : '1200px';
+        }
+
+        // v0.16.1: 恢复容器几何
+        function restoreExportGeometry() {
+            const container = document.getElementById('progressChartContainer');
+            if (container) container.style.width = '';
+        }
+
         // v0.15.0: 文件名安全处理
         function sanitizeFileName(name) {
             return name.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -2955,8 +2983,16 @@
                 alert('暂无图表可导出');
                 return;
             }
+            // v0.16.1: 导出模式下重渲染（瞬时最终状态 + 大字体 + 固定几何），
+            // 避免动画未结束时截图出现标签位置/柱高不符
+            setChartExportMode(true);
+            applyExportGeometry(currentChartType);
+            switchChartType(currentChartType);
             const canvas = document.getElementById('progressChart');
             const url = canvas.toDataURL('image/png');
+            setChartExportMode(false);
+            restoreExportGeometry();
+            switchChartType(currentChartType);  // 恢复页面带动画的视图
             const chartName = {
                 'trend': 'milestone_trend',
                 'feature': 'feature_cp_coverage',
@@ -2985,12 +3021,13 @@
             const projectName = currentProject ? sanitizeFileName(currentProject.name) : 'project';
             const dateStr = new Date().toISOString().slice(0, 10);
 
+            // v0.16.1: 全程导出模式（瞬时最终状态 + 大字体 + 固定几何）
+            setChartExportMode(true);
             for (const type of types) {
+                applyExportGeometry(type);
                 switchChartType(type);
-                // 等待一帧确保渲染开始
+                // 等待一帧确保渲染完成（导出模式动画时长为 0，首帧即最终状态）
                 await new Promise(r => requestAnimationFrame(r));
-                // 再等待一小段时间让 Chart.js 完成无动画渲染
-                await new Promise(r => setTimeout(r, 100));
                 const canvas = document.getElementById('progressChart');
                 const url = canvas.toDataURL('image/png');
                 const chartName = {
@@ -3008,6 +3045,8 @@
             }
 
             // 恢复原始图表
+            setChartExportMode(false);
+            restoreExportGeometry();
             switchChartType(originalType);
             document.getElementById('chartExportMenu').style.display = 'none';
         }
@@ -3440,6 +3479,8 @@
                     scales: {
                         x: {
                             stacked: true,
+                            // v0.16.1: 右侧预留 15% 余量，防止最大柱的标签被画布右缘裁切
+                            grace: '15%',
                             title: { display: true, text: 'CP 数量' }
                         },
                         y: {
@@ -3448,7 +3489,11 @@
                         }
                     },
                     plugins: {
-                        title: { display: true, text: 'Feature CP 覆盖进度' },
+                        title: {
+                            display: true,
+                            text: 'Feature CP 覆盖进度',
+                            font: { size: chartExportMode ? 16 : 12, weight: 'bold' }
+                        },
                         tooltip: {
                             callbacks: {
                                 afterBody: function(tooltipItems) {
@@ -3463,12 +3508,14 @@
                 // v0.16.0: 改用 afterDraw 内联插件在条形末端绘制覆盖率百分比和未覆盖个数。
                 // 原实现在 animation.onComplete 中绘制，图表截图导出（如材料包导出）会在动画
                 // 完成前执行 toDataURL，导致标签丢失；afterDraw 每帧都会绘制，截图始终包含标签。
+                // v0.16.1: 导出模式放大标签字号（12px -> 18px），保证材料包与 PPT 中可读。
                 plugins: [{
                     id: 'featureCoverageLabels',
                     afterDraw(chart) {
                         const { ctx, scales: { x, y } } = chart;
                         ctx.save();
-                        ctx.font = 'bold 12px "Noto Sans CJK SC", "WenQuanYi Micro Hei", "Source Han Sans SC", sans-serif';
+                        const fontSize = chartExportMode ? 18 : 12;
+                        ctx.font = `bold ${fontSize}px "Noto Sans CJK SC", "WenQuanYi Micro Hei", "Source Han Sans SC", sans-serif`;
                         ctx.textBaseline = 'middle';
 
                         chart.data.labels.forEach((label, index) => {
@@ -3483,11 +3530,11 @@
                             // 覆盖率百分比（深绿色）
                             ctx.fillStyle = '#1e7e34';
                             ctx.textAlign = 'left';
-                            ctx.fillText(`${f.coverage_pct}%`, xPos, yPos - 7);
+                            ctx.fillText(`${f.coverage_pct}%`, xPos, yPos - fontSize * 0.6);
 
                             // 未覆盖个数（红色）
                             ctx.fillStyle = '#dc3545';
-                            ctx.fillText(`未覆盖: ${f.uncovered_cp}`, xPos, yPos + 7);
+                            ctx.fillText(`未覆盖: ${f.uncovered_cp}`, xPos, yPos + fontSize * 0.6);
                         });
                         ctx.restore();
                     }
@@ -3517,8 +3564,9 @@
                 return;
             }
 
-            container.style.minHeight = '400px';
-            canvas.style.maxHeight = '400px';
+            // v0.16.1: 导出模式加高，使截图宽高比贴近 PPT 图位（约 2.0）
+            container.style.minHeight = chartExportMode ? '500px' : '400px';
+            canvas.style.maxHeight = chartExportMode ? '500px' : '400px';
 
             progressChart = new Chart(ctx, {
                 type: 'bar',
@@ -3549,16 +3597,26 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    // v0.16.1: 顶部留白，柱宽不足退回柱顶外侧的 ≥90% 标签不再触碰 legend
+                    layout: { padding: { top: chartExportMode ? 26 : 18 } },
                     scales: {
                         y: {
                             min: 0,
                             max: 100,
                             title: { display: true, text: '覆盖率 (%)' },
                             ticks: { callback: v => v + '%' }
+                        },
+                        // v0.16.1: 导出宽度下模块名拥挤时允许旋转 45°
+                        x: {
+                            ticks: { maxRotation: 45, minRotation: 0 }
                         }
                     },
                     plugins: {
-                        title: { display: true, text: 'P0 / P1 覆盖率重点模块对比（Top 10 低覆盖）' },
+                        title: {
+                            display: true,
+                            text: 'P0 / P1 覆盖率重点模块对比（Top 10 低覆盖）',
+                            font: { size: chartExportMode ? 16 : 12, weight: 'bold' }
+                        },
                         tooltip: {
                             callbacks: {
                                 label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}%`
@@ -3566,28 +3624,69 @@
                         }
                     }
                 },
-                // v0.16.0: 柱顶百分比标签。使用 afterDraw 内联插件逐帧绘制，
-                // 确保进度页导出与材料包截图导出均能带上百分比（与样张一致）。
-                plugins: [{
-                    id: 'p0p1BarValueLabels',
-                    afterDraw(chart) {
-                        const { ctx } = chart;
-                        ctx.save();
-                        ctx.font = 'bold 11px "Noto Sans CJK SC", "WenQuanYi Micro Hei", "Source Han Sans SC", sans-serif';
-                        ctx.textAlign = 'center';
-                        ctx.textBaseline = 'bottom';
-                        ctx.fillStyle = '#333';
-                        chart.data.datasets.forEach((dataset, datasetIndex) => {
-                            const meta = chart.getDatasetMeta(datasetIndex);
-                            meta.data.forEach((bar, index) => {
-                                const value = dataset.data[index];
-                                if (value === null || value === undefined) return;
-                                ctx.fillText(`${value}%`, bar.x, bar.y - 2);
+                plugins: [
+                    // v0.16.0: 柱顶百分比标签（afterDraw 逐帧绘制，截图始终带标签）
+                    // v0.16.1: 方案乙 —— ≥90% 标签画在柱内顶部（白字），避免与顶部
+                    // legend 重叠及裁切；<90% 仍画在柱顶外侧。导出模式放大字号。
+                    {
+                        id: 'p0p1BarValueLabels',
+                        afterDraw(chart) {
+                            const { ctx } = chart;
+                            ctx.save();
+                            const fontSize = chartExportMode ? 18 : 11;
+                            ctx.font = `bold ${fontSize}px "Noto Sans CJK SC", "WenQuanYi Micro Hei", "Source Han Sans SC", sans-serif`;
+                            ctx.textAlign = 'center';
+                            chart.data.datasets.forEach((dataset, datasetIndex) => {
+                                const meta = chart.getDatasetMeta(datasetIndex);
+                                meta.data.forEach((bar, index) => {
+                                    const value = dataset.data[index];
+                                    if (value === null || value === undefined) return;
+                                    const text = `${value}%`;
+                                    if (value >= 90 && bar.width >= ctx.measureText(text).width + 8) {
+                                        // 柱内顶部横排（≥90% 柱色必为绿色系，白字对比度足够）
+                                        ctx.textBaseline = 'top';
+                                        ctx.fillStyle = '#fff';
+                                        ctx.fillText(text, bar.x, bar.y + 4);
+                                    } else if (value >= 90) {
+                                        // 柱宽不足：柱内顶部竖排（-90° 旋转），避免与相邻标签/legend 碰撞
+                                        ctx.save();
+                                        ctx.translate(bar.x, bar.y + 6);
+                                        ctx.rotate(-Math.PI / 2);
+                                        ctx.textAlign = 'left';
+                                        ctx.textBaseline = 'middle';
+                                        ctx.fillStyle = '#fff';
+                                        ctx.fillText(text, 0, 0);
+                                        ctx.restore();
+                                    } else {
+                                        ctx.textBaseline = 'bottom';
+                                        ctx.fillStyle = '#333';
+                                        ctx.fillText(`${value}%`, bar.x, bar.y - 2);
+                                    }
+                                });
                             });
-                        });
-                        ctx.restore();
+                            ctx.restore();
+                        }
+                    },
+                    // v0.16.1: 100% 目标参考虚线（对齐汇报样张）
+                    {
+                        id: 'p0p1RefLine100',
+                        afterDraw(chart) {
+                            const { ctx, chartArea, scales: { y } } = chart;
+                            if (!chartArea) return;
+                            const yPos = y.getPixelForValue(100);
+                            ctx.save();
+                            ctx.strokeStyle = '#6c757d';
+                            ctx.lineWidth = 1;
+                            ctx.setLineDash([6, 4]);
+                            ctx.beginPath();
+                            ctx.moveTo(chartArea.left, yPos);
+                            ctx.lineTo(chartArea.right, yPos);
+                            ctx.stroke();
+                            ctx.setLineDash([]);
+                            ctx.restore();
+                        }
                     }
-                }]
+                ]
             });
         }
 
@@ -5011,11 +5110,15 @@
                     document.getElementById('progressChart').style.display = 'block';
                     document.getElementById('progressEmptyState').style.display = 'none';
 
+                    // v0.16.1: 全程导出模式（瞬时最终状态 + 大字体 + 固定几何），
+                    // 避免截到动画中间帧导致标签远离柱体/标签值与柱高不符
+                    setChartExportMode(true);
                     const types = ['trend', 'feature', 'p0p1'];
                     for (const type of types) {
+                        applyExportGeometry(type);
                         switchChartType(type);
                         await new Promise(r => requestAnimationFrame(r));
-                        await new Promise(r => setTimeout(r, 300));
+                        await new Promise(r => setTimeout(r, 100));
                         const canvas = document.getElementById('progressChart');
                         if (canvas && canvas.style.display !== 'none') {
                             charts[type] = canvas.toDataURL('image/png');
@@ -5025,6 +5128,10 @@
             } catch (e) {
                 console.error('图表捕获失败:', e);
             } finally {
+                // v0.16.1: 先退出导出模式并恢复几何，再恢复页面状态
+                setChartExportMode(false);
+                restoreExportGeometry();
+
                 // 恢复状态
                 currentProject = originalProject;
                 currentProgressData = originalProgressData;
