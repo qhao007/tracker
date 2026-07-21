@@ -58,10 +58,15 @@ cd /projects/management/tracker/dev && PLAYWRIGHT_BROWSERS_PATH=/projects/manage
 
 ### UI 测试调试
 
-**清理测试数据**: 大量测试项目会导致超时，运行以下命令清理:
+**清理测试数据**: 大量测试项目会导致超时，运行以下命令清理（默认 dry-run 预览）:
 ```bash
-python3 scripts/tracker_ops.py clean
+python3 scripts/tracker_ops.py clean          # 预览，不删除
+python3 scripts/tracker_ops.py clean --yes    # 确认执行
 ```
+- 保留 `EX5`(id=1)、`SOC_DV`(id=3)、`FC_DV`(id=4) 且 id 不变；缺失的 demo 会按原 id 自动重建
+- 仅操作 `shared/data/test_data`（`dev/data` 是其符号链接），绝不触碰 `user_data`
+- 注意：users.db 会重建（密码回默认）、sessions 全部失效；建议先停 8081 再执行
+- 详见 `docs/OPERATIONS/test_data_cleanup.md`
 
 **Playwright 沙箱环境**: 如遇 Firefox 启动失败，添加环境变量:
 ```bash

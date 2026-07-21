@@ -1,6 +1,6 @@
 # Tracker BugLog
 
-> **版本**: v0.6.0 | **最后更新**: 2026-03-29 | **状态**: 开发中
+> **版本**: v0.6.0 | **最后更新**: 2026-06-03 | **状态**: 开发中
 
 ---
 
@@ -4798,3 +4798,320 @@ function renderTC(filter = '', statusFilter = '', dvFilterParam = '', sortBy = '
 - `/projects/management/tracker/dev/tests/test_api/test_api_snapshot.py`
 
 **测试时间**: 2026-05-26
+
+---
+
+## BUG-103: v0.15.0 feature_coverage 计算时 UnboundLocalError
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ⏳ 待修复 |
+| **发现日期** | 2026-06-02 |
+| **报告人** | Claude Code (API测试) |
+| **修复日期** | - |
+| **修复人** | - |
+
+**描述**:
+当调用 `/api/progress/<project_id>` 且不带 `priority` 参数时，`feature_coverage` 计算抛出 `UnboundLocalError: cannot access local variable 'priority_list' where it is not associated with a value`，导致 `feature_coverage` 返回空数组。
+
+**根本原因**:
+`dev/app/api.py` 中 `get_progress()` 函数的 `feature_coverage` 计算逻辑（约第 1244 行）：
+
+```python
+# 构建 CP 查询条件（支持 priority 过滤）
+cp_where = "WHERE project_id = ?"
+cp_params = [project_id]
+if priority_filter:
+    priority_list = [...]  # 只在 if 块内定义
+    ...
+
+# 获取所有符合条件的 CP
+if priority_list:  # <-- 当 priority_filter 为空时，priority_list 未定义！
+    ...
+```
+
+变量 `priority_list` 只在 `if priority_filter:` 块内定义，当没有 priority 参数时，执行到 `if priority_list:` 会抛出 `UnboundLocalError`。
+
+**影响范围**:
+- 所有不带 `priority` 参数的 `/api/progress/<id>` 请求都无法返回 `feature_coverage` 数据
+- 前端 Progress Charts 的 Feature 覆盖图表和 P0/P1 对比图表在无 priority 过滤时显示为空
+
+**修复方案**:
+在 `if priority_filter:` 之前初始化 `priority_list = []`：
+
+```python
+# 构建 CP 查询条件（支持 priority 过滤）
+cp_where = "WHERE project_id = ?"
+cp_params = [project_id]
+priority_list = []  # <-- 添加初始化
+if priority_filter:
+    priority_list = [p.strip().upper() for p in priority_filter.split(',') if p.strip()]
+    priority_list = [p for p in priority_list if p in ('P0', 'P1', 'P2', 'P3')]
+    ...
+```
+
+**验证结果**:
+- API 测试 `test_progress_returns_feature_coverage` 失败（确认 Bug）
+- API 测试 `test_feature_coverage_calculation` 失败（确认 Bug）
+- API 测试 `test_feature_coverage_sorted_by_coverage_pct` 失败（确认 Bug）
+- API 测试 `test_progress_priority_filter_feature_coverage` 失败（确认 Bug）
+- API 测试 `test_feature_coverage_p0_p1_sub_coverage` 失败（确认 Bug）
+
+**修复文件**:
+- `/projects/management/tracker/dev/app/api.py` (第 1233-1244 行附近)
+
+**测试时间**: 2026-06-02
+
+---
+
+## BUG-107: 覆盖趋势图初始渲染区域扁塌
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-06-03 |
+| **报告人** | Claude Code |
+| **修复日期** | 2026-06-03 |
+| **修复人** | Claude Code |
+
+**描述**:
+Progress Charts 面板默认打开"覆盖趋势"图表时，图表区域高度异常扁塌（几乎只有标题和坐标轴），但切换到 Feature 覆盖或 P0/P1 对比后再切回趋势图，显示就恢复正常。
+
+**根本原因**:
+`renderTrendChart()` 函数未设置图表容器 `#progressChartContainer` 的最小高度。当 Chart.js 使用 `maintainAspectRatio: false` 时，需要父容器有明确的高度约束，否则 Canvas 会塌陷到接近零高度。而 `renderFeatureCoverageChart()` 会设置 `container.style.minHeight = chartHeight + 'px'`，所以只有先切到 Feature 图再切回趋势图时，容器才拥有足够高度。
+
+**修复方案**:
+在 `renderTrendChart()` 开头增加容器高度设置：
+```javascript
+const container = document.getElementById('progressChartContainer');
+container.style.minHeight = '400px';
+```
+
+**验证结果**:
+- Playwright 截图验证：初始打开趋势图高度正常（400px）
+- Playwright 截图验证：从 Feature 图切回趋势图后高度一致
+- 无 JavaScript 控制台错误
+
+**修复文件**:
+- `/projects/management/tracker/dev/index.html` (`renderTrendChart` 函数)
+
+**测试时间**: 2026-06-03
+
+---
+
+## BUG-108: 覆盖趋势图 Legend 显示 "TC PASS 率" 而非 "TC PASS 个数"
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Low |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-06-03 |
+| **报告人** | Claude Code |
+| **修复日期** | 2026-06-03 |
+| **修复人** | Claude Code |
+
+**描述**:
+覆盖趋势图中蓝色柱状图代表 TC PASS 的数量（个），但 Legend 标签显示为 "TC PASS 率"，与实际数据含义不符。
+
+**根本原因**:
+`renderTrendChart()` 中数据集 label 设置为 `'TC PASS 率'`，且 data 计算的是百分比 `Math.round(t.tc_pass / t.tc_total * 1000) / 10`，而非原始个数。
+
+**修复方案**:
+1. 数据集 label 改为 `'TC PASS 个数'`
+2. data 改为原始计数 `t.tc_pass || 0`
+3. Tooltip 回调保留百分比信息：`TC PASS: ${tc_pass}/${tc_total} (${pct}%)`
+
+**验证结果**:
+- Playwright 截图验证：Legend 正确显示 "TC PASS 个数"
+- Tooltip 悬浮时同时显示个数和通过率百分比
+
+**修复文件**:
+- `/projects/management/tracker/dev/index.html` (`renderTrendChart` 函数)
+
+**测试时间**: 2026-06-03
+
+---
+
+## BUG-109: 覆盖趋势图 TC PASS 个数与覆盖率共用左侧坐标轴
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-06-03 |
+| **报告人** | Claude Code |
+| **修复日期** | 2026-06-03 |
+| **修复人** | Claude Code |
+
+**描述**:
+覆盖趋势图中 TC PASS 个数（柱状图）与 CP 覆盖率、P0 覆盖率（折线图）共用同一个左侧 Y 轴（0–100%）。由于 TC PASS 个数可能达到数百，而覆盖率最大只有 100%，两者量纲不同，共用同一轴会导致柱状图被过度压缩或比例失真。
+
+**根本原因**:
+三个数据集都配置了 `yAxisID: 'y1'`，而 scales 中只定义了一个左侧轴 `y1`（0–100）。
+
+**修复方案**:
+增加右侧双 Y 轴 `y2`，实现左右分离：
+- `y1`（左侧，position: left）：0–100，标题"覆盖率 (%)"，供 CP 覆盖率、P0 覆盖率使用
+- `y2`（右侧，position: right）：0–maxTcTotal（向上取整到最近的 50），标题"TC PASS 个数"，供 TC PASS 柱状图使用
+
+```javascript
+scales: {
+    y1: { type: 'linear', position: 'left', min: 0, max: 100, title: { display: true, text: '覆盖率 (%)' } },
+    y2: { type: 'linear', position: 'right', min: 0, max: y2Max, title: { display: true, text: 'TC PASS 个数' }, grid: { drawOnChartArea: false } }
+}
+```
+TC PASS 数据集改用 `yAxisID: 'y2'`。
+
+**验证结果**:
+- Playwright 截图验证：左侧轴 0–100%，右侧轴 0–350，双轴刻度清晰
+- 柱状图高度与实际 TC PASS 个数比例正确
+- 折线图与覆盖率百分比比例正确
+
+**修复文件**:
+- `/projects/management/tracker/dev/index.html` (`renderTrendChart` 函数)
+
+**测试时间**: 2026-06-03
+
+---
+
+## BUG-110: Feature 覆盖图高度不足导致 Feature 名称显示不全
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-06-03 |
+| **报告人** | Claude Code |
+| **修复日期** | 2026-06-03 |
+| **修复人** | Claude Code |
+
+**描述**:
+Feature CP 覆盖进度图（水平堆叠条形图）中，当 Feature 数量较多时（如 10+ 个），部分 Feature 名称在 Y 轴上被截断或无法显示，导致无法识别所有模块。
+
+**根本原因**:
+1. 动态高度计算 `features.length * 35 + 60` 中每根条形高度 35px 过于紧凑，不足以容纳 Chart.js 的标签、间距和边距
+2. Canvas 元素有 inline style `max-height: 400px`，即使容器被撑高，Canvas 本身仍被限制在 400px
+
+**修复方案**:
+1. 增大每根条形高度乘数：`35` → `45`，并增加底部边距：`60` → `80`
+2. 在 `renderFeatureCoverageChart` 中同步设置 `canvas.style.maxHeight = chartHeight + 'px'`，解除 400px 限制
+3. 在 `renderTrendChart` 和 `renderP0P1ComparisonChart` 中恢复 `canvas.style.maxHeight = '400px'`，避免其他图表被意外撑大
+
+**验证结果**:
+- Playwright 截图验证：14 个 Feature 全部显示，Y 轴标签清晰可读
+
+**修复文件**:
+- `/projects/management/tracker/dev/index.html` (`renderFeatureCoverageChart`、`renderTrendChart`、`renderP0P1ComparisonChart`)
+
+**测试时间**: 2026-06-03
+
+---
+
+## BUG-111: P0/P1 对比图显示所有模块，缺乏重点聚焦
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Low |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-06-03 |
+| **报告人** | Claude Code |
+| **修复日期** | 2026-06-03 |
+| **修复人** | Claude Code |
+
+**描述**:
+P0/P1 覆盖率模块对比图展示了所有包含 P0 或 P1 CP 的模块（多达 18+ 个），柱状图过于密集，模块名称重叠，用户无法快速识别最需要关注的低覆盖率模块。
+
+**根本原因**:
+1. `renderP0P1ComparisonChart` 仅过滤出 `p0_total > 0 || p1_total > 0` 的模块，未进行排序和数量限制
+2. **更关键的问题**：使用 `||` 导致大量只有 P0 或只有 P1 的模块也被纳入对比。当模块缺少某一优先级时，其 coverage 为 0，计算平均值 `(0 + 100) / 2 = 50` 会被错误标记为"低覆盖"重点模块，失去了 P0/P1 "对比"的意义
+
+**修复方案**:
+1. 过滤条件改为 `p0_total > 0 && p1_total > 0`，确保每个展示的模块**同时有 P0 和 P1**，才能进行有意义的对比
+2. 计算每个模块的平均覆盖率：`avg = (p0_coverage + p1_coverage) / 2`
+3. 按平均覆盖率从低到高排序（低覆盖 = 高风险，需要重点关注）
+4. 截取前 10 个模块：`filtered.slice(0, 10)`
+5. 图表标题更新为："P0 / P1 覆盖率重点模块对比（Top 10 低覆盖）"
+
+```javascript
+// 只保留同时有 P0 和 P1 的模块，避免单优先级模块被误记为低覆盖
+let filtered = allFeatures.filter(f => f.p0_total > 0 && f.p1_total > 0);
+filtered = filtered.slice().sort((a, b) => {
+    const avgA = (a.p0_coverage + a.p1_coverage) / 2;
+    const avgB = (b.p0_coverage + b.p1_coverage) / 2;
+    return avgA - avgB;
+});
+filtered = filtered.slice(0, 10);
+```
+
+**验证结果**:
+- Playwright 截图验证：仅显示 10 个模块，从左到右覆盖率递增
+- APCS、PMA 等低覆盖模块排在最左侧（红色预警），一目了然
+
+**修复文件**:
+- `/projects/management/tracker/dev/index.html` (`renderP0P1ComparisonChart`)
+
+**测试时间**: 2026-06-03
+
+---
+
+## BUG-112: 材料包导出图表丢失百分比/未覆盖标签（截图时序问题）
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-07-21 |
+| **报告人** | 用户反馈 |
+| **修复日期** | 2026-07-21 |
+| **修复人** | Claude Code |
+
+**描述**:
+Progress 图表页手动导出 PNG 时，Feature CP 覆盖进度图带有每条的覆盖率百分比和未覆盖个数；但通过"导出项目材料包"得到的 `charts/feature_coverage.png` 中这些标签全部丢失。
+
+**根本原因**:
+Feature 图的标签绘制挂在 Chart.js `animation.onComplete` 回调上（动画默认时长 1000ms，见 `renderFeatureCoverageChart`）。材料包导出（`exportProjectPackage`）在 `switchChartType()` 后仅等待 300ms 即执行 `canvas.toDataURL()`，此刻动画未结束、标签尚未绘制。手动导出时因图表已展示完毕，标签已在画布上，所以表现正常。
+
+**修复方案**:
+将标签绘制从 `animation.onComplete` 迁移到 Chart.js 内联插件的 `afterDraw` 钩子（插件 id: `featureCoverageLabels`）。`afterDraw` 每帧都会执行，标签从首帧即存在，任意时机的截图都完整。绘制逻辑（位置/颜色/字体）保持不变。
+
+**验证结果**:
+- Playwright + Firefox：切换图表后仅等待 300ms 截图（与材料包导出时序一致），百分比与未覆盖标签完整显示
+- 端到端：按材料包导出流程 POST `/api/export/project/3/package`，ZIP 内 `charts/feature_coverage.png` 标签齐全
+
+**修复文件**:
+- `/projects/management/tracker/dev/index.html` (`renderFeatureCoverageChart`)
+
+**测试时间**: 2026-07-21
+
+---
+
+## BUG-113: P0/P1 覆盖率对比图缺少柱顶百分比标签
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-07-21 |
+| **报告人** | 用户反馈 |
+| **修复日期** | 2026-07-21 |
+| **修复人** | Claude Code |
+
+**描述**:
+汇报样张中 P0/P1 覆盖率对比图每根柱子顶部都标注百分比完成度，但 Tracker 的 P0/P1 对比图无论进度页导出还是材料包导出都没有百分比标注，只能对照 Y 轴估读。
+
+**根本原因**:
+`renderP0P1ComparisonChart` 从未实现数值标签绘制，仅有 tooltip（悬停可见，截图不可见）。
+
+**修复方案**:
+新增内联插件 `p0p1BarValueLabels`，在 `afterDraw` 中通过 `chart.getDatasetMeta()` 获取每根柱子的位置，在柱顶绘制 `{value}%`（P0、P1 两个数据集都标注）。渲染函数为三条导出路径（进度页单张导出、批量导出、材料包截图）共用，修复自动全量生效。
+
+**验证结果**:
+- Playwright + Firefox：切换后 300ms 截图，所有柱顶百分比完整（20%/25%/33.3%/.../100%）
+- 端到端：材料包中 `charts/p0p1_comparison.png` 与 PPT 内嵌图均带百分比
+
+**修复文件**:
+- `/projects/management/tracker/dev/index.html` (`renderP0P1ComparisonChart`)
+
+**测试时间**: 2026-07-21

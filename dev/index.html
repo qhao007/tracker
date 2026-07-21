@@ -1075,7 +1075,6 @@
 
                     script.onload = () => {
                         clearTimeout(timeoutId);
-                        console.log('Chart.js: CDN 加载成功');
                         window.ChartLoaded = true;
                         resolve();
                     };
@@ -1363,6 +1362,7 @@
         <div class="header-actions" id="headerActions">
             <button class="header-btn" id="projectManageBtn" onclick="showProjectModal()">📁 项目</button>
             <button class="header-btn" id="backupBtn" onclick="showArchiveModal()">💾 备份</button>
+            <button class="header-btn" id="exportReportBtn" onclick="exportProjectReport()">📊 导出报告</button>
             <button class="header-btn" onclick="showVersionInfo()">ℹ️ 关于</button>
             <a href="/manual" target="_blank" class="header-btn" style="text-decoration: none;">❓ 帮助</a>
             <button class="header-btn" id="loginHeaderBtn" onclick="showLoginModal()">🔑 登录</button>
@@ -1454,9 +1454,22 @@
         <div id="progressPanel" style="display: none;">
             <div class="toolbar">
                 <div class="toolbar-left">
-                    <span style="color: #666; font-size: 14px;">选择项目查看进度图表</span>
+                    <!-- v0.15.0: 图表类型切换 Tabs -->
+                    <div class="chart-type-tabs" style="display: flex; gap: 4px;">
+                        <button class="chart-tab active" data-chart="trend" onclick="switchChartType('trend')" style="padding: 4px 10px; font-size: 13px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; background: white;">📈 覆盖趋势</button>
+                        <button class="chart-tab" data-chart="feature" onclick="switchChartType('feature')" style="padding: 4px 10px; font-size: 13px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; background: white;">📊 Feature覆盖</button>
+                        <button class="chart-tab" data-chart="p0p1" onclick="switchChartType('p0p1')" style="padding: 4px 10px; font-size: 13px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; background: white;">📉 P0/P1对比</button>
+                    </div>
                 </div>
                 <div class="toolbar-right">
+                    <!-- v0.15.0: 导出按钮 -->
+                    <div style="display: inline-block; position: relative; margin-right: 8px;">
+                        <button id="chartExportBtn" onclick="toggleExportMenu()" style="padding: 4px 10px; font-size: 13px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; background: white;">📷 导出 ▼</button>
+                        <div id="chartExportMenu" style="display: none; position: absolute; top: 100%; right: 0; background: white; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 100; min-width: 160px;">
+                            <button onclick="exportChart('png')" style="display: block; width: 100%; padding: 8px 12px; font-size: 13px; border: none; background: white; cursor: pointer; text-align: left;">导出当前图表 (PNG)</button>
+                            <button onclick="exportAllCharts()" style="display: block; width: 100%; padding: 8px 12px; font-size: 13px; border: none; background: white; cursor: pointer; text-align: left;">导出全部图表</button>
+                        </div>
+                    </div>
                     <label style="font-size: 13px; color: #666;">时间段:</label>
                     <input type="date" id="progressStartDate" style="width: 130px; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
                     <span style="color: #999;">-</span>
@@ -1495,6 +1508,24 @@
             </div>
         </div>
     </div>
+
+    <!-- v0.15.0: Chart Tab 样式 -->
+    <style>
+        .chart-type-tabs .chart-tab {
+            transition: all 200ms ease;
+        }
+        .chart-type-tabs .chart-tab:hover {
+            background: #f5f5f5 !important;
+        }
+        .chart-type-tabs .chart-tab.active {
+            background: #2170bb !important;
+            color: white !important;
+            border-color: #2170bb !important;
+        }
+        #chartExportMenu button:hover {
+            background: #f5f5f5 !important;
+        }
+    </style>
 
     <!-- FC Panel (v0.11.0) - 仅在 FC-CP 模式下显示 -->
     <div id="fcPanel" style="display: none;">
@@ -1769,7 +1800,11 @@
                     </div>
                     <button class="btn btn-primary" onclick="createProject()">创建</button>
                 </div>
-                <div class="form-group"><label>选择项目</label><div class="project-list" id="projectList"></div></div>
+                <div class="form-group">
+                    <label>选择项目</label>
+                    <input type="text" id="projectSearch" placeholder="🔍 搜索项目名称..." oninput="filterProjectList()" style="width: 100%; padding: 8px 12px; margin-bottom: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; box-sizing: border-box;">
+                    <div class="project-list" id="projectList"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -2429,7 +2464,6 @@
                 if (!res.ok) {
                     if (res.status === 401) {
                         // 未登录，跳过
-                        console.log('未登录，跳过加载项目');
                         return;
                     }
                     console.error('加载项目失败:', res.status);
@@ -2591,7 +2625,6 @@
                     return;
                 }
                 fcCpAssociations = await res.json();
-                console.log('FC-CP 关联已加载:', fcCpAssociations.length);
             } catch (e) { console.error('加载 FC-CP 关联失败:', e); }
         }
 
@@ -2791,7 +2824,7 @@
 
         function openFCModal() {
             // TODO: v0.11.0 FC 添加功能待实现 - 需要弹出 FC 添加表单（covergroup/coverpoint/coverage_type/bin_name 等字段）
-            console.log('FC 添加功能开发中');
+            alert('FC 添加功能开发中');
         }
 
         // 更新 FC Tab 显示状态
@@ -2868,8 +2901,116 @@
         }
 
         // Progress Charts (v0.8.0)
+        // v0.15.0: 新增图表类型切换状态
         let progressChart = null;
         let currentProgressData = null;
+        let currentChartType = 'trend'; // 'trend' | 'feature' | 'p0p1'
+
+        // v0.15.0: 文件名安全处理
+        function sanitizeFileName(name) {
+            return name.replace(/[^a-zA-Z0-9_-]/g, '_');
+        }
+
+        // v0.15.0: 切换图表类型
+        function switchChartType(type) {
+            currentChartType = type;
+            // 更新 tab 样式
+            document.querySelectorAll('.chart-tab').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.chart === type);
+            });
+            // 重新渲染
+            if (currentProgressData) {
+                renderChartByType(currentProgressData);
+            }
+        }
+
+        // v0.15.0: 根据类型分发渲染
+        function renderChartByType(data) {
+            if (progressChart) progressChart.destroy();
+            switch (currentChartType) {
+                case 'trend': renderTrendChart(data); break;
+                case 'feature': renderFeatureCoverageChart(data); break;
+                case 'p0p1': renderP0P1ComparisonChart(data); break;
+            }
+        }
+
+        // v0.15.0: 导出菜单切换
+        function toggleExportMenu() {
+            const menu = document.getElementById('chartExportMenu');
+            menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+        }
+
+        // 点击其他地方关闭导出菜单
+        document.addEventListener('click', function(e) {
+            const exportBtn = document.getElementById('chartExportBtn');
+            const exportMenu = document.getElementById('chartExportMenu');
+            if (exportBtn && exportMenu && !exportBtn.contains(e.target) && !exportMenu.contains(e.target)) {
+                exportMenu.style.display = 'none';
+            }
+        });
+
+        // v0.15.0: 导出当前图表为 PNG
+        function exportChart(format) {
+            if (!progressChart) {
+                alert('暂无图表可导出');
+                return;
+            }
+            const canvas = document.getElementById('progressChart');
+            const url = canvas.toDataURL('image/png');
+            const chartName = {
+                'trend': 'milestone_trend',
+                'feature': 'feature_cp_coverage',
+                'p0p1': 'p0_p1_comparison'
+            }[currentChartType];
+            const projectName = currentProject ? sanitizeFileName(currentProject.name) : 'project';
+            const dateStr = new Date().toISOString().slice(0, 10);
+            const link = document.createElement('a');
+            link.download = `${chartName}_${projectName}_${dateStr}.png`;
+            link.href = url;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            // 关闭菜单
+            document.getElementById('chartExportMenu').style.display = 'none';
+        }
+
+        // v0.15.0: 导出全部三张图表
+        async function exportAllCharts() {
+            if (!currentProgressData) {
+                alert('暂无图表可导出');
+                return;
+            }
+            const types = ['trend', 'feature', 'p0p1'];
+            const originalType = currentChartType;
+            const projectName = currentProject ? sanitizeFileName(currentProject.name) : 'project';
+            const dateStr = new Date().toISOString().slice(0, 10);
+
+            for (const type of types) {
+                switchChartType(type);
+                // 等待一帧确保渲染开始
+                await new Promise(r => requestAnimationFrame(r));
+                // 再等待一小段时间让 Chart.js 完成无动画渲染
+                await new Promise(r => setTimeout(r, 100));
+                const canvas = document.getElementById('progressChart');
+                const url = canvas.toDataURL('image/png');
+                const chartName = {
+                    'trend': 'milestone_trend',
+                    'feature': 'feature_cp_coverage',
+                    'p0p1': 'p0_p1_comparison'
+                }[type];
+                const link = document.createElement('a');
+                link.download = `${chartName}_${projectName}_${dateStr}.png`;
+                link.href = url;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                await new Promise(r => setTimeout(r, 200));
+            }
+
+            // 恢复原始图表
+            switchChartType(originalType);
+            document.getElementById('chartExportMenu').style.display = 'none';
+        }
         
         async function loadProgressChart() {
             // 检查 Chart.js 是否加载成功
@@ -2907,11 +3048,12 @@
                 const progressData = await progressRes.json();
                 
                 currentProgressData = progressData;
-                
+
                 document.getElementById('progressEmptyState').style.display = 'none';
                 document.getElementById('progressChart').style.display = 'block';
 
-                renderProgressChart(progressData);
+                // v0.15.0: 根据当前 chart type 渲染对应图表
+                renderChartByType(progressData);
 
                 // v0.8.2: 根据角色显示/隐藏快照按钮
                 updateSnapshotButtons();
@@ -2943,7 +3085,8 @@
                 const progressData = await progressRes.json();
 
                 currentProgressData = progressData;
-                renderProgressChart(progressData);
+                // v0.15.0: 根据当前 chart type 渲染对应图表
+                renderChartByType(progressData);
 
                 // v0.8.2: 根据角色显示/隐藏快照按钮
                 updateSnapshotButtons();
@@ -3142,55 +3285,380 @@
             }
         }
         
-        function renderProgressChart(data) {
+        // v0.15.0: 图1 - 里程碑趋势（组合图：柱状+双折线+双Y轴）
+        function renderTrendChart(data) {
+            const ctx = document.getElementById('progressChart').getContext('2d');
+            const container = document.getElementById('progressChartContainer');
+            const trend = data.trend || [];
+
+            // 确保容器有足够高度，避免初始渲染扁塌
+            container.style.minHeight = '400px';
+            document.getElementById('progressChart').style.maxHeight = '400px';
+
+            // 如果没有趋势数据，回退到原来的 planned/actual 折线图
+            if (trend.length === 0) {
+                renderLegacyProgressChart(data);
+                return;
+            }
+
+            // 计算 TC PASS 右轴最大值（取整到最近的 50）
+            const maxTcTotal = Math.max(...trend.map(t => t.tc_total || 0), 1);
+            const y2Max = Math.ceil(maxTcTotal / 50) * 50;
+
+            progressChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: trend.map(t => t.date),
+                    datasets: [
+                        {
+                            type: 'bar',
+                            label: 'TC PASS 个数',
+                            data: trend.map(t => t.tc_pass || 0),
+                            backgroundColor: '#a8d5ff',
+                            borderColor: '#74b9ff',
+                            borderWidth: 1,
+                            yAxisID: 'y2',
+                            order: 3
+                        },
+                        {
+                            type: 'line',
+                            label: 'CP 覆盖率',
+                            data: trend.map(t => t.cp_coverage),
+                            borderColor: '#28a745',
+                            backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 4,
+                            pointBackgroundColor: '#28a745',
+                            tension: 0.1,
+                            yAxisID: 'y1',
+                            order: 2
+                        },
+                        {
+                            type: 'line',
+                            label: 'P0 覆盖率',
+                            data: trend.map(t => t.p0_coverage),
+                            borderColor: '#dc3545',
+                            backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 4,
+                            pointBackgroundColor: '#dc3545',
+                            pointStyle: 'rect',
+                            tension: 0.1,
+                            yAxisID: 'y1',
+                            order: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            min: 0,
+                            max: 100,
+                            title: { display: true, text: '覆盖率 (%)' },
+                            grid: { drawOnChartArea: true }
+                        },
+                        y2: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            min: 0,
+                            max: y2Max,
+                            title: { display: true, text: 'TC PASS 个数' },
+                            grid: { drawOnChartArea: false }
+                        }
+                    },
+                    plugins: {
+                        title: { display: true, text: '里程碑趋势：TC PASS个数 / CP覆盖率' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.dataset.label;
+                                    const value = context.parsed.y;
+                                    if (label === 'TC PASS 个数') {
+                                        const idx = context.dataIndex;
+                                        const t = trend[idx];
+                                        const pct = t.tc_total > 0 ? Math.round(t.tc_pass / t.tc_total * 1000) / 10 : 0;
+                                        return `TC PASS: ${t.tc_pass}/${t.tc_total} (${pct}%)`;
+                                    }
+                                    return `${label}: ${value}%`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // v0.15.0: 图2 - Feature CP 覆盖进度（水平堆叠条形图）
+        function renderFeatureCoverageChart(data) {
+            const ctx = document.getElementById('progressChart').getContext('2d');
+            const container = document.getElementById('progressChartContainer');
+            const canvas = document.getElementById('progressChart');
+            let features = data.feature_coverage || [];
+
+            if (features.length === 0) {
+                renderEmptyChart('暂无 Feature 覆盖数据');
+                return;
+            }
+
+            // 按覆盖率从高到低排序
+            features = features.slice().sort((a, b) => b.coverage_pct - a.coverage_pct);
+
+            // v0.15.0: 水平条形图需要足够高度显示所有 Feature
+            const chartHeight = Math.max(400, features.length * 45 + 80);
+            container.style.minHeight = chartHeight + 'px';
+            canvas.style.maxHeight = chartHeight + 'px';
+
+            progressChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: features.map(f => f.feature),
+                    datasets: [
+                        {
+                            label: '已覆盖',
+                            data: features.map(f => f.covered_cp),
+                            backgroundColor: '#28a745',
+                            stack: 'stack1'
+                        },
+                        {
+                            label: '未覆盖',
+                            data: features.map(f => f.uncovered_cp),
+                            backgroundColor: '#dee2e6',
+                            stack: 'stack1'
+                        }
+                    ]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            stacked: true,
+                            title: { display: true, text: 'CP 数量' }
+                        },
+                        y: {
+                            stacked: true,
+                            title: { display: true, text: 'Feature' }
+                        }
+                    },
+                    plugins: {
+                        title: { display: true, text: 'Feature CP 覆盖进度' },
+                        tooltip: {
+                            callbacks: {
+                                afterBody: function(tooltipItems) {
+                                    const idx = tooltipItems[0].dataIndex;
+                                    const f = features[idx];
+                                    return `覆盖率: ${f.coverage_pct}% | 未覆盖: ${f.uncovered_cp}`;
+                                }
+                            }
+                        }
+                    },
+                },
+                // v0.16.0: 改用 afterDraw 内联插件在条形末端绘制覆盖率百分比和未覆盖个数。
+                // 原实现在 animation.onComplete 中绘制，图表截图导出（如材料包导出）会在动画
+                // 完成前执行 toDataURL，导致标签丢失；afterDraw 每帧都会绘制，截图始终包含标签。
+                plugins: [{
+                    id: 'featureCoverageLabels',
+                    afterDraw(chart) {
+                        const { ctx, scales: { x, y } } = chart;
+                        ctx.save();
+                        ctx.font = 'bold 12px "Noto Sans CJK SC", "WenQuanYi Micro Hei", "Source Han Sans SC", sans-serif';
+                        ctx.textBaseline = 'middle';
+
+                        chart.data.labels.forEach((label, index) => {
+                            const f = features[index];
+                            const total = f.covered_cp + f.uncovered_cp;
+                            if (total === 0) return;
+
+                            // 计算条形最右端的 x 坐标
+                            const xPos = x.getPixelForValue(total) + 8;
+                            const yPos = y.getPixelForValue(label);
+
+                            // 覆盖率百分比（深绿色）
+                            ctx.fillStyle = '#1e7e34';
+                            ctx.textAlign = 'left';
+                            ctx.fillText(`${f.coverage_pct}%`, xPos, yPos - 7);
+
+                            // 未覆盖个数（红色）
+                            ctx.fillStyle = '#dc3545';
+                            ctx.fillText(`未覆盖: ${f.uncovered_cp}`, xPos, yPos + 7);
+                        });
+                        ctx.restore();
+                    }
+                }]
+            });
+        }
+
+        // v0.15.0: 图3 - P0 / P1 覆盖率模块对比（分组柱状图）
+        function renderP0P1ComparisonChart(data) {
+            const ctx = document.getElementById('progressChart').getContext('2d');
+            const canvas = document.getElementById('progressChart');
+            const container = document.getElementById('progressChartContainer');
+            const allFeatures = data.feature_coverage || [];
+
+            // 只展示同时有 P0 和 P1 CP 的模块，并按平均覆盖率从低到高排序
+            let filtered = allFeatures.filter(f => f.p0_total > 0 && f.p1_total > 0);
+            filtered = filtered.slice().sort((a, b) => {
+                const avgA = (a.p0_coverage + a.p1_coverage) / 2;
+                const avgB = (b.p0_coverage + b.p1_coverage) / 2;
+                return avgA - avgB;
+            });
+            // 聚焦重点：最多展示 10 个覆盖率最低的模块
+            filtered = filtered.slice(0, 10);
+
+            if (filtered.length === 0) {
+                renderEmptyChart('暂无 P0/P1 覆盖数据');
+                return;
+            }
+
+            container.style.minHeight = '400px';
+            canvas.style.maxHeight = '400px';
+
+            progressChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: filtered.map(f => f.feature),
+                    datasets: [
+                        {
+                            label: 'P0 覆盖率',
+                            data: filtered.map(f => f.p0_coverage),
+                            backgroundColor: '#1e7e34',
+                            borderColor: '#1e7e34',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'P1 覆盖率',
+                            data: filtered.map(f => f.p1_coverage),
+                            backgroundColor: (ctx) => {
+                                const v = ctx.raw ?? 0;
+                                if (v < 70) return '#dc3545';
+                                if (v < 90) return '#ffc107';
+                                return '#28a745';
+                            },
+                            borderColor: '#999',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            min: 0,
+                            max: 100,
+                            title: { display: true, text: '覆盖率 (%)' },
+                            ticks: { callback: v => v + '%' }
+                        }
+                    },
+                    plugins: {
+                        title: { display: true, text: 'P0 / P1 覆盖率重点模块对比（Top 10 低覆盖）' },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}%`
+                            }
+                        }
+                    }
+                },
+                // v0.16.0: 柱顶百分比标签。使用 afterDraw 内联插件逐帧绘制，
+                // 确保进度页导出与材料包截图导出均能带上百分比（与样张一致）。
+                plugins: [{
+                    id: 'p0p1BarValueLabels',
+                    afterDraw(chart) {
+                        const { ctx } = chart;
+                        ctx.save();
+                        ctx.font = 'bold 11px "Noto Sans CJK SC", "WenQuanYi Micro Hei", "Source Han Sans SC", sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'bottom';
+                        ctx.fillStyle = '#333';
+                        chart.data.datasets.forEach((dataset, datasetIndex) => {
+                            const meta = chart.getDatasetMeta(datasetIndex);
+                            meta.data.forEach((bar, index) => {
+                                const value = dataset.data[index];
+                                if (value === null || value === undefined) return;
+                                ctx.fillText(`${value}%`, bar.x, bar.y - 2);
+                            });
+                        });
+                        ctx.restore();
+                    }
+                }]
+            });
+        }
+
+        // v0.15.0: 空状态图表
+        function renderEmptyChart(message) {
+            const ctx = document.getElementById('progressChart').getContext('2d');
+            progressChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: [message],
+                    datasets: [{
+                        label: '',
+                        data: [0],
+                        backgroundColor: '#f5f5f5'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: { display: true, text: message }
+                    },
+                    scales: {
+                        y: { display: false },
+                        x: { display: false }
+                    }
+                }
+            });
+        }
+
+        // v0.15.0: 保留原来的 planned/actual 折线图作为回退
+        function renderLegacyProgressChart(data) {
             const ctx = document.getElementById('progressChart').getContext('2d');
 
-            // 如果已有图表，先销毁
             if (progressChart) {
                 progressChart.destroy();
             }
 
-            // 准备数据
             const planned = data.planned || [];
             const actual = data.actual || [];
 
-            // 使用计划曲线的 labels，如果没有则用实际的
             let labels = planned.map(p => p.week);
             if (labels.length === 0) {
                 labels = actual.map(a => a.week);
             }
 
-            // v0.13.0: 构建 week -> coverage 的映射，确保 actual 数据与正确的 week label 对齐
             const actualCoverageByWeek = {};
             for (const a of actual) {
                 actualCoverageByWeek[a.week] = a.coverage;
             }
 
-            // 按计划周的顺序构建 actualData，确保每个点都对齐到正确的 week
             const actualData = labels.map(label => {
                 return actualCoverageByWeek.hasOwnProperty(label) ? actualCoverageByWeek[label] : null;
             });
 
             const plannedData = planned.map(p => p.coverage);
 
-            // 构建 datasets
             const datasets = [];
 
-            // 计划曲线（蓝色虚线）
             if (plannedData.length > 0) {
                 datasets.push({
                     label: '计划曲线',
                     data: plannedData,
                     borderColor: '#2170bb',
                     backgroundColor: 'rgba(33, 112, 187, 0.1)',
-                    borderDash: [5, 5],  // 虚线
+                    borderDash: [5, 5],
                     fill: true,
                     tension: 0.1
                 });
             }
 
-            // v0.8.2: 实际曲线（绿色实线）
-            // v0.13.0: 只包含有实际数据的点（排除 null 值）
             const validActualData = actualData.map((v, i) => v !== null ? v : NaN);
             if (actual.length > 0) {
                 datasets.push({
@@ -3200,11 +3668,10 @@
                     backgroundColor: 'rgba(40, 167, 69, 0.1)',
                     fill: true,
                     tension: 0.1,
-                    spanGaps: true  // 允许断点
+                    spanGaps: true
                 });
             }
-            
-            // 如果没有数据，显示占位
+
             if (datasets.length === 0) {
                 datasets.push({
                     label: '覆盖率',
@@ -3214,15 +3681,13 @@
                     fill: true
                 });
             }
-            
-            // v0.10.0: 获取 priority 过滤条件用于显示
+
             const priorityFilter = data.priority_filter || '';
             let titleText = 'CP 覆盖率进度';
             if (priorityFilter) {
                 titleText += ` (${priorityFilter.replace(/,/g, '+')})`;
             }
 
-            // 创建图表
             progressChart = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -3257,6 +3722,11 @@
                     }
                 }
             });
+        }
+
+        // v0.15.0: 兼容旧调用（renderProgressChart 映射到 renderTrendChart）
+        function renderProgressChart(data) {
+            renderTrendChart(data);
         }
         
         function renderCP(filter = '') {
@@ -4012,6 +4482,52 @@
         }
         
         /**
+         * 导出项目状态报告 (Markdown 格式)
+         * v0.14.3: 新增函数
+         */
+        async function exportProjectReport() {
+            if (!currentProject) {
+                alert('请先选择一个项目');
+                return;
+            }
+            try {
+                const res = await fetch(`${API_BASE}/export/project/${currentProject.id}/report`, {
+                    credentials: 'include'
+                });
+                if (!res.ok) {
+                    if (res.status === 401) {
+                        alert('请先登录');
+                        return;
+                    }
+                    const err = await res.json().catch(() => ({}));
+                    alert('导出报告失败: ' + (err.error || res.statusText));
+                    return;
+                }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                const filename = res.headers.get('content-disposition');
+                if (filename && filename.includes('filename=')) {
+                    const match = filename.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                    if (match) {
+                        a.download = match[1].replace(/['"]/g, '');
+                    } else {
+                        a.download = `${currentProject.project_name}_Report_${new Date().toISOString().split('T')[0]}.md`;
+                    }
+                } else {
+                    a.download = `${currentProject.project_name}_Report_${new Date().toISOString().split('T')[0]}.md`;
+                }
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            } catch (e) {
+                alert('导出报告失败: ' + e.message);
+            }
+        }
+        
+        /**
          * 打开 CP Modal（创建或编辑）
          * @param {number|null} id - CP ID，null 表示创建新 CP
          * @returns {void}
@@ -4422,10 +4938,17 @@
         let pendingDeleteProjectId = null;
         let pendingDeleteProjectName = null;
         
-        function showProjectModal() {
-            const list = document.getElementById('projectList');
+        function renderProjectItems(projectList, filterText) {
             const isAdmin = currentUser && currentUser.role === 'admin';
-            list.innerHTML = projects.map(p => {
+            const filter = filterText.toLowerCase().trim();
+
+            // 按名称排序
+            const sorted = [...projectList].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+
+            // 过滤
+            const filtered = filter ? sorted.filter(p => p.name.toLowerCase().includes(filter)) : sorted;
+
+            return filtered.map(p => {
                 const isActive = currentProject && currentProject.id === p.id;
                 const exportBtn = isAdmin ? `<button class="action-btn export" onclick="event.stopPropagation(); exportProjectPackage(${p.id}, '${escapeHtml(p.name)}')" title="导出材料包">📦 导出</button>` : '';
                 const editBtn = isAdmin ? `<button class="action-btn edit" onclick="event.stopPropagation(); showEditProjectDate(${p.id}, '${escapeHtml(p.name)}', '${p.start_date || ''}', '${p.end_date || ''}')" title="编辑项目日期">✏️ 编辑</button>` : '';
@@ -4441,20 +4964,94 @@
                 if (p.start_date) {
                     metaParts.push(`${p.start_date} ~ ${p.end_date}`);
                 }
-                return `<div class="project-item ${isActive ? 'active' : ''}" onclick="selectProject(${p.id}); closeModal('projectModal');"><div class="project-info"><span class="project-name">${p.name}</span><span class="project-meta">${metaParts.join(' | ')}</span></div><div class="action-btns">${exportBtn}${editBtn}${deleteBtn}</div></div>`;
-            }).join('');
+                return `<div class="project-item ${isActive ? 'active' : ''}" onclick="selectProject(${p.id}); closeModal('projectModal');"><div class="project-info"><span class="project-name">${escapeHtml(p.name)}</span><span class="project-meta">${metaParts.join(' | ')}</span></div><div class="action-btns">${exportBtn}${editBtn}${deleteBtn}</div></div>`;
+            }).join('') || '<p style="color: #999; padding: 12px; text-align: center;">无匹配项目</p>';
+        }
+
+        function filterProjectList() {
+            const filterText = document.getElementById('projectSearch').value;
+            document.getElementById('projectList').innerHTML = renderProjectItems(projects, filterText);
+        }
+
+        function showProjectModal() {
+            document.getElementById('projectSearch').value = '';
+            document.getElementById('projectList').innerHTML = renderProjectItems(projects, '');
             document.getElementById('projectModal').classList.add('active');
         }
 
-        // v0.14.0: 导出项目材料包
+        // v0.15.0: 导出项目材料包 (支持图表截图)
         async function exportProjectPackage(projectId, projectName) {
             if (!confirm(`确定要导出项目 "${projectName}" 的材料包吗？`)) {
                 return;
             }
+
+            let charts = {};
+
+            // v0.15.0: 捕获 Progress Charts 截图
+            const originalTab = currentTab;
+            const originalChartType = currentChartType;
+            const originalProject = currentProject;
+            const originalProgressData = currentProgressData;
+
+            try {
+                // 确保 currentProject 匹配要导出的项目
+                if (!currentProject || currentProject.id !== projectId) {
+                    currentProject = projects.find(p => p.id === projectId);
+                }
+
+                // 如果没有进度数据，尝试加载
+                if (currentProject && !currentProgressData) {
+                    await loadProgressChart();
+                }
+
+                // 捕获图表
+                if (currentProgressData) {
+                    // 显示 progress panel 和 canvas 以便渲染
+                    document.getElementById('progressPanel').style.display = 'block';
+                    document.getElementById('progressChart').style.display = 'block';
+                    document.getElementById('progressEmptyState').style.display = 'none';
+
+                    const types = ['trend', 'feature', 'p0p1'];
+                    for (const type of types) {
+                        switchChartType(type);
+                        await new Promise(r => requestAnimationFrame(r));
+                        await new Promise(r => setTimeout(r, 300));
+                        const canvas = document.getElementById('progressChart');
+                        if (canvas && canvas.style.display !== 'none') {
+                            charts[type] = canvas.toDataURL('image/png');
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('图表捕获失败:', e);
+            } finally {
+                // 恢复状态
+                currentProject = originalProject;
+                currentProgressData = originalProgressData;
+                currentChartType = originalChartType;
+
+                // 恢复面板显示
+                document.getElementById('cpPanel').style.display = originalTab === 'cp' ? 'block' : 'none';
+                document.getElementById('tcPanel').style.display = originalTab === 'tc' ? 'block' : 'none';
+                document.getElementById('progressPanel').style.display = originalTab === 'progress' ? 'block' : 'none';
+                document.getElementById('fcPanel').style.display = originalTab === 'fc' ? 'block' : 'none';
+                document.getElementById('dashboard-content').style.display = originalTab === 'dashboard' ? 'block' : 'none';
+                document.getElementById('wikiPanel').style.display = originalTab === 'wiki' ? 'block' : 'none';
+
+                // 恢复图表渲染
+                if (currentProgressData && originalTab === 'progress') {
+                    renderChartByType(currentProgressData);
+                } else if (originalTab !== 'progress') {
+                    document.getElementById('progressChart').style.display = 'none';
+                }
+            }
+
             try {
                 const response = await fetch(`/api/export/project/${projectId}/package`, {
-                    method: 'GET',
-                    credentials: 'include'
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    credentials: 'include',
+                    body: JSON.stringify({charts})
                 });
                 if (response.status === 403) {
                     alert('无权限执行此操作，需要管理员权限');

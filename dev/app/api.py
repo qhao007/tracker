@@ -8,7 +8,9 @@ from urllib.parse import quote
 from functools import wraps
 import json
 import os
+import re
 import sqlite3
+from collections import defaultdict
 
 api = Blueprint("api", __name__)
 auth_api = Blueprint("auth_api", __name__)
@@ -1190,6 +1192,172 @@ def get_progress(project_id):
     except Exception as e:
         print(f"Warning: Could not load actual curve: {e}")
 
+    # v0.15.0: 新增趋势数据（从 project_progress 快照表读取）
+    trend = []
+    try:
+        ensure_progress_table_exists(project["name"])
+        conn = get_db(project["name"])
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT snapshot_date, tc_pass_count, tc_total,
+                   actual_coverage, p0_coverage, cp_covered, cp_total
+            FROM project_progress
+            WHERE project_id = ?
+            ORDER BY snapshot_date
+        """, (project_id,))
+        for row in cursor.fetchall():
+            trend.append({
+                'date': row[0],
+                'tc_pass': row[1] if row[1] is not None else 0,
+                'tc_total': row[2] if row[2] is not None else 0,
+                'cp_coverage': round(row[3], 1) if row[3] is not None else 0,
+                'p0_coverage': round(row[4], 1) if row[4] is not None else 0,
+                'cp_covered': row[5] if row[5] is not None else 0,
+                'cp_total': row[6] if row[6] is not None else 0
+            })
+    except Exception as e:
+        print(f"Warning: Could not load trend data: {e}")
+
+    # v0.15.0: 新增 feature_coverage 实时计算
+    feature_coverage = []
+    try:
+        conn = get_db(project["name"])
+        cursor = conn.cursor()
+
+        # 获取项目 coverage_mode
+        coverage_mode = project.get('coverage_mode', 'tc_cp')
+        is_fc_cp_mode = coverage_mode == 'fc_cp'
+
+        # 构建 CP 查询条件（支持 priority 过滤）
+        cp_where = "WHERE project_id = ?"
+        cp_params = [project_id]
+        priority_list = []
+        if priority_filter:
+            priority_list = [p.strip().upper() for p in priority_filter.split(',') if p.strip()]
+            priority_list = [p for p in priority_list if p in ('P0', 'P1', 'P2', 'P3')]
+            if priority_list:
+                placeholders = ','.join('?' * len(priority_list))
+                cp_where += f" AND priority IN ({placeholders})"
+                cp_params.extend(priority_list)
+
+        # 获取所有符合条件的 CP
+        if priority_list:
+            placeholders = ','.join('?' * len(priority_list))
+            cursor.execute(
+                f"SELECT id, feature, priority, cover_point FROM cover_point WHERE project_id = ? AND priority IN ({placeholders})",
+                tuple([project_id] + priority_list)
+            )
+        else:
+            cursor.execute(
+                "SELECT id, feature, priority, cover_point FROM cover_point WHERE project_id = ?",
+                (project_id,)
+            )
+        all_cps = cursor.fetchall()
+
+        if all_cps:
+            cp_ids = [cp_row[0] for cp_row in all_cps]
+
+            if is_fc_cp_mode:
+                # 批量查询所有 CP 的 FC 关联数据
+                fc_placeholders = ','.join('?' * len(cp_ids))
+                cursor.execute(f"""
+                    SELECT fcca.cp_id, fc.coverage_pct
+                    FROM functional_coverage fc
+                    INNER JOIN fc_cp_association fcca ON fc.id = fcca.fc_id
+                    WHERE fcca.cp_id IN ({fc_placeholders})
+                """, tuple(cp_ids))
+                fc_data = {}
+                for row in cursor.fetchall():
+                    cp_id, pct = row[0], row[1]
+                    if cp_id not in fc_data:
+                        fc_data[cp_id] = []
+                    fc_data[cp_id].append(pct)
+            else:
+                # 批量查询所有 CP 的 TC 关联状态
+                tc_placeholders = ','.join('?' * len(cp_ids))
+                cursor.execute(f"""
+                    SELECT tcc.cp_id, tc.status
+                    FROM test_case tc
+                    INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+                    WHERE tcc.cp_id IN ({tc_placeholders})
+                """, tuple(cp_ids))
+                tc_data = {}
+                for row in cursor.fetchall():
+                    cp_id, status = row[0], row[1]
+                    if cp_id not in tc_data:
+                        tc_data[cp_id] = []
+                    tc_data[cp_id].append(status)
+
+            # 计算每个 CP 的 coverage_rate
+            cp_rates = {}  # cp_id -> {feature, priority, rate}
+            for cp_row in all_cps:
+                cp_id = cp_row[0]
+                feature = cp_row[1] if cp_row[1] else 'Unknown'
+                priority = cp_row[2] if cp_row[2] else 'P0'
+
+                if is_fc_cp_mode:
+                    linked_fcs = fc_data.get(cp_id, [])
+                    if len(linked_fcs) == 0:
+                        cp_rate = 0.0
+                    else:
+                        cp_rate = sum(linked_fcs) / len(linked_fcs)
+                else:
+                    connected_tcs = tc_data.get(cp_id, [])
+                    total_tc = len(connected_tcs)
+                    if total_tc == 0:
+                        cp_rate = 0.0
+                    else:
+                        covered_tc = sum(1 for status in connected_tcs if status in ('PASS', 'FAIL'))
+                        cp_rate = (covered_tc / total_tc) * 100
+
+                cp_rates[cp_id] = {
+                    'feature': feature,
+                    'priority': priority,
+                    'rate': cp_rate
+                }
+
+            # 按 feature 分组聚合
+            feature_groups = defaultdict(list)
+            for cp_id, info in cp_rates.items():
+                feature_groups[info['feature']].append(info)
+
+            for feature, cps in feature_groups.items():
+                total_cp = len(cps)
+                covered_cp = sum(1 for cp in cps if cp['rate'] > 0)
+                uncovered_cp = total_cp - covered_cp
+                coverage_pct = round(sum(cp['rate'] for cp in cps) / total_cp, 1) if total_cp > 0 else 0
+
+                # P0/P1 子分组
+                p0_cps = [cp for cp in cps if cp['priority'] == 'P0']
+                p0_total = len(p0_cps)
+                p0_covered = sum(1 for cp in p0_cps if cp['rate'] > 0)
+                p0_coverage = round(sum(cp['rate'] for cp in p0_cps) / p0_total, 1) if p0_total > 0 else 0
+
+                p1_cps = [cp for cp in cps if cp['priority'] == 'P1']
+                p1_total = len(p1_cps)
+                p1_covered = sum(1 for cp in p1_cps if cp['rate'] > 0)
+                p1_coverage = round(sum(cp['rate'] for cp in p1_cps) / p1_total, 1) if p1_total > 0 else 0
+
+                feature_coverage.append({
+                    'feature': feature,
+                    'total_cp': total_cp,
+                    'covered_cp': covered_cp,
+                    'uncovered_cp': uncovered_cp,
+                    'coverage_pct': coverage_pct,
+                    'p0_total': p0_total,
+                    'p0_covered': p0_covered,
+                    'p0_coverage': p0_coverage,
+                    'p1_total': p1_total,
+                    'p1_covered': p1_covered,
+                    'p1_coverage': p1_coverage
+                })
+
+            # 按 coverage_pct 从高到低排序
+            feature_coverage.sort(key=lambda x: x['coverage_pct'], reverse=True)
+    except Exception as e:
+        print(f"Warning: Could not calculate feature coverage: {e}")
+
     return jsonify({
         "project_id": project_id,
         "project_name": project["name"],
@@ -1197,7 +1365,9 @@ def get_progress(project_id):
         "end_date": project.get("end_date", ""),
         "planned": planned,
         "actual": actual,
-        "priority_filter": priority_filter
+        "priority_filter": priority_filter,
+        "trend": trend,
+        "feature_coverage": feature_coverage
     })
 
 
@@ -4492,18 +4662,25 @@ def export_data():
 
 # ============ 项目材料包导出 (v0.14.0) ============
 
-@api.route("/api/export/project/<int:project_id>/package", methods=["GET"])
+@api.route("/api/export/project/<int:project_id>/package", methods=["POST"])
 @admin_required
 def export_project_package(project_id):
     """
     导出项目材料包 (ZIP)
     权限: 仅管理员可用
+    v0.15.0: 支持接收前端图表截图 (base64 PNG)
+    v0.16.0: 附带生成 Validation Summary PPT (summary/validation_summary.pptx)
     """
     import zipfile
     import io
+    import base64
     from openpyxl import Workbook
     from openpyxl.styles import Font, Alignment
     from datetime import datetime
+
+    # v0.15.0: 读取前端发送的图表截图
+    data = request.get_json(silent=True) or {}
+    charts = data.get("charts", {})
 
     # 获取项目信息
     projects = load_projects()
@@ -4538,6 +4715,10 @@ def export_project_package(project_id):
 - dashboard_coverage_matrix.md/.xlsx - Coverage Matrix
 - feature_list.md/.xlsx - Feature列表
 - snapshots.md/.xlsx - 快照历史
+- charts/coverage_trend.png - 覆盖趋势图
+- charts/feature_coverage.png - Feature CP 覆盖图
+- charts/p0p1_comparison.png - P0/P1 覆盖率对比图
+- summary/validation_summary.pptx - Validation Summary PPT (v0.16.0)
 - wiki/ - Wiki内容 (如存在)
 
 ## 项目信息
@@ -5001,6 +5182,50 @@ def export_project_package(project_id):
         snap_bytes = io.BytesIO()
         wb_snap.save(snap_bytes)
         zipf.writestr("snapshots.xlsx", snap_bytes.getvalue())
+
+        # v0.15.0: 添加图表截图 (前端传入的 base64 PNG)
+        chart_names = {
+            'trend': 'charts/coverage_trend.png',
+            'feature': 'charts/feature_coverage.png',
+            'p0p1': 'charts/p0p1_comparison.png'
+        }
+        chart_bytes = {}  # v0.16.0: 保留解码后的图表字节，供 Validation Summary PPT 复用
+        for key, zip_path in chart_names.items():
+            if key in charts:
+                try:
+                    b64_data = charts[key].split(',')[1] if ',' in charts[key] else charts[key]
+                    img_bytes = base64.b64decode(b64_data, validate=True)
+                    # 校验 PNG 文件签名
+                    if img_bytes.startswith(b'\x89PNG\r\n\x1a\n'):
+                        zipf.writestr(zip_path, img_bytes)
+                        chart_bytes[key] = img_bytes
+                except Exception:
+                    pass  # 跳过无效的图表数据
+
+        # v0.16.0: 生成 Validation Summary PPT，放入 summary/ 子目录
+        try:
+            from app.ppt_report import generate_validation_summary_ppt
+
+            report_data = _get_project_report_data(project_id)
+
+            # 环比：取最近两条有效快照的覆盖率差值（快照不足时不显示环比行）
+            coverage_delta = None
+            valid_snaps = [r for r in progress_rows if r['actual_coverage'] is not None]
+            if len(valid_snaps) >= 2:
+                coverage_delta = {
+                    'prev_date': valid_snaps[-2]['snapshot_date'],
+                    'delta_pp': round(valid_snaps[-1]['actual_coverage'] - valid_snaps[-2]['actual_coverage'], 1)
+                }
+
+            if report_data:
+                ppt_bytes = generate_validation_summary_ppt(
+                    report_data,
+                    coverage_delta=coverage_delta,
+                    chart_images={'feature': chart_bytes.get('feature'), 'p0p1': chart_bytes.get('p0p1')}
+                )
+                zipf.writestr("summary/validation_summary.pptx", ppt_bytes)
+        except Exception as e:
+            print(f"Warning: 生成 Validation Summary PPT 失败（不影响材料包其他内容）: {e}")
 
         # Wiki 内容导出 (如果存在)
         wiki_base = os.path.join(current_app.config["DATA_DIR"], "wiki")
@@ -6233,6 +6458,8 @@ def get_dashboard_coverage_matrix():
                 connected_tcs = cursor.fetchall()
 
                 cp_coverage_rate = 0
+                pass_tc = 0
+                fail_tc = 0
                 if len(connected_tcs) > 0:
                     covered_tc = sum(1 for tc in connected_tcs if tc[0] in ('PASS', 'FAIL'))
                     pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
@@ -6308,6 +6535,1020 @@ def get_dashboard_coverage_matrix():
 
     except sqlite3.Error as e:
         return jsonify({'success': False, 'error': f'Database error: {str(e)}'}), 500
+
+
+# ============ Project Report Export (v0.14.3) ============
+
+
+def _get_project_report_data(project_id):
+    """收集项目报告所需的全部数据，返回纯 Python dict。
+
+    v0.14.3: 新增函数，复用 Dashboard 各端点的 SQL 查询逻辑，
+    支持 TC-CP 和 FC-CP 两种覆盖模式。
+    """
+    # 验证项目存在
+    projects = load_projects()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    if not project:
+        return None
+
+    project_name = project['name']
+    conn = None
+    try:
+        db_path = get_db_path(project_name)
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+    except sqlite3.Error:
+        if conn:
+            conn.close()
+        return None
+
+    coverage_mode = project.get('coverage_mode', 'tc_cp')
+    is_fc_cp_mode = coverage_mode == 'fc_cp'
+
+    today = datetime.now().strftime('%Y-%m-%d')
+
+    data = {
+        'project': {
+            'name': project_name,
+            'start_date': project.get('start_date', ''),
+            'end_date': project.get('end_date', '')
+        },
+        'mode': coverage_mode,
+        'generated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    }
+
+    try:
+        # ---------- 1. Overview stats (复用 dashboard stats 逻辑) ----------
+        if is_fc_cp_mode:
+            cursor.execute("SELECT COUNT(*) FROM cover_point WHERE project_id = ?", (project_id,))
+            total_cp = cursor.fetchone()[0] or 0
+
+            cursor.execute("SELECT id, priority, feature FROM cover_point WHERE project_id = ?", (project_id,))
+            all_cps = cursor.fetchall()
+
+            covered_cp = 0
+            cp_full_coverage = 0
+            cp_below_100 = 0
+            cp_risk = 0
+
+            for cp_row in all_cps:
+                cp_id = cp_row[0]
+                cursor.execute("""
+                    SELECT fc.coverage_pct
+                    FROM functional_coverage fc
+                    INNER JOIN fc_cp_association fcca ON fc.id = fcca.fc_id
+                    WHERE fcca.cp_id = ?
+                """, (cp_id,))
+                linked_fcs = cursor.fetchall()
+                if linked_fcs:
+                    avg_coverage = sum(fc[0] for fc in linked_fcs) / len(linked_fcs)
+                    if avg_coverage > 0:
+                        covered_cp += 1
+                    if avg_coverage >= 100:
+                        cp_full_coverage += 1
+                    else:
+                        cp_below_100 += 1
+
+            unlinked_cp = total_cp - covered_cp
+            coverage_rate = round((covered_cp / total_cp * 100), 1) if total_cp > 0 else 0
+
+            cursor.execute("SELECT COUNT(*) FROM test_case WHERE project_id = ?", (project_id,))
+            tc_total = cursor.fetchone()[0] or 0
+            cursor.execute("SELECT COUNT(*) FROM test_case WHERE project_id = ? AND status = 'PASS'", (project_id,))
+            tc_pass = cursor.fetchone()[0] or 0
+            tc_pass_rate = round((tc_pass / tc_total * 100), 1) if tc_total > 0 else 0
+        else:
+            cursor.execute("SELECT id, priority, feature FROM cover_point WHERE project_id = ?", (project_id,))
+            all_cps = cursor.fetchall()
+
+            total_cp = len(all_cps)
+            unlinked_cp = 0
+            total_coverage_rate = 0.0
+
+            covered_cp = 0
+            cp_full_coverage = 0
+            cp_below_100 = 0
+            cp_risk = 0
+
+            for cp_row in all_cps:
+                cp_id = cp_row[0]
+                cursor.execute("""
+                    SELECT tc.status FROM test_case tc
+                    INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+                    WHERE tcc.cp_id = ?
+                """, (cp_id,))
+                connected_tcs = cursor.fetchall()
+
+                total_tc = len(connected_tcs)
+                if total_tc == 0:
+                    unlinked_cp += 1
+                    cp_rate = 0.0
+                else:
+                    covered_tc = sum(1 for tc in connected_tcs if tc[0] in ('PASS', 'FAIL'))
+                    fail_tc = sum(1 for tc in connected_tcs if tc[0] == 'FAIL')
+                    cp_rate = (covered_tc / total_tc) * 100
+                    if covered_tc > 0:
+                        covered_cp += 1
+                    if cp_rate == 100.0:
+                        cp_full_coverage += 1
+                        if fail_tc > 0:
+                            cp_risk += 1
+                    elif cp_rate > 0:
+                        cp_below_100 += 1
+
+                total_coverage_rate += cp_rate
+
+            coverage_rate = round(total_coverage_rate / total_cp, 1) if total_cp > 0 else 0
+
+            cursor.execute("SELECT COUNT(*) FROM test_case WHERE project_id = ?", (project_id,))
+            tc_total = cursor.fetchone()[0] or 0
+            cursor.execute("SELECT COUNT(*) FROM test_case WHERE project_id = ? AND status = 'PASS'", (project_id,))
+            tc_pass = cursor.fetchone()[0] or 0
+            tc_pass_rate = round((tc_pass / tc_total * 100), 1) if tc_total > 0 else 0
+
+        # TC 按状态统计
+        cursor.execute("SELECT COUNT(*) FROM test_case WHERE project_id = ? AND status = 'FAIL'", (project_id,))
+        tc_fail = cursor.fetchone()[0] or 0
+        cursor.execute("SELECT COUNT(*) FROM test_case WHERE project_id = ? AND status = 'OPEN'", (project_id,))
+        tc_open = cursor.fetchone()[0] or 0
+        cursor.execute("SELECT COUNT(*) FROM test_case WHERE project_id = ? AND status = 'CODED'", (project_id,))
+        tc_coded = cursor.fetchone()[0] or 0
+        cursor.execute("SELECT COUNT(*) FROM test_case WHERE project_id = ? AND status = 'REMOVED'", (project_id,))
+        tc_removed = cursor.fetchone()[0] or 0
+
+        data['overview'] = {
+            'total_cp': total_cp,
+            'covered_cp': covered_cp,
+            'coverage_rate': coverage_rate,
+            'unlinked_cp': unlinked_cp,
+            'cp_full_coverage': cp_full_coverage,
+            'cp_below_100': cp_below_100,
+            'cp_risk': cp_risk,
+            'tc_total': tc_total,
+            'tc_pass': tc_pass,
+            'tc_fail': tc_fail,
+            'tc_open': tc_open,
+            'tc_coded': tc_coded,
+            'tc_removed': tc_removed,
+            'tc_pass_rate': tc_pass_rate
+        }
+
+        # ---------- 2. By Priority (复用 dashboard stats 逻辑) ----------
+        by_priority = {}
+        for p in ['P0', 'P1', 'P2']:
+            cursor.execute("SELECT id FROM cover_point WHERE project_id = ? AND priority = ?", (project_id, p))
+            p_cp_ids = [row[0] for row in cursor.fetchall()]
+            p_total = len(p_cp_ids)
+
+            p_total_coverage = 0.0
+            p_covered = 0
+
+            for cp_id in p_cp_ids:
+                if is_fc_cp_mode:
+                    cursor.execute("""
+                        SELECT fc.coverage_pct FROM functional_coverage fc
+                        INNER JOIN fc_cp_association fcca ON fc.id = fcca.fc_id
+                        WHERE fcca.cp_id = ?
+                    """, (cp_id,))
+                    linked_fcs = cursor.fetchall()
+                    linked_fc_count = len(linked_fcs)
+                    if linked_fc_count == 0:
+                        cp_rate = 0.0
+                    else:
+                        cp_rate = sum(fc[0] for fc in linked_fcs) / linked_fc_count
+                        if cp_rate > 0:
+                            p_covered += 1
+                else:
+                    cursor.execute("""
+                        SELECT tc.status FROM test_case tc
+                        INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+                        WHERE tcc.cp_id = ?
+                    """, (cp_id,))
+                    connected_tcs = cursor.fetchall()
+                    total_tc = len(connected_tcs)
+                    if total_tc == 0:
+                        cp_rate = 0.0
+                    else:
+                        pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
+                        cp_rate = (pass_tc / total_tc) * 100
+                        if pass_tc > 0:
+                            p_covered += 1
+
+                p_total_coverage += cp_rate
+
+            p_rate = round(p_total_coverage / p_total, 1) if p_total > 0 else 0
+            by_priority[p] = {'total': p_total, 'covered': p_covered, 'rate': p_rate}
+
+        data['by_priority'] = by_priority
+
+        # ---------- 3. By Feature (复用 dashboard stats 逻辑) ----------
+        cursor.execute("""
+            SELECT feature, COUNT(*) as cnt
+            FROM cover_point
+            WHERE project_id = ? AND feature IS NOT NULL AND feature != ''
+            GROUP BY feature
+        """, (project_id,))
+        feature_stats = cursor.fetchall()
+
+        by_feature = []
+        for stat in feature_stats:
+            feature_name = stat[0]
+            feature_total = stat[1]
+
+            cursor.execute("SELECT cp.id FROM cover_point cp WHERE cp.project_id = ? AND cp.feature = ?", (project_id, feature_name))
+            feature_cp_ids = [row[0] for row in cursor.fetchall()]
+
+            feature_total_coverage = 0.0
+            feature_covered = 0
+
+            for cp_id in feature_cp_ids:
+                if is_fc_cp_mode:
+                    cursor.execute("""
+                        SELECT fc.coverage_pct FROM functional_coverage fc
+                        INNER JOIN fc_cp_association fcca ON fc.id = fcca.fc_id
+                        WHERE fcca.cp_id = ?
+                    """, (cp_id,))
+                    linked_fcs = cursor.fetchall()
+                    linked_fc_count = len(linked_fcs)
+                    if linked_fc_count == 0:
+                        cp_rate = 0.0
+                    else:
+                        cp_rate = sum(fc[0] for fc in linked_fcs) / linked_fc_count
+                        if cp_rate > 0:
+                            feature_covered += 1
+                else:
+                    cursor.execute("""
+                        SELECT tc.status FROM test_case tc
+                        INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+                        WHERE tcc.cp_id = ?
+                    """, (cp_id,))
+                    connected_tcs = cursor.fetchall()
+                    total_tc = len(connected_tcs)
+                    if total_tc == 0:
+                        cp_rate = 0.0
+                    else:
+                        pass_tc = sum(1 for tc in connected_tcs if tc[0] == 'PASS')
+                        cp_rate = (pass_tc / total_tc) * 100
+                        if pass_tc > 0:
+                            feature_covered += 1
+
+                feature_total_coverage += cp_rate
+
+            rate = round(feature_total_coverage / feature_total, 1) if feature_total > 0 else 0
+            by_feature.append({
+                'feature': feature_name,
+                'total': feature_total,
+                'covered': feature_covered,
+                'rate': rate
+            })
+
+        by_feature.sort(key=lambda x: x['rate'], reverse=True)
+        data['by_feature'] = by_feature
+
+        # ---------- 4. By DV Milestone (新增) ----------
+        cursor.execute("""
+            SELECT dv_milestone, status, COUNT(*) as cnt
+            FROM test_case
+            WHERE project_id = ?
+            GROUP BY dv_milestone, status
+        """, (project_id,))
+
+        dv_rows = cursor.fetchall()
+        dv_stats = {}
+        for row in dv_rows:
+            milestone = row[0] if row[0] else '(未指定)'
+            status = row[1]
+            cnt = row[2]
+
+            if milestone not in dv_stats:
+                dv_stats[milestone] = {'milestone': milestone, 'total': 0, 'pass': 0, 'fail': 0, 'open': 0, 'coded': 0, 'removed': 0}
+
+            dv_stats[milestone]['total'] += cnt
+            if status == 'PASS':
+                dv_stats[milestone]['pass'] += cnt
+            elif status == 'FAIL':
+                dv_stats[milestone]['fail'] += cnt
+            elif status == 'OPEN':
+                dv_stats[milestone]['open'] += cnt
+            elif status == 'CODED':
+                dv_stats[milestone]['coded'] += cnt
+            elif status == 'REMOVED':
+                dv_stats[milestone]['removed'] += cnt
+
+        data['by_dv_milestone'] = sorted(dv_stats.values(), key=lambda x: x['total'], reverse=True)
+
+        # ---------- 5. Coverage Matrix (复用 coverage-matrix 逻辑) ----------
+        cursor.execute("""
+            SELECT cp.id, cp.cover_point, cp.feature, cp.priority
+            FROM cover_point cp
+            WHERE cp.project_id = ?
+        """, (project_id,))
+
+        all_cps = cursor.fetchall()
+        matrix = {}
+        features_set = set()
+        priorities = ['P0', 'P1', 'P2']
+
+        for cp_row in all_cps:
+            cp_id = cp_row[0]
+            cp_name = cp_row[1] if cp_row[1] else ''
+            feature = cp_row[2] if cp_row[2] else '(no feature)'
+            priority = cp_row[3] if cp_row[3] else 'P0'
+
+            features_set.add(feature)
+
+            if feature not in matrix:
+                matrix[feature] = {}
+            if priority not in matrix[feature]:
+                matrix[feature][priority] = {'covered': 0, 'total': 0}
+
+            matrix[feature][priority]['total'] += 1
+
+            if is_fc_cp_mode:
+                cursor.execute("""
+                    SELECT fc.coverage_pct FROM functional_coverage fc
+                    INNER JOIN fc_cp_association fcca ON fc.id = fcca.fc_id
+                    WHERE fcca.cp_id = ?
+                """, (cp_id,))
+                linked_fcs = cursor.fetchall()
+                if len(linked_fcs) > 0:
+                    cp_coverage_rate = round(sum(fc[0] for fc in linked_fcs) / len(linked_fcs), 1)
+                    if cp_coverage_rate > 0:
+                        matrix[feature][priority]['covered'] += 1
+            else:
+                cursor.execute("""
+                    SELECT tc.status FROM test_case tc
+                    INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+                    WHERE tcc.cp_id = ?
+                """, (cp_id,))
+                connected_tcs = cursor.fetchall()
+                if len(connected_tcs) > 0:
+                    covered_tc = sum(1 for tc in connected_tcs if tc[0] in ('PASS', 'FAIL'))
+                    if covered_tc > 0:
+                        matrix[feature][priority]['covered'] += 1
+
+        row_totals = {}
+        for feature in matrix:
+            total_covered = sum(data['covered'] for data in matrix[feature].values())
+            total_cp_feat = sum(data['total'] for data in matrix[feature].values())
+            rate = round((total_covered / total_cp_feat) * 100, 1) if total_cp_feat > 0 else 0
+            row_totals[feature] = {'covered': total_covered, 'total': total_cp_feat, 'rate': rate}
+
+        column_totals = {}
+        for priority in priorities:
+            total_covered = sum(
+                matrix[f][priority]['covered']
+                for f in matrix if priority in matrix[f]
+            )
+            total_cp_col = sum(
+                matrix[f][priority]['total']
+                for f in matrix if priority in matrix[f]
+            )
+            rate = round((total_covered / total_cp_col) * 100, 1) if total_cp_col > 0 else 0
+            column_totals[priority] = {'covered': total_covered, 'total': total_cp_col, 'rate': rate}
+
+        data['coverage_matrix'] = {
+            'features': sorted(list(features_set)),
+            'priorities': priorities,
+            'matrix': matrix,
+            'row_totals': row_totals,
+            'column_totals': column_totals
+        }
+
+        # ---------- 6. Owner Stats (复用 owner-stats 逻辑) ----------
+        cursor.execute("""
+            SELECT owner, status, COUNT(*) as cnt
+            FROM test_case
+            WHERE project_id = ?
+            GROUP BY owner, status
+        """, (project_id,))
+
+        rows = cursor.fetchall()
+        owner_stats = {}
+        for row in rows:
+            owner = row[0] if row[0] else '(unassigned)'
+            status = row[1]
+            cnt = row[2]
+
+            if owner not in owner_stats:
+                owner_stats[owner] = {
+                    'owner': owner,
+                    'tc_total': 0,
+                    'tc_pass': 0,
+                    'tc_fail': 0,
+                    'tc_not_run': 0
+                }
+
+            owner_stats[owner]['tc_total'] += cnt
+            if status == 'PASS':
+                owner_stats[owner]['tc_pass'] += cnt
+            elif status == 'FAIL':
+                owner_stats[owner]['tc_fail'] += cnt
+            else:
+                owner_stats[owner]['tc_not_run'] += cnt
+
+        owners_list = sorted(owner_stats.values(), key=lambda x: x['tc_total'], reverse=True)
+        unassigned_count = sum(v['tc_total'] for k, v in owner_stats.items() if k == '(unassigned)')
+
+        data['owner_stats'] = {
+            'owners': owners_list,
+            'unassigned_count': unassigned_count
+        }
+
+        # ---------- 7. Coverage Holes (复用 coverage-holes 逻辑) ----------
+        cursor.execute("""
+            SELECT cp.id, cp.cover_point, cp.feature, cp.priority
+            FROM cover_point cp
+            WHERE cp.project_id = ?
+        """, (project_id,))
+
+        critical = []
+        warning = []
+        attention = []
+        risk = []
+
+        for cp_row in cursor.fetchall():
+            cp_id = cp_row[0]
+            cp_name = cp_row[1] if cp_row[1] else ''
+            feature = cp_row[2] if cp_row[2] else ''
+            priority = cp_row[3] if cp_row[3] else 'P0'
+
+            if is_fc_cp_mode:
+                cursor.execute("""
+                    SELECT fc.coverage_pct
+                    FROM functional_coverage fc
+                    INNER JOIN fc_cp_association fcca ON fc.id = fcca.fc_id
+                    WHERE fcca.cp_id = ?
+                """, (cp_id,))
+                linked_fcs = cursor.fetchall()
+
+                linked_fc_count = len(linked_fcs)
+                if linked_fc_count == 0:
+                    continue
+
+                coverage_rate = sum(fc[0] for fc in linked_fcs) / linked_fc_count if linked_fc_count > 0 else 0
+                if coverage_rate >= 25:
+                    continue
+
+                hole_entry = {
+                    'cp_id': cp_id,
+                    'cp_name': cp_name[:80] if cp_name else '',
+                    'feature': feature,
+                    'priority': priority,
+                    'coverage_rate': round(coverage_rate, 1)
+                }
+
+                if coverage_rate == 0:
+                    critical.append(hole_entry)
+                elif coverage_rate < 15:
+                    warning.append(hole_entry)
+                else:
+                    attention.append(hole_entry)
+            else:
+                cursor.execute("""
+                    SELECT tc.id, tc.test_name, tc.status
+                    FROM test_case tc
+                    INNER JOIN tc_cp_connections tcc ON tc.id = tcc.tc_id
+                    WHERE tcc.cp_id = ?
+                """, (cp_id,))
+                linked_tcs = cursor.fetchall()
+
+                linked_tc_count = len(linked_tcs)
+                if linked_tc_count == 0:
+                    continue
+
+                covered_tc = sum(1 for tc in linked_tcs if tc[2] in ('PASS', 'FAIL'))
+                fail_tc = sum(1 for tc in linked_tcs if tc[2] == 'FAIL')
+                coverage_rate = (covered_tc / linked_tc_count) * 100 if linked_tc_count > 0 else 0
+
+                hole_entry = {
+                    'cp_id': cp_id,
+                    'cp_name': cp_name[:80] if cp_name else '',
+                    'feature': feature,
+                    'priority': priority,
+                    'coverage_rate': round(coverage_rate, 1)
+                }
+
+                if coverage_rate > 0:
+                    # 不是空洞，检查是否属于 risk（100%覆盖但有FAIL）
+                    if coverage_rate == 100 and fail_tc > 0:
+                        risk.append(hole_entry)
+                    continue
+
+                if priority == 'P0':
+                    critical.append(hole_entry)
+                elif priority == 'P1':
+                    warning.append(hole_entry)
+                else:
+                    attention.append(hole_entry)
+
+        priority_order = {'P0': 0, 'P1': 1, 'P2': 2, 'P3': 3}
+        if is_fc_cp_mode:
+            for lst in [critical, warning, attention]:
+                lst.sort(key=lambda x: (priority_order.get(x['priority'], 4), x['coverage_rate']))
+        else:
+            for lst in [critical, warning, attention, risk]:
+                lst.sort(key=lambda x: priority_order.get(x['priority'], 4))
+
+        for lst in [critical, warning, attention, risk]:
+            del lst[20:]
+
+        data['coverage_holes'] = {
+            'critical': critical,
+            'warning': warning,
+            'attention': attention,
+            'risk': risk
+        }
+
+        # ---------- 8. Top Uncovered CPs (未关联 TC/FC 的 CP) ----------
+        if is_fc_cp_mode:
+            cursor.execute("""
+                SELECT cp.id, cp.cover_point, cp.priority, cp.feature
+                FROM cover_point cp
+                LEFT JOIN fc_cp_association fcca ON cp.id = fcca.cp_id
+                WHERE cp.project_id = ? AND fcca.id IS NULL
+                ORDER BY
+                    CASE cp.priority
+                        WHEN 'P0' THEN 1
+                        WHEN 'P1' THEN 2
+                        WHEN 'P2' THEN 3
+                        ELSE 4
+                    END,
+                    cp.created_at DESC
+                LIMIT 20
+            """, (project_id,))
+        else:
+            cursor.execute("""
+                SELECT cp.id, cp.cover_point, cp.priority, cp.feature
+                FROM cover_point cp
+                LEFT JOIN tc_cp_connections tcc ON cp.id = tcc.cp_id
+                WHERE cp.project_id = ? AND tcc.id IS NULL
+                ORDER BY
+                    CASE cp.priority
+                        WHEN 'P0' THEN 1
+                        WHEN 'P1' THEN 2
+                        WHEN 'P2' THEN 3
+                        ELSE 4
+                    END,
+                    cp.created_at DESC
+                LIMIT 20
+            """, (project_id,))
+
+        top_uncovered = []
+        for row in cursor.fetchall():
+            top_uncovered.append({
+                'id': row[0],
+                'name': row[1][:50] if row[1] else '',
+                'priority': row[2] or 'P0',
+                'feature': row[3] or ''
+            })
+
+        data['top_uncovered'] = top_uncovered
+
+        # ---------- 9. Overdue OPEN TCs (新增) ----------
+        cursor.execute("""
+            SELECT id, test_name, owner, target_date
+            FROM test_case
+            WHERE project_id = ? AND status = 'OPEN'
+                AND target_date IS NOT NULL
+                AND target_date < ?
+            ORDER BY target_date ASC
+            LIMIT 20
+        """, (project_id, today))
+
+        overdue_open_tcs = []
+        for row in cursor.fetchall():
+            overdue_open_tcs.append({
+                'id': row[0],
+                'test_name': row[1] if row[1] else '',
+                'owner': row[2] if row[2] else '(unassigned)',
+                'target_date': row[3] if row[3] else ''
+            })
+
+        data['overdue_open_tcs'] = overdue_open_tcs
+
+        # ---------- 10. FAIL TCs ----------
+        cursor.execute("""
+            SELECT id, test_name, testbench, owner
+            FROM test_case
+            WHERE project_id = ? AND status = 'FAIL'
+            ORDER BY id DESC
+            LIMIT 20
+        """, (project_id,))
+
+        fail_tcs = []
+        for row in cursor.fetchall():
+            fail_tcs.append({
+                'id': row[0],
+                'test_name': row[1] if row[1] else '',
+                'testbench': row[2] if row[2] else '',
+                'owner': row[3] if row[3] else '(unassigned)'
+            })
+
+        data['fail_tcs'] = fail_tcs
+
+        # ---------- 11. REMOVED TCs ----------
+        cursor.execute("""
+            SELECT id, test_name, testbench, comments
+            FROM test_case
+            WHERE project_id = ? AND status = 'REMOVED'
+            ORDER BY id DESC
+            LIMIT 20
+        """, (project_id,))
+
+        removed_tcs = []
+        for row in cursor.fetchall():
+            removed_tcs.append({
+                'id': row[0],
+                'test_name': row[1] if row[1] else '',
+                'testbench': row[2] if row[2] else '',
+                'comments': row[3] if row[3] else ''
+            })
+
+        data['removed_tcs'] = removed_tcs
+
+        # ---------- 12. Full CP List ----------
+        cursor.execute("""
+            SELECT id, feature, sub_feature, cover_point, priority, comments
+            FROM cover_point
+            WHERE project_id = ?
+            ORDER BY feature, priority, id
+        """, (project_id,))
+
+        full_cp_list = []
+        for row in cursor.fetchall():
+            full_cp_list.append({
+                'id': row[0],
+                'feature': row[1] if row[1] else '',
+                'sub_feature': row[2] if row[2] else '',
+                'cover_point': row[3] if row[3] else '',
+                'priority': row[4] if row[4] else 'P0',
+                'comments': row[5] if row[5] else ''
+            })
+
+        data['full_cp_list'] = full_cp_list
+
+        # ---------- 13. Full TC List ----------
+        cursor.execute("""
+            SELECT id, dv_milestone, testbench, category, owner, test_name, status, target_date, comments
+            FROM test_case
+            WHERE project_id = ?
+            ORDER BY id
+        """, (project_id,))
+
+        full_tc_list = []
+        for row in cursor.fetchall():
+            full_tc_list.append({
+                'id': row[0],
+                'dv_milestone': row[1] if row[1] else '',
+                'testbench': row[2] if row[2] else '',
+                'category': row[3] if row[3] else '',
+                'owner': row[4] if row[4] else '(unassigned)',
+                'test_name': row[5] if row[5] else '',
+                'status': row[6] if row[6] else 'OPEN',
+                'target_date': row[7] if row[7] else '',
+                'comments': row[8] if row[8] else ''
+            })
+
+        data['full_tc_list'] = full_tc_list
+
+    finally:
+        if conn:
+            conn.close()
+
+    return data
+
+
+def _generate_markdown_report(data):
+    """从数据生成 8 页 Markdown 报告。
+
+    v0.14.3: 新增函数，纯字符串拼接，无需额外依赖。
+    """
+    project = data['project']
+    mode = data['mode']
+    generated_at = data['generated_at']
+    overview = data['overview']
+    by_priority = data['by_priority']
+    by_feature = data['by_feature']
+    by_dv_milestone = data['by_dv_milestone']
+    coverage_matrix = data['coverage_matrix']
+    owner_stats = data['owner_stats']
+    coverage_holes = data['coverage_holes']
+    top_uncovered = data['top_uncovered']
+    overdue_open_tcs = data['overdue_open_tcs']
+    fail_tcs = data['fail_tcs']
+    removed_tcs = data['removed_tcs']
+    full_cp_list = data['full_cp_list']
+    full_tc_list = data['full_tc_list']
+
+    mode_display = 'FC-CP (Functional Coverage)' if mode == 'fc_cp' else 'TC-CP (Test Case)'
+
+    def _pct(numerator, denominator):
+        return f"{round(numerator / denominator * 100, 1)}%" if denominator > 0 else "0%"
+
+    lines = []
+
+    # ========== Page 1: 封面 ==========
+    lines.append(f"# {project['name']} - 项目状态报告")
+    lines.append("")
+    lines.append(f"**生成时间**: {generated_at}")
+    lines.append(f"**覆盖模式**: {mode_display}")
+    if project.get('start_date'):
+        lines.append(f"**开始日期**: {project['start_date']}")
+    if project.get('end_date'):
+        lines.append(f"**结束日期**: {project['end_date']}")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # ========== Page 2: CP 概览 ==========
+    lines.append("## 1. CP 概览")
+    lines.append("")
+    lines.append("| 指标 | 数值 |")
+    lines.append("|------|------|")
+    lines.append(f"| CP 总数 | {overview['total_cp']} |")
+    lines.append(f"| 已覆盖 CP | {overview['covered_cp']} ({_pct(overview['covered_cp'], overview['total_cp'])}) |")
+    lines.append(f"| 覆盖率 | {overview['coverage_rate']}% |")
+    lines.append(f"| 覆盖率 = 100% | {overview.get('cp_full_coverage', '-')} |")
+    lines.append(f"| 覆盖率 < 100% | {overview.get('cp_below_100', '-')} |")
+    lines.append(f"| 覆盖率 = 100% 但有 FAIL | {overview.get('cp_risk', '-')} |")
+    lines.append(f"| 未关联 CP | {overview['unlinked_cp']} |")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # ========== Page 3: TC 概览 ==========
+    lines.append("## 2. TC 概览")
+    lines.append("")
+    lines.append("| 指标 | 数值 |")
+    lines.append("|------|------|")
+    lines.append(f"| TC 总数 | {overview['tc_total']} |")
+    lines.append(f"| TC PASS | {overview['tc_pass']} ({_pct(overview['tc_pass'], overview['tc_total'])}) |")
+    lines.append(f"| TC FAIL | {overview['tc_fail']} |")
+    lines.append(f"| TC OPEN | {overview['tc_open']} |")
+    lines.append(f"| TC CODED | {overview['tc_coded']} |")
+    lines.append(f"| TC REMOVED | {overview['tc_removed']} |")
+    lines.append(f"| TC 通过率 | {overview['tc_pass_rate']}% |")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # ========== Page 3: CP 覆盖状态 ==========
+    lines.append("## 3. CP 覆盖状态")
+    lines.append("")
+    lines.append("### 按 Priority 统计")
+    lines.append("")
+    lines.append("| Priority | 总数 | 已覆盖 | 覆盖率 |")
+    lines.append("|----------|------|--------|--------|")
+    for p in ['P0', 'P1', 'P2']:
+        stats = by_priority.get(p, {'total': 0, 'covered': 0, 'rate': 0})
+        lines.append(f"| {p} | {stats['total']} | {stats['covered']} | {stats['rate']}% |")
+    lines.append("")
+
+    lines.append("### 按 Feature 统计 (Top 20)")
+    lines.append("")
+    lines.append("| Feature | 总数 | 已覆盖 | 覆盖率 |")
+    lines.append("|---------|------|--------|--------|")
+    for feat in by_feature[:20]:
+        lines.append(f"| {feat['feature']} | {feat['total']} | {feat['covered']} | {feat['rate']}% |")
+    lines.append("")
+
+    lines.append("### 未覆盖 CP Top 20")
+    lines.append("")
+    if top_uncovered:
+        lines.append("| ID | Cover Point | Priority | Feature |")
+        lines.append("|----|-------------|----------|---------|")
+        for cp in top_uncovered[:20]:
+            lines.append(f"| {cp['id']} | {cp['name']} | {cp['priority']} | {cp['feature']} |")
+    else:
+        lines.append("*无未覆盖 CP*")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # ========== Page 4: TC 执行状态 ==========
+    lines.append("## 4. TC 执行状态")
+    lines.append("")
+    lines.append("### 按 Status 分布")
+    lines.append("")
+    lines.append("| Status | 数量 | 占比 |")
+    lines.append("|--------|------|------|")
+    total_active = overview['tc_total'] - overview['tc_removed']
+    for status, count in [
+        ('PASS', overview['tc_pass']),
+        ('FAIL', overview['tc_fail']),
+        ('OPEN', overview['tc_open']),
+        ('CODED', overview['tc_coded']),
+        ('REMOVED', overview['tc_removed'])
+    ]:
+        pct = _pct(count, overview['tc_total'])
+        lines.append(f"| {status} | {count} | {pct} |")
+    lines.append("")
+
+    lines.append("### 按 DV Milestone 分布")
+    lines.append("")
+    if by_dv_milestone:
+        lines.append("| Milestone | 总数 | PASS | FAIL | OPEN | CODED | REMOVED |")
+        lines.append("|-----------|------|------|------|------|-------|---------|")
+        for dv in by_dv_milestone[:20]:
+            lines.append(f"| {dv['milestone']} | {dv['total']} | {dv['pass']} | {dv['fail']} | {dv['open']} | {dv['coded']} | {dv['removed']} |")
+    else:
+        lines.append("*无 DV Milestone 数据*")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # ========== Page 5: Feature 覆盖矩阵 ==========
+    lines.append("## 5. Feature 覆盖矩阵")
+    lines.append("")
+    features = coverage_matrix['features']
+    priorities = coverage_matrix['priorities']
+    matrix = coverage_matrix['matrix']
+    row_totals = coverage_matrix['row_totals']
+    column_totals = coverage_matrix['column_totals']
+
+    if features:
+        # Header
+        header = "| Feature | " + " | ".join(priorities) + " | 总计 |"
+        lines.append(header)
+        sep = "|---------|" + "|".join(["--------"] * len(priorities)) + "|------|"
+        lines.append(sep)
+
+        # Rows
+        for feature in features:
+            row_data = matrix.get(feature, {})
+            cells = []
+            for p in priorities:
+                p_data = row_data.get(p, {'covered': 0, 'total': 0})
+                cells.append(f"{p_data['covered']}/{p_data['total']}")
+            rt = row_totals.get(feature, {'covered': 0, 'total': 0})
+            cells.append(f"{rt['covered']}/{rt['total']}")
+            lines.append(f"| {feature} | " + " | ".join(cells) + " |")
+
+        # Column totals
+        total_cells = []
+        for p in priorities:
+            ct = column_totals.get(p, {'covered': 0, 'total': 0})
+            total_cells.append(f"{ct['covered']}/{ct['total']}")
+        total_covered = sum(column_totals.get(p, {}).get('covered', 0) for p in priorities)
+        total_all = sum(column_totals.get(p, {}).get('total', 0) for p in priorities)
+        total_cells.append(f"{total_covered}/{total_all}")
+        lines.append(f"| **总计** | " + " | ".join(total_cells) + " |")
+    else:
+        lines.append("*无 Feature 数据*")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # ========== Page 6: Owner 工作分布 ==========
+    lines.append("## 6. Owner 工作分布")
+    lines.append("")
+    owners = owner_stats['owners']
+    unassigned_count = owner_stats['unassigned_count']
+
+    if owners:
+        lines.append("| Owner | TC 总数 | PASS | FAIL | 未执行 | 通过率 |")
+        lines.append("|-------|---------|------|------|--------|--------|")
+        for o in owners:
+            if o['owner'] == '(unassigned)':
+                continue
+            pass_rate = _pct(o['tc_pass'], o['tc_total'])
+            lines.append(f"| {o['owner']} | {o['tc_total']} | {o['tc_pass']} | {o['tc_fail']} | {o['tc_not_run']} | {pass_rate} |")
+        if unassigned_count > 0:
+            lines.append(f"| (unassigned) | {unassigned_count} | - | - | - | - |")
+    else:
+        lines.append("*无 Owner 数据*")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # ========== Page 7: 风险与待办 ==========
+    lines.append("## 7. 风险与待办")
+    lines.append("")
+
+    lines.append("### 覆盖率空洞")
+    lines.append("")
+    lines.append(f"- 严重 (P0 + 0% 覆盖): {len(coverage_holes['critical'])} 个")
+    lines.append(f"- 警告 (P1 + 0% 覆盖): {len(coverage_holes['warning'])} 个")
+    lines.append(f"- 关注 (P2 + 0% 覆盖): {len(coverage_holes['attention'])} 个")
+    lines.append("")
+
+    if coverage_holes['critical']:
+        lines.append("#### 严重空洞")
+        lines.append("")
+        lines.append("| CP ID | Cover Point | Priority | Feature | 覆盖率 |")
+        lines.append("|-------|-------------|----------|---------|--------|")
+        for h in coverage_holes['critical'][:10]:
+            lines.append(f"| {h['cp_id']} | {h['cp_name']} | {h['priority']} | {h['feature']} | {h['coverage_rate']}% |")
+        lines.append("")
+
+    lines.append("### 失败 TC")
+    lines.append("")
+    if fail_tcs:
+        lines.append("| ID | Test Name | TestBench | Owner |")
+        lines.append("|----|-----------|-----------|-------|")
+        for tc in fail_tcs[:10]:
+            lines.append(f"| {tc['id']} | {tc['test_name']} | {tc['testbench']} | {tc['owner']} |")
+    else:
+        lines.append("*无失败 TC*")
+    lines.append("")
+
+    lines.append("### 逾期 OPEN TC")
+    lines.append("")
+    if overdue_open_tcs:
+        lines.append("| ID | Test Name | Owner | Target Date |")
+        lines.append("|----|-----------|-------|-------------|")
+        for tc in overdue_open_tcs[:10]:
+            lines.append(f"| {tc['id']} | {tc['test_name']} | {tc['owner']} | {tc['target_date']} |")
+    else:
+        lines.append("*无逾期 OPEN TC*")
+    lines.append("")
+
+    lines.append("### REMOVED TC")
+    lines.append("")
+    if removed_tcs:
+        lines.append(f"*共 {len(removed_tcs)} 个 REMOVED TC (显示前 10)*")
+        lines.append("")
+        lines.append("| ID | Test Name | TestBench | Comments |")
+        lines.append("|----|-----------|-----------|----------|")
+        for tc in removed_tcs[:10]:
+            lines.append(f"| {tc['id']} | {tc['test_name']} | {tc['testbench']} | {tc['comments']} |")
+    else:
+        lines.append("*无 REMOVED TC*")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # ========== Page 8: 附录 ==========
+    lines.append("## 8. 附录")
+    lines.append("")
+
+    lines.append("### 完整 CP 列表")
+    lines.append("")
+    lines.append(f"*共 {len(full_cp_list)} 个 CP*")
+    lines.append("")
+    if full_cp_list:
+        lines.append("| ID | Feature | Sub-Feature | Cover Point | Priority |")
+        lines.append("|----|---------|-------------|-------------|----------|")
+        for cp in full_cp_list:
+            lines.append(f"| {cp['id']} | {cp['feature']} | {cp['sub_feature']} | {cp['cover_point']} | {cp['priority']} |")
+    lines.append("")
+
+    lines.append("### 完整 TC 列表")
+    lines.append("")
+    lines.append(f"*共 {len(full_tc_list)} 个 TC*")
+    lines.append("")
+    if full_tc_list:
+        lines.append("| ID | DV Milestone | TestBench | Category | Owner | Test Name | Status | Target Date |")
+        lines.append("|----|--------------|-----------|----------|-------|-----------|--------|-------------|")
+        for tc in full_tc_list:
+            lines.append(f"| {tc['id']} | {tc['dv_milestone']} | {tc['testbench']} | {tc['category']} | {tc['owner']} | {tc['test_name']} | {tc['status']} | {tc['target_date']} |")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+@api.route('/api/export/project/<int:project_id>/report', methods=['GET'])
+@login_required
+def export_project_report(project_id):
+    """导出项目状态报告 (Markdown 格式)
+    v0.14.3: 新增端点
+
+    GET /api/export/project/<project_id>/report
+    """
+    try:
+        # 获取报告数据
+        data = _get_project_report_data(project_id)
+
+        if data is None:
+            return jsonify({'success': False, 'error': 'Project not found', 'code': 'PROJECT_NOT_FOUND'}), 404
+
+        # 生成 Markdown
+        markdown_content = _generate_markdown_report(data)
+
+        # 构建文件名
+        project_name = data['project']['name']
+        safe_name = re.sub(r'[^\w\-_.]', '_', project_name)
+        today = datetime.now().strftime('%Y%m%d')
+        filename = f"{safe_name}_Report_{today}.md"
+
+        # 使用 BytesIO 生成文件 (send_file 需要二进制模式)
+        output = io.BytesIO()
+        output.write(markdown_content.encode('utf-8'))
+        output.seek(0)
+
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='text/markdown; charset=utf-8'
+        )
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Report generation failed: {str(e)}'}), 500
+
 
 
 # ============ 静态文件路由 - 必须放在所有 API 路由之后 ============

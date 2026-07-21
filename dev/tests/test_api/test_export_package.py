@@ -18,6 +18,7 @@ import os
 import time
 import zipfile
 import io
+import base64
 
 # 确保导入路径正确
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -270,7 +271,7 @@ class TestExportPackagePermissions:
 
     def test_export_package_as_admin(self, admin_client, test_project):
         """EXP-API-001: 管理员导出项目材料包"""
-        response = admin_client.get(f'/api/export/project/{test_project["id"]}/package')
+        response = admin_client.post(f'/api/export/project/{test_project["id"]}/package')
 
         assert response.status_code == 200
         assert response.content_type == 'application/zip'
@@ -279,7 +280,7 @@ class TestExportPackagePermissions:
 
     def test_export_package_as_user(self, user_client, test_project):
         """EXP-API-002: 普通用户调用导出 API"""
-        response = user_client.get(f'/api/export/project/{test_project["id"]}/package')
+        response = user_client.post(f'/api/export/project/{test_project["id"]}/package')
 
         assert response.status_code == 403
         data = response.get_json()
@@ -287,7 +288,7 @@ class TestExportPackagePermissions:
 
     def test_export_package_as_guest(self, guest_client, test_project):
         """EXP-API-003: 访客调用导出 API"""
-        response = guest_client.get(f'/api/export/project/{test_project["id"]}/package')
+        response = guest_client.post(f'/api/export/project/{test_project["id"]}/package')
 
         assert response.status_code == 403
         data = response.get_json()
@@ -295,7 +296,7 @@ class TestExportPackagePermissions:
 
     def test_export_package_unauthenticated(self, client, test_project):
         """EXP-API-004: 未登录调用导出 API"""
-        response = client.get(f'/api/export/project/{test_project["id"]}/package')
+        response = client.post(f'/api/export/project/{test_project["id"]}/package')
 
         assert response.status_code == 401
         data = response.get_json()
@@ -303,7 +304,7 @@ class TestExportPackagePermissions:
 
     def test_export_nonexistent_project(self, admin_client):
         """EXP-API-005: 导出不存在的项目"""
-        response = admin_client.get('/api/export/project/99999/package')
+        response = admin_client.post('/api/export/project/99999/package')
 
         assert response.status_code == 404
         data = response.get_json()
@@ -316,7 +317,7 @@ class TestExportPackageContent:
 
     def test_export_package_content(self, admin_client, test_project):
         """EXP-API-006: 验证 ZIP 包含所有预期文件"""
-        response = admin_client.get(f'/api/export/project/{test_project["id"]}/package')
+        response = admin_client.post(f'/api/export/project/{test_project["id"]}/package')
 
         assert response.status_code == 200
         zip_data = response.data
@@ -345,7 +346,7 @@ class TestExportPackageContent:
 
     def test_export_project_overview(self, admin_client, test_project):
         """EXP-API-007: 验证项目概览文件"""
-        response = admin_client.get(f'/api/export/project/{test_project["id"]}/package')
+        response = admin_client.post(f'/api/export/project/{test_project["id"]}/package')
 
         assert response.status_code == 200
         zip_data = response.data
@@ -361,7 +362,7 @@ class TestExportPackageContent:
 
     def test_export_coverage_trend(self, admin_client, test_project):
         """EXP-API-008: 验证覆盖率数据"""
-        response = admin_client.get(f'/api/export/project/{test_project["id"]}/package')
+        response = admin_client.post(f'/api/export/project/{test_project["id"]}/package')
 
         assert response.status_code == 200
         zip_data = response.data
@@ -376,7 +377,7 @@ class TestExportPackageContent:
 
     def test_export_tc_cp_statistics(self, admin_client, test_project):
         """EXP-API-009: 验证 TC/CP 统计"""
-        response = admin_client.get(f'/api/export/project/{test_project["id"]}/package')
+        response = admin_client.post(f'/api/export/project/{test_project["id"]}/package')
 
         assert response.status_code == 200
         zip_data = response.data
@@ -393,7 +394,7 @@ class TestExportPackageContent:
 
     def test_export_dashboard_data(self, admin_client, test_project):
         """EXP-API-010: 验证 Dashboard 数据"""
-        response = admin_client.get(f'/api/export/project/{test_project["id"]}/package')
+        response = admin_client.post(f'/api/export/project/{test_project["id"]}/package')
 
         assert response.status_code == 200
         zip_data = response.data
@@ -409,7 +410,7 @@ class TestExportPackageContent:
 
     def test_export_feature_list(self, admin_client, test_project):
         """EXP-API-011: 验证 Feature 列表"""
-        response = admin_client.get(f'/api/export/project/{test_project["id"]}/package')
+        response = admin_client.post(f'/api/export/project/{test_project["id"]}/package')
 
         assert response.status_code == 200
         zip_data = response.data
@@ -424,7 +425,7 @@ class TestExportPackageContent:
 
     def test_export_snapshots(self, admin_client, test_project):
         """EXP-API-012: 验证快照历史"""
-        response = admin_client.get(f'/api/export/project/{test_project["id"]}/package')
+        response = admin_client.post(f'/api/export/project/{test_project["id"]}/package')
 
         assert response.status_code == 200
         zip_data = response.data
@@ -439,7 +440,7 @@ class TestExportPackageContent:
 
     def test_export_wiki_content(self, admin_client, project_with_wiki):
         """EXP-API-013: 验证 Wiki 内容"""
-        response = admin_client.get(f'/api/export/project/{project_with_wiki["id"]}/package')
+        response = admin_client.post(f'/api/export/project/{project_with_wiki["id"]}/package')
 
         assert response.status_code == 200
         zip_data = response.data
@@ -452,7 +453,7 @@ class TestExportPackageContent:
 
     def test_export_filename_format(self, admin_client, test_project):
         """EXP-API-014: 验证文件名格式"""
-        response = admin_client.get(f'/api/export/project/{test_project["id"]}/package')
+        response = admin_client.post(f'/api/export/project/{test_project["id"]}/package')
 
         assert response.status_code == 200
 
@@ -471,7 +472,7 @@ class TestExportPackageBoundary:
 
     def test_export_special_chars_in_project_name(self, admin_client, project_with_special_chars):
         """EXP-API-015: 项目名含特殊字符"""
-        response = admin_client.get(f'/api/export/project/{project_with_special_chars["id"]}/package')
+        response = admin_client.post(f'/api/export/project/{project_with_special_chars["id"]}/package')
 
         assert response.status_code == 200
 
@@ -483,7 +484,7 @@ class TestExportPackageBoundary:
 
     def test_export_empty_project(self, admin_client, empty_project):
         """EXP-API-016: 空项目（无 TC/CP）"""
-        response = admin_client.get(f'/api/export/project/{empty_project["id"]}/package')
+        response = admin_client.post(f'/api/export/project/{empty_project["id"]}/package')
 
         assert response.status_code == 200
         zip_data = response.data
@@ -508,7 +509,7 @@ class TestExportPackageBoundary:
     def test_export_large_project(self, admin_client, large_project):
         """EXP-API-017: 大项目（500+ TC）"""
         start_time = time.time()
-        response = admin_client.get(f'/api/export/project/{large_project["id"]}/package')
+        response = admin_client.post(f'/api/export/project/{large_project["id"]}/package')
         elapsed_time = time.time() - start_time
 
         assert response.status_code == 200
@@ -526,14 +527,14 @@ class TestExportPackageException:
 
     def test_export_invalid_project_id(self, admin_client):
         """EXP-API-018: 无效项目 ID"""
-        response = admin_client.get('/api/export/project/invalid_id/package')
+        response = admin_client.post('/api/export/project/invalid_id/package')
 
         # Flask 路由会返回 404，因为 project_id 类型不匹配
         assert response.status_code == 404
 
     def test_export_without_wiki(self, admin_client, test_project):
         """EXP-API-019: 项目无 Wiki"""
-        response = admin_client.get(f'/api/export/project/{test_project["id"]}/package')
+        response = admin_client.post(f'/api/export/project/{test_project["id"]}/package')
 
         assert response.status_code == 200
         zip_data = response.data
@@ -544,3 +545,277 @@ class TestExportPackageException:
         # 如果项目没有 Wiki，ZIP 中不应该包含 wiki/ 目录或包含空目录
         # 根据规格书，无 Wiki 时应该跳过，所以这里验证 wiki/ 目录不存在
         assert len(wiki_files) == 0 or not any(f.endswith('.html') for f in wiki_files)
+
+
+class TestExportPackageCharts:
+    """v0.15.0: 测试图表截图导出功能"""
+
+    # 1x1 透明 PNG 的 base64
+    SAMPLE_PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    SAMPLE_PNG_DATA_URL = f"data:image/png;base64,{SAMPLE_PNG_B64}"
+
+    def test_export_with_valid_charts(self, admin_client, test_project):
+        """EXP-API-020: 传入图表截图后 ZIP 包含 charts/ 目录"""
+        charts = {
+            'trend': self.SAMPLE_PNG_DATA_URL,
+            'feature': self.SAMPLE_PNG_B64,
+            'p0p1': self.SAMPLE_PNG_DATA_URL
+        }
+
+        response = admin_client.post(
+            f'/api/export/project/{test_project["id"]}/package',
+            data=json.dumps({'charts': charts}),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 200
+        zip_file = zipfile.ZipFile(io.BytesIO(response.data))
+        names = zip_file.namelist()
+
+        assert 'charts/coverage_trend.png' in names
+        assert 'charts/feature_coverage.png' in names
+        assert 'charts/p0p1_comparison.png' in names
+
+    def test_export_chart_png_content(self, admin_client, test_project):
+        """EXP-API-021: charts/ 下的 PNG 文件内容正确解码"""
+        charts = {
+            'trend': self.SAMPLE_PNG_DATA_URL,
+            'feature': self.SAMPLE_PNG_B64,
+        }
+
+        response = admin_client.post(
+            f'/api/export/project/{test_project["id"]}/package',
+            data=json.dumps({'charts': charts}),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 200
+        zip_file = zipfile.ZipFile(io.BytesIO(response.data))
+
+        for path in ['charts/coverage_trend.png', 'charts/feature_coverage.png']:
+            content = zip_file.read(path)
+            assert content.startswith(b'\x89PNG\r\n\x1a\n'), f"{path} 不是有效 PNG 文件"
+            assert len(content) > 0
+
+    def test_export_with_partial_charts(self, admin_client, test_project):
+        """EXP-API-022: 只传入部分图表时仅导出对应文件"""
+        charts = {'trend': self.SAMPLE_PNG_B64}
+
+        response = admin_client.post(
+            f'/api/export/project/{test_project["id"]}/package',
+            data=json.dumps({'charts': charts}),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 200
+        zip_file = zipfile.ZipFile(io.BytesIO(response.data))
+        names = zip_file.namelist()
+
+        assert 'charts/coverage_trend.png' in names
+        assert 'charts/feature_coverage.png' not in names
+        assert 'charts/p0p1_comparison.png' not in names
+
+    def test_export_with_invalid_base64(self, admin_client, test_project):
+        """EXP-API-023: 无效 base64 数据被跳过，不影响整体导出"""
+        charts = {
+            'trend': 'this_is_not_valid_base64!!!',
+            'feature': self.SAMPLE_PNG_B64
+        }
+
+        response = admin_client.post(
+            f'/api/export/project/{test_project["id"]}/package',
+            data=json.dumps({'charts': charts}),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 200
+        zip_file = zipfile.ZipFile(io.BytesIO(response.data))
+        names = zip_file.namelist()
+
+        # trend 无效，不应写入
+        assert 'charts/coverage_trend.png' not in names
+        # feature 有效，应写入
+        assert 'charts/feature_coverage.png' in names
+
+    def test_export_without_charts_body(self, admin_client, test_project):
+        """EXP-API-024: 不传入 charts 时向后兼容，正常导出"""
+        response = admin_client.post(f'/api/export/project/{test_project["id"]}/package')
+
+        assert response.status_code == 200
+        zip_file = zipfile.ZipFile(io.BytesIO(response.data))
+        names = zip_file.namelist()
+
+        # 不应包含 charts/ 目录
+        assert not any(f.startswith('charts/') for f in names)
+        # 核心文件仍然存在
+        assert 'README.md' in names
+        assert 'project_overview.md' in names
+
+    def test_export_with_empty_charts_object(self, admin_client, test_project):
+        """EXP-API-025: 传入空 charts 对象不影响导出"""
+        response = admin_client.post(
+            f'/api/export/project/{test_project["id"]}/package',
+            data=json.dumps({'charts': {}}),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 200
+        zip_file = zipfile.ZipFile(io.BytesIO(response.data))
+        names = zip_file.namelist()
+
+        assert not any(f.startswith('charts/') for f in names)
+        assert 'README.md' in names
+
+
+@pytest.fixture(scope='module')
+def project_with_snapshots():
+    """创建带两条进度快照的项目（用于 PPT 环比行测试）"""
+    import sqlite3
+    app = create_app(testing=True)
+    with app.test_client() as client:
+        client.post('/api/auth/login',
+            data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+            content_type='application/json')
+
+        name = f"PPT_Snapshot_Test_{int(time.time())}"
+
+        response = client.post('/api/projects',
+                              data=json.dumps({'name': name, 'start_date': '2026-01-01', 'end_date': '2026-12-31'}),
+                              content_type='application/json')
+
+        if response.status_code == 200:
+            data = json.loads(response.data)
+            project_id = data['project']['id']
+
+            # 直接向项目库插入两条历史快照（快照 API 只能写当天日期）
+            db_path = os.path.join(app.config['DATA_DIR'], f"{name}.db")
+            assert os.path.isfile(db_path), f"项目数据库不存在: {db_path}"
+            conn = sqlite3.connect(db_path)
+            conn.execute(
+                "INSERT INTO project_progress (project_id, snapshot_date, actual_coverage) VALUES (?, ?, ?)",
+                (project_id, '2026-05-28', 91.8))
+            conn.execute(
+                "INSERT INTO project_progress (project_id, snapshot_date, actual_coverage) VALUES (?, ?, ?)",
+                (project_id, '2026-06-04', 92.6))
+            conn.commit()
+            conn.close()
+
+            yield {'id': project_id, 'name': name}
+
+            client.delete(f"/api/projects/{project_id}")
+        else:
+            pytest.skip("无法创建快照测试项目")
+
+
+class TestExportPackageSummaryPPT:
+    """v0.16.0: 测试材料包中的 Validation Summary PPT (summary/ 子目录)"""
+
+    SAMPLE_PNG_B64 = TestExportPackageCharts.SAMPLE_PNG_B64
+    SAMPLE_PNG_DATA_URL = TestExportPackageCharts.SAMPLE_PNG_DATA_URL
+    PPT_ZIP_PATH = 'summary/validation_summary.pptx'
+
+    @staticmethod
+    def _walk(shapes):
+        for sh in shapes:
+            yield sh
+            if sh.shape_type == 6:  # GROUP
+                yield from TestExportPackageSummaryPPT._walk(sh.shapes)
+
+    @classmethod
+    def _ppt_text(cls, zip_file):
+        from pptx import Presentation
+        prs = Presentation(io.BytesIO(zip_file.read(cls.PPT_ZIP_PATH)))
+        texts = []
+        for sh in cls._walk(prs.slides[0].shapes):
+            if sh.has_text_frame:
+                texts.append(sh.text_frame.text)
+        return "\n".join(texts)
+
+    @classmethod
+    def _ppt_pictures(cls, zip_file):
+        from pptx import Presentation
+        prs = Presentation(io.BytesIO(zip_file.read(cls.PPT_ZIP_PATH)))
+        return [sh for sh in cls._walk(prs.slides[0].shapes) if sh.shape_type == 13]
+
+    def _export(self, client, project_id, charts=None):
+        body = {'charts': charts} if charts is not None else None
+        return client.post(
+            f'/api/export/project/{project_id}/package',
+            data=json.dumps(body) if body else None,
+            content_type='application/json'
+        )
+
+    def test_summary_ppt_in_package(self, admin_client, test_project):
+        """EXP-API-026: ZIP 包含 summary/validation_summary.pptx 且可正常打开"""
+        response = self._export(admin_client, test_project['id'])
+
+        assert response.status_code == 200
+        zip_file = zipfile.ZipFile(io.BytesIO(response.data))
+        assert self.PPT_ZIP_PATH in zip_file.namelist()
+
+        from pptx import Presentation
+        prs = Presentation(io.BytesIO(zip_file.read(self.PPT_ZIP_PATH)))
+        assert len(prs.slides) == 1
+
+    def test_summary_ppt_content(self, admin_client, test_project):
+        """EXP-API-027: PPT 内容反映项目数据（空项目全 0）"""
+        response = self._export(admin_client, test_project['id'])
+
+        assert response.status_code == 200
+        zip_file = zipfile.ZipFile(io.BytesIO(response.data))
+        text = self._ppt_text(zip_file)
+
+        assert f"{test_project['name']}-Functional Validation Summary" in text
+        assert '0%' in text
+        assert '0 / 0' in text
+        # 无快照数据时不显示环比行
+        assert 'pp' not in text
+        # 状态文字为静态占位
+        assert '请在此填写项目当前状态与下一步计划' in text
+
+    def test_summary_ppt_charts_embedded(self, admin_client, test_project):
+        """EXP-API-028: 传入 feature/p0p1 截图后 PPT 嵌入两张图"""
+        charts = {
+            'feature': self.SAMPLE_PNG_DATA_URL,
+            'p0p1': self.SAMPLE_PNG_DATA_URL
+        }
+        response = self._export(admin_client, test_project['id'], charts)
+
+        assert response.status_code == 200
+        zip_file = zipfile.ZipFile(io.BytesIO(response.data))
+        assert len(self._ppt_pictures(zip_file)) == 2
+
+    def test_summary_ppt_without_charts(self, admin_client, test_project):
+        """EXP-API-029: 无图表截图时 PPT 不保留样张占位图"""
+        response = self._export(admin_client, test_project['id'])
+
+        assert response.status_code == 200
+        zip_file = zipfile.ZipFile(io.BytesIO(response.data))
+        assert len(self._ppt_pictures(zip_file)) == 0
+
+    def test_summary_ppt_delta_line(self, admin_client, project_with_snapshots):
+        """EXP-API-030: 有两条快照时 PPT 显示环比行"""
+        response = self._export(admin_client, project_with_snapshots['id'])
+
+        assert response.status_code == 200
+        zip_file = zipfile.ZipFile(io.BytesIO(response.data))
+        text = self._ppt_text(zip_file)
+        # 92.6 - 91.8 = +0.8pp（Python 浮点 round 后为 0.8）
+        assert '较 5/28 +0.8pp' in text
+
+    def test_summary_ppt_failure_resilient(self, admin_client, test_project, monkeypatch):
+        """EXP-API-031: PPT 生成失败不影响材料包其他内容"""
+        def _raise(*args, **kwargs):
+            raise RuntimeError("模拟 PPT 生成失败")
+
+        monkeypatch.setattr('app.ppt_report.generate_validation_summary_ppt', _raise)
+
+        response = self._export(admin_client, test_project['id'])
+
+        assert response.status_code == 200
+        zip_file = zipfile.ZipFile(io.BytesIO(response.data))
+        names = zip_file.namelist()
+        assert self.PPT_ZIP_PATH not in names
+        # 材料包本体完好
+        assert 'README.md' in names
+        assert 'project_overview.md' in names

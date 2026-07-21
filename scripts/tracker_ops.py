@@ -10,10 +10,11 @@ Tracker 运维管理脚本
 
 使用方法:
     python3 scripts/tracker_ops.py sync      # 复制数据
-    python3 scripts/tracker_ops.py clean     # 清理数据
+    python3 scripts/tracker_ops.py clean     # 预览清理（dry-run，不删除）
+    python3 scripts/tracker_ops.py clean --yes  # 确认执行清理（保留 EX5/SOC_DV/FC_DV 且 id 不变）
     python3 scripts/tracker_ops.py check     # 静态检查
     python3 scripts/tracker_ops.py test     # 动态测试
-    python3 scripts/tracker_ops.py all      # 执行全部
+    python3 scripts/tracker_ops.py all      # 执行全部（含实际清理）
 """
 
 import sqlite3
@@ -126,166 +127,218 @@ def reinit_users_db():
     return True
 
 
-def clean():
-    """删除 test_data 中的测试数据（只保留预置的原始数据）"""
-    print_step("步骤 1: 清理测试数据")
+# 清理时保留的基本 demo 项目（自动化测试基线依赖，如 SOC_DV id=3）
+PRESERVED_NAMES = ["EX5", "SOC_DV", "FC_DV"]
+
+
+def _check_safe_target():
+    """安全约束：清理目标必须是 shared/data/test_data，拒绝触碰生产 user_data。"""
+    test_data_real = TEST_DATA_DIR.resolve()
+    user_data_real = USER_DATA_DIR.resolve()
+    if test_data_real == user_data_real:
+        print_error(f"安全约束: 测试数据目录与生产目录相同 ({test_data_real})，拒绝清理")
+        return False
+    if test_data_real.name != "test_data":
+        print_error(f"安全约束: 目标目录名不是 test_data ({test_data_real})，拒绝清理")
+        return False
+    return True
+
+
+def clean(dry_run=True):
+    """清理 test_data 中的测试项目，保留基本 demo 项目且保持其 id 不变。
+
+    - 保留: PRESERVED_NAMES 中的项目（完整保留原始 projects.json 记录与 id）
+    - 删除: 其他项目 db、users.db（重建）、sessions、wiki 孤儿目录、
+            *.db-journal、projects.json.new
+    - 重建: 清理后若 SOC_DV / FC_DV 缺失，按原 id 调用 create_demo_project.py 重建
+    - 安全: 仅操作 TEST_DATA_DIR (shared/data/test_data)，绝不触碰 user_data
+
+    Args:
+        dry_run: True 仅预览不删除（默认）；False 实际执行
+    """
+    if not _check_safe_target():
+        return False
+
+    mode = "预览（dry-run，不删除任何文件）" if dry_run else "实际执行"
+    print_step(f"步骤 1: 扫描测试数据 [{mode}]")
 
     if not TEST_DATA_DIR.exists():
         print_warn("测试数据目录不存在")
         return True
 
-    test_dbs = get_all_db_files(TEST_DATA_DIR)
-    if not test_dbs:
-        print_warn("未找到测试数据库文件")
-        return True
-
-    # 预置的原始测试数据（这些是项目自带的，需要保留）
-    # 注意：这些项目的 is_archived 必须是 false，否则前端无法显示
-    PRESERVED_NAMES = ["EX5", "TestProject"]
-
     # 系统数据库文件（删除后重新创建）
     SYSTEM_DB = "users.db"
 
-    # 记录将被删除的项目名称
-    deleted_names = []
-
-    deleted = 0
-    skipped = 0
-    for db_file in test_dbs:
-        # 保留预置的原始测试数据
-        if any(preserved in db_file.name for preserved in PRESERVED_NAMES):
-            print_warn(f"保留预置原始数据: {db_file.name}")
-            skipped += 1
-            continue
-
-        # users.db 删除后由 reinit_users_db() 重新创建
-        if db_file.name == SYSTEM_DB:
-            print_ok(f"删除 (将重新创建): {db_file.name}")
-            os.remove(db_file)
-            deleted += 1
-            continue
-
-        # 删除其他所有数据（包括 sync 来的 + 测试创建的）
-        os.remove(db_file)
-        print_ok(f"删除: {db_file.name}")
-
-        # 提取项目名称（去掉 .db 后缀）
-        project_name = db_file.stem
-        deleted_names.append(project_name)
-        deleted += 1
-
-    print_ok(f"完成! 保留了 {skipped} 个文件，删除了 {deleted} 个文件")
-    
-    # v0.7.1+: 重新初始化用户数据库
-    if not reinit_users_db():
-        return False
-    
-    # 同步更新 projects.json - 基于剩余的 .db 文件重建
-    print_step("步骤 3: 同步更新 projects.json")
+    # 读取原 projects.json，保留 name -> 完整记录 的映射
+    # （保持 SOC_DV id=3 等原始 id 是自动化测试基线的硬约束）
     projects_json = TEST_DATA_DIR / "projects.json"
-    
-    try:
-        # 先读取原 projects.json，建立 name -> (is_archived, version, created_at) 的映射
-        original_meta = {}
-        if projects_json.exists():
+    original_records = {}
+    if projects_json.exists():
+        try:
             with open(projects_json, 'r', encoding='utf-8') as f:
-                original_projects = json.load(f)
-                for proj in original_projects:
-                    name = proj.get('name')
-                    original_meta[name] = {
-                        'is_archived': proj.get('is_archived', True),
-                        'version': proj.get('version', 'test'),
-                        'created_at': proj.get('created_at')
-                    }
-        
-        # 扫描剩余的 .db 文件（排除 projects.json 本身）
-        remaining_dbs = [f for f in TEST_DATA_DIR.iterdir() 
-                         if f.is_file() and f.suffix == '.db']
-        
-        # 排除系统数据库文件 (users.db 是用户认证数据库，不是项目)
-        SYSTEM_DBS = ["users.db"]
-        remaining_dbs = [f for f in remaining_dbs if f.name not in SYSTEM_DBS]
-        
-        # 为每个 .db 文件创建项目记录
+                for proj in json.load(f):
+                    original_records[proj.get('name')] = proj
+        except Exception as e:
+            print_error(f"读取 projects.json 失败: {e}")
+            return False
+
+    # 分类: 保留 / 删除
+    test_dbs = get_all_db_files(TEST_DATA_DIR)
+    preserved_dbs = [f for f in test_dbs if f.stem in PRESERVED_NAMES]
+    system_dbs = [f for f in test_dbs if f.name == SYSTEM_DB]
+    delete_dbs = [f for f in test_dbs if f.stem not in PRESERVED_NAMES and f.name != SYSTEM_DB]
+
+    # 附属残留文件
+    journal_files = sorted(TEST_DATA_DIR.glob("*.db-journal"))
+    stray_files = [f for f in [TEST_DATA_DIR / "projects.json.new"] if f.exists()]
+
+    for f in preserved_dbs:
+        print_warn(f"保留 demo 项目: {f.name}")
+    for f in delete_dbs[:20]:
+        print_ok(f"删除: {f.name}")
+    if len(delete_dbs) > 20:
+        print_ok(f"删除: ... 其余 {len(delete_dbs) - 20} 个从略")
+    for f in system_dbs:
+        print_ok(f"删除 (将重新创建): {f.name}")
+    for f in journal_files + stray_files:
+        print_ok(f"删除残留文件: {f.name}")
+
+    if not dry_run:
+        for f in delete_dbs + system_dbs + journal_files + stray_files:
+            try:
+                f.unlink()
+            except FileNotFoundError:
+                pass
+            except Exception as e:
+                print_warn(f"删除失败: {f.name} - {e}")
+    print_ok(f"项目 db: 保留 {len(preserved_dbs)} 个，删除 {len(delete_dbs)} 个")
+
+    # v0.7.1+: 重新初始化用户数据库（所有用户密码重置为默认值，8081 在线会话全部失效）
+    if not dry_run:
+        if not reinit_users_db():
+            return False
+    else:
+        print_warn("users.db 将重建（用户密码重置为默认值）")
+
+    # 步骤 3: 重建 projects.json - 只含保留项目，完整沿用原记录（id 不变）
+    print_step("步骤 3: 同步更新 projects.json")
+    try:
         remaining_projects = []
-        for i, db_file in enumerate(sorted(remaining_dbs), start=1):
-            project_name = db_file.stem  # 去掉 .db 后缀
-            
-            # 优先使用原 projects.json 中的元数据
-            meta = original_meta.get(project_name, {})
-            # 预置项目默认 is_archived=False，否则前端无法显示
-            is_archived = meta.get('is_archived', False)
-            version = meta.get('version', 'test')
-            created_at = meta.get('created_at')
-            
-            # 如果原 projects.json 没有创建时间，则用文件修改时间
-            if not created_at:
-                mtime = db_file.stat().st_mtime
-                created_at = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
-            
-            project_record = {
-                "id": i,
-                "name": project_name,
-                "created_at": created_at,
-                "is_archived": is_archived,
-                "version": version
-            }
-            remaining_projects.append(project_record)
-            print_ok(f"保留项目: {project_name} (is_archived={is_archived}, version={version})")
-        
-        # 写回文件
-        with open(projects_json, 'w', encoding='utf-8') as f:
-            json.dump(remaining_projects, f, indent=2, ensure_ascii=False)
-        
-        print_ok(f"projects.json 重建完成: 共 {len(remaining_projects)} 个项目")
-        
+        used_ids = set()
+        for db_file in sorted(preserved_dbs):
+            name = db_file.stem
+            record = dict(original_records.get(name, {}))
+            record.setdefault('created_at',
+                              datetime.fromtimestamp(db_file.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S"))
+            record.setdefault('version', 'test')
+            if 'id' not in record:
+                record['id'] = 0  # 稍后分配空闲 id
+            # 保留项目必须前端可见
+            record['is_archived'] = False
+            record['name'] = name
+            remaining_projects.append(record)
+            used_ids.add(record['id'])
+
+        # 为没有原记录的项目分配空闲 id
+        next_id = max(used_ids | {0}) + 1
+        for record in remaining_projects:
+            if record['id'] == 0:
+                while next_id in used_ids:
+                    next_id += 1
+                record['id'] = next_id
+                used_ids.add(next_id)
+
+        remaining_projects.sort(key=lambda p: p['id'])
+
+        if not dry_run:
+            with open(projects_json, 'w', encoding='utf-8') as f:
+                json.dump(remaining_projects, f, indent=2, ensure_ascii=False)
+
+        for p in remaining_projects:
+            print_ok(f"保留项目: {p['name']} (id={p['id']}, version={p.get('version')})")
+        print_ok(f"projects.json {'将' if dry_run else ''}重建完成: 共 {len(remaining_projects)} 个项目")
     except Exception as e:
         print_error(f"更新 projects.json 失败: {e}")
         return False
-    
-    # 清理 sessions 目录（测试产生的 session 文件）
-    print_step("步骤 4: 清理 sessions 目录")
+
+    # 步骤 4: 清理 sessions 与 wiki 孤儿目录
+    print_step("步骤 4: 清理 sessions / wiki 孤儿目录")
     sessions_dir = TEST_DATA_DIR / "sessions"
     if sessions_dir.exists():
         session_files = list(sessions_dir.glob("*"))
-        if session_files:
+        if not dry_run:
             for sf in session_files:
                 try:
                     sf.unlink()
                 except Exception as e:
                     print_warn(f"删除 session 文件失败: {sf.name} - {e}")
-            print_ok(f"清理了 {len(session_files)} 个 session 文件")
-        else:
-            print_ok("sessions 目录已是空目录")
+        print_ok(f"sessions: {'发现' if dry_run else '清理'} {len(session_files)} 个文件")
     else:
         print_ok("sessions 目录不存在，无需清理")
-    
-    # 步骤 5: 自动生成 demo 项目
-    print_step("步骤 5: 自动生成 Demo 项目")
-    if not generate_demo_project():
-        print_error("Demo 项目生成失败")
+
+    # wiki 数字目录（wiki/<project_id>/）中 project_id 已不存在的为孤儿目录
+    wiki_dir = TEST_DATA_DIR / "wiki"
+    remaining_ids = {p['id'] for p in remaining_projects}
+    wiki_orphans = []
+    if wiki_dir.exists():
+        wiki_orphans = [d for d in wiki_dir.iterdir()
+                        if d.is_dir() and d.name.isdigit() and int(d.name) not in remaining_ids]
+    for d in wiki_orphans:
+        print_ok(f"删除 wiki 孤儿目录: wiki/{d.name}")
+        if not dry_run:
+            shutil.rmtree(d, ignore_errors=True)
+    if not wiki_orphans:
+        print_ok("无 wiki 孤儿目录")
+
+    # 步骤 5: 重建缺失的 demo 项目（按原 id）
+    print_step("步骤 5: 检查 Demo 项目")
+    remaining_names = {p['name'] for p in remaining_projects}
+    demo_configs = [("SOC_DV", "soc_dv"), ("FC_DV", "fc_dv")]
+    all_ok = True
+    for demo_name, demo_slug in demo_configs:
+        if demo_name in remaining_names:
+            print_ok(f"Demo 项目 {demo_name} 已保留，无需重建")
+            continue
+        original_id = (original_records.get(demo_name) or {}).get('id')
+        print_warn(f"Demo 项目 {demo_name} 缺失，{'将' if dry_run else '正在'}按原 id ({original_id or '自动'}) 重建")
+        if not dry_run:
+            if not generate_demo_project(demo_slug, demo_name, original_id):
+                print_error(f"Demo 项目 {demo_name} 生成失败")
+                all_ok = False
+    if not all_ok:
         return False
-    
+
+    if dry_run:
+        print_step("预览完成")
+        print_warn("以上为预览，未删除任何文件。确认无误后执行: python3 scripts/tracker_ops.py clean --yes")
+
     return True
 
 
-def generate_demo_project():
-    """自动生成 SOC_DV Demo 项目"""
+def generate_demo_project(project_slug=None, project_name=None, project_id=None):
+    """生成缺失的 Demo 项目。
+
+    Args:
+        project_slug: create_demo_project.py -p 参数 ('soc_dv' / 'fc_dv')，None 表示全部
+        project_name: 项目名（用于 --ids 传参与日志显示）
+        project_id: 指定恢复的项目 id（保持测试基线依赖），None 为自动分配
+    """
     demo_script = REPO_ROOT / "scripts" / "create_demo_project.py"
-    
+
     if not demo_script.exists():
         print_warn(f"Demo 项目生成脚本不存在: {demo_script}")
         return True  # 不算失败，只是跳过
-    
+
+    cmd = [sys.executable, str(demo_script), "--force"]
+    if project_slug:
+        cmd += ["-p", project_slug]
+    if project_id is not None:
+        cmd += ["--ids", f"{project_name}={project_id}"]
+
     try:
         # 调用 demo 项目生成脚本
-        result = subprocess.run(
-            [sys.executable, str(demo_script), "--force"],
-            capture_output=True,
-            text=True,
-            cwd=str(REPO_ROOT)
-        )
-        
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(REPO_ROOT))
+
         if result.returncode == 0:
             print_ok("Demo 项目生成完成")
             # 打印关键输出
@@ -296,7 +349,7 @@ def generate_demo_project():
         else:
             print_error(f"Demo 项目生成失败: {result.stderr}")
             return False
-            
+
     except Exception as e:
         print_error(f"调用 Demo 项目生成脚本失败: {e}")
         return False
@@ -502,7 +555,7 @@ def all_tests():
     
     # 4. 清理数据
     print()
-    results['clean'] = clean()
+    results['clean'] = clean(dry_run=False)
     
     # 汇总
     print("\n" + "=" * 60)
@@ -536,7 +589,9 @@ def main():
     if command == 'sync':
         return 0 if sync() else 1
     elif command == 'clean':
-        return 0 if clean() else 1
+        # 默认 dry-run 预览，--yes/--force 才真正执行
+        execute = '--yes' in sys.argv[2:] or '--force' in sys.argv[2:]
+        return 0 if clean(dry_run=not execute) else 1
     elif command == 'check':
         return 0 if check() else 1
     elif command == 'test':
