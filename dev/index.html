@@ -1800,7 +1800,11 @@
                     </div>
                     <button class="btn btn-primary" onclick="createProject()">创建</button>
                 </div>
-                <div class="form-group"><label>选择项目</label><div class="project-list" id="projectList"></div></div>
+                <div class="form-group">
+                    <label>选择项目</label>
+                    <input type="text" id="projectSearch" placeholder="🔍 搜索项目名称..." oninput="filterProjectList()" style="width: 100%; padding: 8px 12px; margin-bottom: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; box-sizing: border-box;">
+                    <div class="project-list" id="projectList"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -4910,10 +4914,17 @@
         let pendingDeleteProjectId = null;
         let pendingDeleteProjectName = null;
         
-        function showProjectModal() {
-            const list = document.getElementById('projectList');
+        function renderProjectItems(projectList, filterText) {
             const isAdmin = currentUser && currentUser.role === 'admin';
-            list.innerHTML = projects.map(p => {
+            const filter = filterText.toLowerCase().trim();
+
+            // 按名称排序
+            const sorted = [...projectList].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+
+            // 过滤
+            const filtered = filter ? sorted.filter(p => p.name.toLowerCase().includes(filter)) : sorted;
+
+            return filtered.map(p => {
                 const isActive = currentProject && currentProject.id === p.id;
                 const exportBtn = isAdmin ? `<button class="action-btn export" onclick="event.stopPropagation(); exportProjectPackage(${p.id}, '${escapeHtml(p.name)}')" title="导出材料包">📦 导出</button>` : '';
                 const editBtn = isAdmin ? `<button class="action-btn edit" onclick="event.stopPropagation(); showEditProjectDate(${p.id}, '${escapeHtml(p.name)}', '${p.start_date || ''}', '${p.end_date || ''}')" title="编辑项目日期">✏️ 编辑</button>` : '';
@@ -4929,20 +4940,94 @@
                 if (p.start_date) {
                     metaParts.push(`${p.start_date} ~ ${p.end_date}`);
                 }
-                return `<div class="project-item ${isActive ? 'active' : ''}" onclick="selectProject(${p.id}); closeModal('projectModal');"><div class="project-info"><span class="project-name">${p.name}</span><span class="project-meta">${metaParts.join(' | ')}</span></div><div class="action-btns">${exportBtn}${editBtn}${deleteBtn}</div></div>`;
-            }).join('');
+                return `<div class="project-item ${isActive ? 'active' : ''}" onclick="selectProject(${p.id}); closeModal('projectModal');"><div class="project-info"><span class="project-name">${escapeHtml(p.name)}</span><span class="project-meta">${metaParts.join(' | ')}</span></div><div class="action-btns">${exportBtn}${editBtn}${deleteBtn}</div></div>`;
+            }).join('') || '<p style="color: #999; padding: 12px; text-align: center;">无匹配项目</p>';
+        }
+
+        function filterProjectList() {
+            const filterText = document.getElementById('projectSearch').value;
+            document.getElementById('projectList').innerHTML = renderProjectItems(projects, filterText);
+        }
+
+        function showProjectModal() {
+            document.getElementById('projectSearch').value = '';
+            document.getElementById('projectList').innerHTML = renderProjectItems(projects, '');
             document.getElementById('projectModal').classList.add('active');
         }
 
-        // v0.14.0: 导出项目材料包
+        // v0.15.0: 导出项目材料包 (支持图表截图)
         async function exportProjectPackage(projectId, projectName) {
             if (!confirm(`确定要导出项目 "${projectName}" 的材料包吗？`)) {
                 return;
             }
+
+            let charts = {};
+
+            // v0.15.0: 捕获 Progress Charts 截图
+            const originalTab = currentTab;
+            const originalChartType = currentChartType;
+            const originalProject = currentProject;
+            const originalProgressData = currentProgressData;
+
+            try {
+                // 确保 currentProject 匹配要导出的项目
+                if (!currentProject || currentProject.id !== projectId) {
+                    currentProject = projects.find(p => p.id === projectId);
+                }
+
+                // 如果没有进度数据，尝试加载
+                if (currentProject && !currentProgressData) {
+                    await loadProgressChart();
+                }
+
+                // 捕获图表
+                if (currentProgressData) {
+                    // 显示 progress panel 和 canvas 以便渲染
+                    document.getElementById('progressPanel').style.display = 'block';
+                    document.getElementById('progressChart').style.display = 'block';
+                    document.getElementById('progressEmptyState').style.display = 'none';
+
+                    const types = ['trend', 'feature', 'p0p1'];
+                    for (const type of types) {
+                        switchChartType(type);
+                        await new Promise(r => requestAnimationFrame(r));
+                        await new Promise(r => setTimeout(r, 300));
+                        const canvas = document.getElementById('progressChart');
+                        if (canvas && canvas.style.display !== 'none') {
+                            charts[type] = canvas.toDataURL('image/png');
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('图表捕获失败:', e);
+            } finally {
+                // 恢复状态
+                currentProject = originalProject;
+                currentProgressData = originalProgressData;
+                currentChartType = originalChartType;
+
+                // 恢复面板显示
+                document.getElementById('cpPanel').style.display = originalTab === 'cp' ? 'block' : 'none';
+                document.getElementById('tcPanel').style.display = originalTab === 'tc' ? 'block' : 'none';
+                document.getElementById('progressPanel').style.display = originalTab === 'progress' ? 'block' : 'none';
+                document.getElementById('fcPanel').style.display = originalTab === 'fc' ? 'block' : 'none';
+                document.getElementById('dashboard-content').style.display = originalTab === 'dashboard' ? 'block' : 'none';
+                document.getElementById('wikiPanel').style.display = originalTab === 'wiki' ? 'block' : 'none';
+
+                // 恢复图表渲染
+                if (currentProgressData && originalTab === 'progress') {
+                    renderChartByType(currentProgressData);
+                } else if (originalTab !== 'progress') {
+                    document.getElementById('progressChart').style.display = 'none';
+                }
+            }
+
             try {
                 const response = await fetch(`/api/export/project/${projectId}/package`, {
-                    method: 'GET',
-                    credentials: 'include'
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    credentials: 'include',
+                    body: JSON.stringify({charts})
                 });
                 if (response.status === 403) {
                     alert('无权限执行此操作，需要管理员权限');

@@ -4662,18 +4662,24 @@ def export_data():
 
 # ============ 项目材料包导出 (v0.14.0) ============
 
-@api.route("/api/export/project/<int:project_id>/package", methods=["GET"])
+@api.route("/api/export/project/<int:project_id>/package", methods=["POST"])
 @admin_required
 def export_project_package(project_id):
     """
     导出项目材料包 (ZIP)
     权限: 仅管理员可用
+    v0.15.0: 支持接收前端图表截图 (base64 PNG)
     """
     import zipfile
     import io
+    import base64
     from openpyxl import Workbook
     from openpyxl.styles import Font, Alignment
     from datetime import datetime
+
+    # v0.15.0: 读取前端发送的图表截图
+    data = request.get_json(silent=True) or {}
+    charts = data.get("charts", {})
 
     # 获取项目信息
     projects = load_projects()
@@ -4708,6 +4714,9 @@ def export_project_package(project_id):
 - dashboard_coverage_matrix.md/.xlsx - Coverage Matrix
 - feature_list.md/.xlsx - Feature列表
 - snapshots.md/.xlsx - 快照历史
+- charts/coverage_trend.png - 覆盖趋势图
+- charts/feature_coverage.png - Feature CP 覆盖图
+- charts/p0p1_comparison.png - P0/P1 覆盖率对比图
 - wiki/ - Wiki内容 (如存在)
 
 ## 项目信息
@@ -5171,6 +5180,23 @@ def export_project_package(project_id):
         snap_bytes = io.BytesIO()
         wb_snap.save(snap_bytes)
         zipf.writestr("snapshots.xlsx", snap_bytes.getvalue())
+
+        # v0.15.0: 添加图表截图 (前端传入的 base64 PNG)
+        chart_names = {
+            'trend': 'charts/coverage_trend.png',
+            'feature': 'charts/feature_coverage.png',
+            'p0p1': 'charts/p0p1_comparison.png'
+        }
+        for key, zip_path in chart_names.items():
+            if key in charts:
+                try:
+                    b64_data = charts[key].split(',')[1] if ',' in charts[key] else charts[key]
+                    img_bytes = base64.b64decode(b64_data, validate=True)
+                    # 校验 PNG 文件签名
+                    if img_bytes.startswith(b'\x89PNG\r\n\x1a\n'):
+                        zipf.writestr(zip_path, img_bytes)
+                except Exception:
+                    pass  # 跳过无效的图表数据
 
         # Wiki 内容导出 (如果存在)
         wiki_base = os.path.join(current_app.config["DATA_DIR"], "wiki")

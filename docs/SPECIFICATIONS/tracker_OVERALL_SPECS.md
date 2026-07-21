@@ -1,6 +1,6 @@
-# 芯片验证 Tracker v0.14.1 总体规格书
+# 芯片验证 Tracker v0.15.0 总体规格书
 
-> **版本**: v0.14.1 | **更新日期**: 2026-05-26 | **状态**: 🔄 开发中
+> **版本**: v0.15.0 | **更新日期**: 2026-07-13 | **状态**: ✅ 已完成
 
 ---
 
@@ -60,6 +60,7 @@
 | **v0.13.0 FC-CP Dashboard 支持** | |
 | **v0.14.0 项目材料包导出** | |
 | **v0.14.1 CP 覆盖率增强** | |
+| **v0.15.0 Progress Charts 增强** | |
 
 ### 1.4 v0.9.0 重大变更
 
@@ -466,6 +467,11 @@ python3 scripts/data_manager.py clean
 | **F072** | **Dashboard FC-CP 模式支持** | Dashboard API 支持 FC-CP 模式项目 | P0 |
 | **F073** | **快照 FC-CP 模式支持** | calculate_current_coverage 支持 FC-CP 模式 | P0 |
 | **F074** | **week_change FC-CP 修复** | FC-CP 模式下 week_change 正确计算 | P0 |
+| **F075** | **Progress Charts 三图表切换** | 覆盖趋势、Feature CP 覆盖、P0/P1 对比 | P0 |
+| **F076** | **图表 PNG 导出** | 单张/全部导出 Progress Charts 为 PNG | P1 |
+| **F077** | **Progress API 数据扩展** | `/api/progress` 返回 trend + feature_coverage | P0 |
+| **F078** | **项目材料包图表截图** | 导出 ZIP 附带三种图表 PNG | P1 |
+| **F079** | **项目选择器搜索** | 按项目名称实时过滤项目列表 | P1 |
 
 ### 3.2 Cover Point 字段
 
@@ -1078,6 +1084,45 @@ coverage = (CP1覆盖率 + CP2覆盖率 + ... + CPn覆盖率) / n
 | **GET** | **`/api/import/template?type=cp\|tc`** | **下载导入模板** |
 | **POST** | **`/api/import`** | **执行导入** |
 | **GET** | **`/api/export?project_id=1&type=cp\|tc&format=xlsx\|csv`** | **导出数据** |
+| **POST** | **`/api/export/project/<project_id>/package`** | **导出项目材料包 ZIP (v0.14.0/v0.15.0 增强)** |
+
+#### 4.7.4 POST /api/export/project/<project_id>/package
+
+导出项目材料包 ZIP。
+
+**权限**: 仅管理员可用（@admin_required）
+
+**请求体** (v0.15.0):
+```json
+{
+  "charts": {
+    "trend": "data:image/png;base64,iVBORw0KGgo...",
+    "feature": "iVBORw0KGgo...",
+    "p0p1": "data:image/png;base64,iVBORw0KGgo..."
+  }
+}
+```
+
+**ZIP 内容**:
+| 文件 | 说明 |
+|------|------|
+| README.md | 材料包说明 |
+| project_overview.md/.xlsx | 项目概览 |
+| coverage_trend.md/.xlsx | 覆盖率趋势 |
+| tc_cp_statistics.md/.xlsx | TC/CP统计 |
+| dashboard_feature_matrix.md/.xlsx | Feature×Priority矩阵 |
+| dashboard_owner_distribution.md/.xlsx | Owner分布表 |
+| dashboard_coverage_matrix.md/.xlsx | Coverage Matrix |
+| feature_list.md/.xlsx | Feature列表 |
+| snapshots.md/.xlsx | 快照历史 |
+| charts/coverage_trend.png | 覆盖趋势图 (v0.15.0) |
+| charts/feature_coverage.png | Feature CP 覆盖图 (v0.15.0) |
+| charts/p0p1_comparison.png | P0/P1 覆盖率对比图 (v0.15.0) |
+| wiki/ | Wiki内容 (如存在) |
+
+**响应**: `application/zip` 二进制流
+
+**文件名格式**: `project_export_{project_name}_{YYYYMMDD_HHMMSS}.zip`
 
 #### 4.7.1 GET /api/import/template
 
@@ -1134,11 +1179,11 @@ coverage = (CP1覆盖率 + CP2覆盖率 + ... + CPn覆盖率) / n
 
 **文件名格式**: `{项目名}_{CP/TC}_{日期}.xlsx`
 
-### 4.8 Progress Charts API (v0.8.1/v0.8.2 新增)
+### 4.8 Progress Charts API (v0.8.1/v0.8.2 新增, v0.15.0 增强)
 
 | 方法 | 路径 | 功能 | 权限 |
 |------|------|------|------|
-| GET | `/api/progress/<project_id>` | 获取进度数据（含计划/实际曲线） | 登录 |
+| GET | `/api/progress/<project_id>` | 获取进度数据（含计划/实际曲线、趋势、Feature 覆盖率） | 登录 |
 | POST | `/api/progress/<project_id>/snapshot` | 手动触发快照 | admin |
 | POST | `/api/cron/progress-snapshot` | 定时任务快照 | Cron Token |
 | GET | `/api/progress/<project_id>/snapshots` | 获取快照列表 | 登录 |
@@ -1178,7 +1223,14 @@ coverage = (CP1覆盖率 + CP2覆盖率 + ... + CPn覆盖率) / n
 
 #### 4.8.1 GET /api/progress/<project_id>
 
-获取完整进度数据，包含计划曲线和实际曲线。
+获取完整进度数据，包含计划曲线、实际曲线、趋势数据和 Feature 覆盖率。
+
+**查询参数**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| start_date | string | 否 | 日期过滤起始（YYYY-MM-DD） |
+| end_date | string | 否 | 日期过滤结束（YYYY-MM-DD） |
+| priority | string | 否 | Priority 过滤，逗号分隔，如 `P0,P1` |
 
 **响应**:
 ```json
@@ -1194,6 +1246,33 @@ coverage = (CP1覆盖率 + CP2覆盖率 + ... + CPn覆盖率) / n
     "actual": [
         {"week": "2026-01-06", "coverage": 0},
         {"week": "2026-01-13", "coverage": 5}
+    ],
+    "priority_filter": "",
+    "trend": [
+        {
+            "date": "2026-04-03",
+            "tc_pass": 30,
+            "tc_total": 120,
+            "cp_coverage": 22.5,
+            "p0_coverage": 45.0,
+            "cp_covered": 15,
+            "cp_total": 52
+        }
+    ],
+    "feature_coverage": [
+        {
+            "feature": "CCB",
+            "total_cp": 45,
+            "covered_cp": 44,
+            "uncovered_cp": 1,
+            "coverage_pct": 97.8,
+            "p0_total": 20,
+            "p0_covered": 20,
+            "p0_coverage": 100.0,
+            "p1_total": 15,
+            "p1_covered": 14,
+            "p1_coverage": 93.3
+        }
     ]
 }
 ```
@@ -1963,6 +2042,7 @@ journalctl -u tracker -f
 | **v0.13.0** | **2026-04-17** | **FC-CP Dashboard 支持**：Dashboard API 支持 FC-CP 模式、快照系统 FC-CP 模式支持、week_change 修复 |
 | **v0.14.0** | **2026-05-12** | **项目材料包导出**：一键导出项目材料包（项目概览、覆盖率趋势、TC/CP统计、Dashboard数据、Feature列表、快照历史、Wiki内容）ZIP打包下载、仅管理员可用 |
 | **v0.14.1** | **2026-05-26** | **CP 覆盖率增强**：FAIL 状态 TC 计入 CP 覆盖、Coverage Holes 新增 Failures 分类、CP 列表支持按覆盖率和含 Fail 过滤 |
+| **v0.15.0** | **2026-07-13** | **Progress Charts 增强**：三种图表（覆盖趋势、Feature CP 覆盖、P0/P1 对比）、图表 PNG 导出、项目材料包附带图表截图、项目选择器搜索 |
 
 ### v0.8.3 详细变更
 
@@ -2513,6 +2593,104 @@ TC-CP 模式下，原有覆盖率计算仅统计 PASS 状态的 TC。实际验�
 - 所有过滤条件串联（AND 关系）
 - 支持与其他现有过滤条件组合使用（Feature、Priority、关联状态、搜索）
 - 点击"重置"按钮一并清空所有过滤条件
+
+### v0.15.0 详细变更 (2026-07-13)
+
+#### 1. Progress Charts 三图表增强
+
+**背景**：
+原有 Progress Charts 仅展示"计划曲线 vs 实际曲线"单一折线图，覆盖维度单一，无法满足项目汇报时多维度可视化需求。
+
+**新增图表**：
+
+| 图表 | 类型 | 说明 |
+|------|------|------|
+| 覆盖趋势 | 组合图（柱状 + 双折线 + 双 Y 轴） | TC PASS 数量 + CP 覆盖率 + P0 覆盖率 |
+| Feature CP 覆盖进度 | 水平堆叠条形图 | 按 feature 展示已覆盖/未覆盖 CP 数量 |
+| P0/P1 覆盖率模块对比 | 分组柱状图 | 重点模块的 P0/P1 覆盖率对比，P1 按阈值变色 |
+
+**前端实现**：
+- 在 Progress Panel toolbar 增加三个 Tab 切换按钮
+- 使用 Chart.js 原生 Canvas 渲染
+- 新增 `currentChartType` 状态变量（`'trend' | 'feature' | 'p0p1'`）
+- 图表切换时销毁旧 Chart 实例并重新渲染
+
+**后端实现**：
+- 扩展 `GET /api/progress/<project_id>` 返回字段：
+  - `trend`: 从 `project_progress` 快照表读取的时间序列
+  - `feature_coverage`: 按 `cover_point.feature` 实时聚合的数据
+- `feature_coverage` 支持 TC-CP 和 FC-CP 两种覆盖模式
+- 支持 `priority` 查询参数过滤
+
+**trend 字段结构**：
+```json
+[
+  {
+    "date": "2026-04-03",
+    "tc_pass": 30,
+    "tc_total": 120,
+    "cp_coverage": 22.5,
+    "p0_coverage": 45.0,
+    "cp_covered": 15,
+    "cp_total": 52
+  }
+]
+```
+
+**feature_coverage 字段结构**：
+```json
+[
+  {
+    "feature": "CCB",
+    "total_cp": 45,
+    "covered_cp": 44,
+    "uncovered_cp": 1,
+    "coverage_pct": 97.8,
+    "p0_total": 20,
+    "p0_covered": 20,
+    "p0_coverage": 100.0,
+    "p1_total": 15,
+    "p1_covered": 14,
+    "p1_coverage": 93.3
+  }
+]
+```
+
+#### 2. 图表 PNG 导出
+
+**前端实现**：
+- "导出"按钮带下拉菜单
+- "导出当前图表"：下载当前显示图表的 PNG
+- "导出全部图表"：依次下载三种图表的 PNG
+- 使用 Chart.js Canvas `toDataURL('image/png')`
+- 文件名格式：`{chart_type}_{project_name}_{date}.png`
+
+#### 3. 项目材料包图表截图集成
+
+**背景**：
+v0.14.0 项目材料包导出仅包含文本和表格数据，v0.15.0 将 Progress Charts 截图自动打包进 ZIP。
+
+**前端实现**：
+- 点击项目选择器中的"导出材料包"按钮时
+- 临时切换三种图表类型，捕获 Canvas 截图
+- 将 base64 PNG 通过 POST body 发送到后端
+- 导出完成后恢复原始界面状态
+
+**后端实现**：
+- `POST /api/export/project/<project_id>/package` 接收 `{charts: {trend, feature, p0p1}}`
+- 将 base64 解码后写入 ZIP 的 `charts/` 目录：
+  - `charts/coverage_trend.png`
+  - `charts/feature_coverage.png`
+  - `charts/p0p1_comparison.png`
+- 对无效 base64 / 非 PNG 数据进行容错处理
+
+#### 4. 项目选择器搜索
+
+**前端实现**：
+- 项目选择器顶部增加搜索框
+- 支持按项目名称实时过滤
+- 项目按名称排序（中文按拼音）
+- 无匹配项目时显示提示
 
 ### v0.12.0 详细变更 (2026-04-08)
 
