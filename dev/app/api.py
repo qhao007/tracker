@@ -4669,6 +4669,7 @@ def export_project_package(project_id):
     导出项目材料包 (ZIP)
     权限: 仅管理员可用
     v0.15.0: 支持接收前端图表截图 (base64 PNG)
+    v0.16.0: 附带生成 Validation Summary PPT (summary/validation_summary.pptx)
     """
     import zipfile
     import io
@@ -4717,6 +4718,7 @@ def export_project_package(project_id):
 - charts/coverage_trend.png - 覆盖趋势图
 - charts/feature_coverage.png - Feature CP 覆盖图
 - charts/p0p1_comparison.png - P0/P1 覆盖率对比图
+- summary/validation_summary.pptx - Validation Summary PPT (v0.16.0)
 - wiki/ - Wiki内容 (如存在)
 
 ## 项目信息
@@ -5187,6 +5189,7 @@ def export_project_package(project_id):
             'feature': 'charts/feature_coverage.png',
             'p0p1': 'charts/p0p1_comparison.png'
         }
+        chart_bytes = {}  # v0.16.0: 保留解码后的图表字节，供 Validation Summary PPT 复用
         for key, zip_path in chart_names.items():
             if key in charts:
                 try:
@@ -5195,8 +5198,34 @@ def export_project_package(project_id):
                     # 校验 PNG 文件签名
                     if img_bytes.startswith(b'\x89PNG\r\n\x1a\n'):
                         zipf.writestr(zip_path, img_bytes)
+                        chart_bytes[key] = img_bytes
                 except Exception:
                     pass  # 跳过无效的图表数据
+
+        # v0.16.0: 生成 Validation Summary PPT，放入 summary/ 子目录
+        try:
+            from app.ppt_report import generate_validation_summary_ppt
+
+            report_data = _get_project_report_data(project_id)
+
+            # 环比：取最近两条有效快照的覆盖率差值（快照不足时不显示环比行）
+            coverage_delta = None
+            valid_snaps = [r for r in progress_rows if r['actual_coverage'] is not None]
+            if len(valid_snaps) >= 2:
+                coverage_delta = {
+                    'prev_date': valid_snaps[-2]['snapshot_date'],
+                    'delta_pp': round(valid_snaps[-1]['actual_coverage'] - valid_snaps[-2]['actual_coverage'], 1)
+                }
+
+            if report_data:
+                ppt_bytes = generate_validation_summary_ppt(
+                    report_data,
+                    coverage_delta=coverage_delta,
+                    chart_images={'feature': chart_bytes.get('feature'), 'p0p1': chart_bytes.get('p0p1')}
+                )
+                zipf.writestr("summary/validation_summary.pptx", ppt_bytes)
+        except Exception as e:
+            print(f"Warning: 生成 Validation Summary PPT 失败（不影响材料包其他内容）: {e}")
 
         # Wiki 内容导出 (如果存在)
         wiki_base = os.path.join(current_app.config["DATA_DIR"], "wiki")

@@ -5053,3 +5053,65 @@ filtered = filtered.slice(0, 10);
 - `/projects/management/tracker/dev/index.html` (`renderP0P1ComparisonChart`)
 
 **测试时间**: 2026-06-03
+
+---
+
+## BUG-112: 材料包导出图表丢失百分比/未覆盖标签（截图时序问题）
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | High |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-07-21 |
+| **报告人** | 用户反馈 |
+| **修复日期** | 2026-07-21 |
+| **修复人** | Claude Code |
+
+**描述**:
+Progress 图表页手动导出 PNG 时，Feature CP 覆盖进度图带有每条的覆盖率百分比和未覆盖个数；但通过"导出项目材料包"得到的 `charts/feature_coverage.png` 中这些标签全部丢失。
+
+**根本原因**:
+Feature 图的标签绘制挂在 Chart.js `animation.onComplete` 回调上（动画默认时长 1000ms，见 `renderFeatureCoverageChart`）。材料包导出（`exportProjectPackage`）在 `switchChartType()` 后仅等待 300ms 即执行 `canvas.toDataURL()`，此刻动画未结束、标签尚未绘制。手动导出时因图表已展示完毕，标签已在画布上，所以表现正常。
+
+**修复方案**:
+将标签绘制从 `animation.onComplete` 迁移到 Chart.js 内联插件的 `afterDraw` 钩子（插件 id: `featureCoverageLabels`）。`afterDraw` 每帧都会执行，标签从首帧即存在，任意时机的截图都完整。绘制逻辑（位置/颜色/字体）保持不变。
+
+**验证结果**:
+- Playwright + Firefox：切换图表后仅等待 300ms 截图（与材料包导出时序一致），百分比与未覆盖标签完整显示
+- 端到端：按材料包导出流程 POST `/api/export/project/3/package`，ZIP 内 `charts/feature_coverage.png` 标签齐全
+
+**修复文件**:
+- `/projects/management/tracker/dev/index.html` (`renderFeatureCoverageChart`)
+
+**测试时间**: 2026-07-21
+
+---
+
+## BUG-113: P0/P1 覆盖率对比图缺少柱顶百分比标签
+
+| 属性 | 值 |
+|------|-----|
+| **严重性** | Medium |
+| **状态** | ✅ 已修复 |
+| **发现日期** | 2026-07-21 |
+| **报告人** | 用户反馈 |
+| **修复日期** | 2026-07-21 |
+| **修复人** | Claude Code |
+
+**描述**:
+汇报样张中 P0/P1 覆盖率对比图每根柱子顶部都标注百分比完成度，但 Tracker 的 P0/P1 对比图无论进度页导出还是材料包导出都没有百分比标注，只能对照 Y 轴估读。
+
+**根本原因**:
+`renderP0P1ComparisonChart` 从未实现数值标签绘制，仅有 tooltip（悬停可见，截图不可见）。
+
+**修复方案**:
+新增内联插件 `p0p1BarValueLabels`，在 `afterDraw` 中通过 `chart.getDatasetMeta()` 获取每根柱子的位置，在柱顶绘制 `{value}%`（P0、P1 两个数据集都标注）。渲染函数为三条导出路径（进度页单张导出、批量导出、材料包截图）共用，修复自动全量生效。
+
+**验证结果**:
+- Playwright + Firefox：切换后 300ms 截图，所有柱顶百分比完整（20%/25%/33.3%/.../100%）
+- 端到端：材料包中 `charts/p0p1_comparison.png` 与 PPT 内嵌图均带百分比
+
+**修复文件**:
+- `/projects/management/tracker/dev/index.html` (`renderP0P1ComparisonChart`)
+
+**测试时间**: 2026-07-21

@@ -665,3 +665,157 @@ class TestExportPackageCharts:
 
         assert not any(f.startswith('charts/') for f in names)
         assert 'README.md' in names
+
+
+@pytest.fixture(scope='module')
+def project_with_snapshots():
+    """创建带两条进度快照的项目（用于 PPT 环比行测试）"""
+    import sqlite3
+    app = create_app(testing=True)
+    with app.test_client() as client:
+        client.post('/api/auth/login',
+            data=json.dumps({'username': 'admin', 'password': 'admin123'}),
+            content_type='application/json')
+
+        name = f"PPT_Snapshot_Test_{int(time.time())}"
+
+        response = client.post('/api/projects',
+                              data=json.dumps({'name': name, 'start_date': '2026-01-01', 'end_date': '2026-12-31'}),
+                              content_type='application/json')
+
+        if response.status_code == 200:
+            data = json.loads(response.data)
+            project_id = data['project']['id']
+
+            # 直接向项目库插入两条历史快照（快照 API 只能写当天日期）
+            db_path = os.path.join(app.config['DATA_DIR'], f"{name}.db")
+            assert os.path.isfile(db_path), f"项目数据库不存在: {db_path}"
+            conn = sqlite3.connect(db_path)
+            conn.execute(
+                "INSERT INTO project_progress (project_id, snapshot_date, actual_coverage) VALUES (?, ?, ?)",
+                (project_id, '2026-05-28', 91.8))
+            conn.execute(
+                "INSERT INTO project_progress (project_id, snapshot_date, actual_coverage) VALUES (?, ?, ?)",
+                (project_id, '2026-06-04', 92.6))
+            conn.commit()
+            conn.close()
+
+            yield {'id': project_id, 'name': name}
+
+            client.delete(f"/api/projects/{project_id}")
+        else:
+            pytest.skip("无法创建快照测试项目")
+
+
+class TestExportPackageSummaryPPT:
+    """v0.16.0: 测试材料包中的 Validation Summary PPT (summary/ 子目录)"""
+
+    SAMPLE_PNG_B64 = TestExportPackageCharts.SAMPLE_PNG_B64
+    SAMPLE_PNG_DATA_URL = TestExportPackageCharts.SAMPLE_PNG_DATA_URL
+    PPT_ZIP_PATH = 'summary/validation_summary.pptx'
+
+    @staticmethod
+    def _walk(shapes):
+        for sh in shapes:
+            yield sh
+            if sh.shape_type == 6:  # GROUP
+                yield from TestExportPackageSummaryPPT._walk(sh.shapes)
+
+    @classmethod
+    def _ppt_text(cls, zip_file):
+        from pptx import Presentation
+        prs = Presentation(io.BytesIO(zip_file.read(cls.PPT_ZIP_PATH)))
+        texts = []
+        for sh in cls._walk(prs.slides[0].shapes):
+            if sh.has_text_frame:
+                texts.append(sh.text_frame.text)
+        return "\n".join(texts)
+
+    @classmethod
+    def _ppt_pictures(cls, zip_file):
+        from pptx import Presentation
+        prs = Presentation(io.BytesIO(zip_file.read(cls.PPT_ZIP_PATH)))
+        return [sh for sh in cls._walk(prs.slides[0].shapes) if sh.shape_type == 13]
+
+    def _export(self, client, project_id, charts=None):
+        body = {'charts': charts} if charts is not None else None
+        return client.post(
+            f'/api/export/project/{project_id}/package',
+            data=json.dumps(body) if body else None,
+            content_type='application/json'
+        )
+
+    def test_summary_ppt_in_package(self, admin_client, test_project):
+        """EXP-API-026: ZIP 包含 summary/validation_summary.pptx 且可正常打开"""
+        response = self._export(admin_client, test_project['id'])
+
+        assert response.status_code == 200
+        zip_file = zipfile.ZipFile(io.BytesIO(response.data))
+        assert self.PPT_ZIP_PATH in zip_file.namelist()
+
+        from pptx import Presentation
+        prs = Presentation(io.BytesIO(zip_file.read(self.PPT_ZIP_PATH)))
+        assert len(prs.slides) == 1
+
+    def test_summary_ppt_content(self, admin_client, test_project):
+        """EXP-API-027: PPT 内容反映项目数据（空项目全 0）"""
+        response = self._export(admin_client, test_project['id'])
+
+        assert response.status_code == 200
+        zip_file = zipfile.ZipFile(io.BytesIO(response.data))
+        text = self._ppt_text(zip_file)
+
+        assert f"{test_project['name']}-Functional Validation Summary" in text
+        assert '0%' in text
+        assert '0 / 0' in text
+        # 无快照数据时不显示环比行
+        assert 'pp' not in text
+        # 状态文字为静态占位
+        assert '请在此填写项目当前状态与下一步计划' in text
+
+    def test_summary_ppt_charts_embedded(self, admin_client, test_project):
+        """EXP-API-028: 传入 feature/p0p1 截图后 PPT 嵌入两张图"""
+        charts = {
+            'feature': self.SAMPLE_PNG_DATA_URL,
+            'p0p1': self.SAMPLE_PNG_DATA_URL
+        }
+        response = self._export(admin_client, test_project['id'], charts)
+
+        assert response.status_code == 200
+        zip_file = zipfile.ZipFile(io.BytesIO(response.data))
+        assert len(self._ppt_pictures(zip_file)) == 2
+
+    def test_summary_ppt_without_charts(self, admin_client, test_project):
+        """EXP-API-029: 无图表截图时 PPT 不保留样张占位图"""
+        response = self._export(admin_client, test_project['id'])
+
+        assert response.status_code == 200
+        zip_file = zipfile.ZipFile(io.BytesIO(response.data))
+        assert len(self._ppt_pictures(zip_file)) == 0
+
+    def test_summary_ppt_delta_line(self, admin_client, project_with_snapshots):
+        """EXP-API-030: 有两条快照时 PPT 显示环比行"""
+        response = self._export(admin_client, project_with_snapshots['id'])
+
+        assert response.status_code == 200
+        zip_file = zipfile.ZipFile(io.BytesIO(response.data))
+        text = self._ppt_text(zip_file)
+        # 92.6 - 91.8 = +0.8pp（Python 浮点 round 后为 0.8）
+        assert '较 5/28 +0.8pp' in text
+
+    def test_summary_ppt_failure_resilient(self, admin_client, test_project, monkeypatch):
+        """EXP-API-031: PPT 生成失败不影响材料包其他内容"""
+        def _raise(*args, **kwargs):
+            raise RuntimeError("模拟 PPT 生成失败")
+
+        monkeypatch.setattr('app.ppt_report.generate_validation_summary_ppt', _raise)
+
+        response = self._export(admin_client, test_project['id'])
+
+        assert response.status_code == 200
+        zip_file = zipfile.ZipFile(io.BytesIO(response.data))
+        names = zip_file.namelist()
+        assert self.PPT_ZIP_PATH not in names
+        # 材料包本体完好
+        assert 'README.md' in names
+        assert 'project_overview.md' in names

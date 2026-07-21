@@ -3459,37 +3459,39 @@
                             }
                         }
                     },
-                    // v0.15.0: 动画完成后在条形末端绘制覆盖率百分比和未覆盖个数
-                    animation: {
-                        onComplete() {
-                            const chart = this;
-                            const { ctx, scales: { x, y } } = chart;
-                            ctx.save();
-                            ctx.font = 'bold 12px "Noto Sans CJK SC", "WenQuanYi Micro Hei", "Source Han Sans SC", sans-serif';
-                            ctx.textBaseline = 'middle';
+                },
+                // v0.16.0: 改用 afterDraw 内联插件在条形末端绘制覆盖率百分比和未覆盖个数。
+                // 原实现在 animation.onComplete 中绘制，图表截图导出（如材料包导出）会在动画
+                // 完成前执行 toDataURL，导致标签丢失；afterDraw 每帧都会绘制，截图始终包含标签。
+                plugins: [{
+                    id: 'featureCoverageLabels',
+                    afterDraw(chart) {
+                        const { ctx, scales: { x, y } } = chart;
+                        ctx.save();
+                        ctx.font = 'bold 12px "Noto Sans CJK SC", "WenQuanYi Micro Hei", "Source Han Sans SC", sans-serif';
+                        ctx.textBaseline = 'middle';
 
-                            chart.data.labels.forEach((label, index) => {
-                                const f = features[index];
-                                const total = f.covered_cp + f.uncovered_cp;
-                                if (total === 0) return;
+                        chart.data.labels.forEach((label, index) => {
+                            const f = features[index];
+                            const total = f.covered_cp + f.uncovered_cp;
+                            if (total === 0) return;
 
-                                // 计算条形最右端的 x 坐标
-                                const xPos = x.getPixelForValue(total) + 8;
-                                const yPos = y.getPixelForValue(label);
+                            // 计算条形最右端的 x 坐标
+                            const xPos = x.getPixelForValue(total) + 8;
+                            const yPos = y.getPixelForValue(label);
 
-                                // 覆盖率百分比（深绿色）
-                                ctx.fillStyle = '#1e7e34';
-                                ctx.textAlign = 'left';
-                                ctx.fillText(`${f.coverage_pct}%`, xPos, yPos - 7);
+                            // 覆盖率百分比（深绿色）
+                            ctx.fillStyle = '#1e7e34';
+                            ctx.textAlign = 'left';
+                            ctx.fillText(`${f.coverage_pct}%`, xPos, yPos - 7);
 
-                                // 未覆盖个数（红色）
-                                ctx.fillStyle = '#dc3545';
-                                ctx.fillText(`未覆盖: ${f.uncovered_cp}`, xPos, yPos + 7);
-                            });
-                            ctx.restore();
-                        }
+                            // 未覆盖个数（红色）
+                            ctx.fillStyle = '#dc3545';
+                            ctx.fillText(`未覆盖: ${f.uncovered_cp}`, xPos, yPos + 7);
+                        });
+                        ctx.restore();
                     }
-                }
+                }]
             });
         }
 
@@ -3563,7 +3565,29 @@
                             }
                         }
                     }
-                }
+                },
+                // v0.16.0: 柱顶百分比标签。使用 afterDraw 内联插件逐帧绘制，
+                // 确保进度页导出与材料包截图导出均能带上百分比（与样张一致）。
+                plugins: [{
+                    id: 'p0p1BarValueLabels',
+                    afterDraw(chart) {
+                        const { ctx } = chart;
+                        ctx.save();
+                        ctx.font = 'bold 11px "Noto Sans CJK SC", "WenQuanYi Micro Hei", "Source Han Sans SC", sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'bottom';
+                        ctx.fillStyle = '#333';
+                        chart.data.datasets.forEach((dataset, datasetIndex) => {
+                            const meta = chart.getDatasetMeta(datasetIndex);
+                            meta.data.forEach((bar, index) => {
+                                const value = dataset.data[index];
+                                if (value === null || value === undefined) return;
+                                ctx.fillText(`${value}%`, bar.x, bar.y - 2);
+                            });
+                        });
+                        ctx.restore();
+                    }
+                }]
             });
         }
 
