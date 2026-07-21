@@ -7,6 +7,10 @@ Demo Project Generator - 创建芯片验证示例项目
 使用方法：
     python3 scripts/create_demo_project.py       # 创建示例项目
     python3 scripts/create_demo_project.py --force  # 重新创建（带清理）
+    python3 scripts/create_demo_project.py --force --ids SOC_DV=3,FC_DV=4
+        # 重新创建并恢复指定 id（测试基线依赖 SOC_DV id=3，被误删后用它恢复）
+
+注意：仅写入 shared/data/test_data，脚本会拒绝操作生产 user_data 目录。
 """
 
 import argparse
@@ -963,11 +967,13 @@ def generate_snapshots(conn, project_id, config):
     print(f"   📊 Priority 覆盖率已计算并保存")
 
 
-def create_demo_project(config):
+def create_demo_project(config, forced_id=None):
     """创建单个演示项目
 
     Args:
         config: 项目配置字典
+        forced_id: 指定项目 id（用于恢复测试基线依赖的 id，如 SOC_DV=3），
+                   None 表示自动分配（max(id)+1）
     """
     project_name = config["name"]
     coverage_mode = config.get("coverage_mode", "tc_cp")
@@ -990,10 +996,20 @@ def create_demo_project(config):
     print(f"   ✅ 数据库初始化完成")
 
     # 获取项目 ID
-    project_id = 1
-    if projects:
-        max_id = max(p.get("id", 0) for p in projects)
-        project_id = max_id + 1
+    if forced_id is not None:
+        # 指定 id 不能与其他项目冲突（同名项目已在 cleanup 阶段移除）
+        conflict = [p for p in projects if p.get("id") == forced_id and p.get("name") != project_name]
+        if conflict:
+            print(f"❌ 错误: 指定的 ID {forced_id} 已被项目 \"{conflict[0].get('name')}\" 使用")
+            conn.close()
+            sys.exit(1)
+        project_id = forced_id
+        print(f"   📌 使用指定项目 ID: {project_id}")
+    else:
+        project_id = 1
+        if projects:
+            max_id = max(p.get("id", 0) for p in projects)
+            project_id = max_id + 1
 
     # 创建项目记录
     create_project_record(project_id, config)
@@ -1024,22 +1040,50 @@ def create_demo_project(config):
         print(f"📋 TC 模式")
 
 
+def parse_forced_ids(ids_str):
+    """解析 --ids 参数: 'SOC_DV=3,FC_DV=4' -> {'SOC_DV': 3, 'FC_DV': 4}"""
+    forced = {}
+    if not ids_str:
+        return forced
+    for item in ids_str.split(','):
+        item = item.strip()
+        if not item:
+            continue
+        name, sep, value = item.partition('=')
+        if not sep or not value.isdigit():
+            print(f"❌ 错误: --ids 格式无效: \"{item}\"（应为 NAME=ID，如 SOC_DV=3）")
+            sys.exit(1)
+        forced[name.strip()] = int(value)
+    return forced
+
+
 def main():
     parser = argparse.ArgumentParser(description="创建演示项目")
     parser.add_argument("--force", "-f", action="store_true",
                         help="重新创建（带清理）")
     parser.add_argument("--project", "-p", choices=["soc_dv", "fc_dv", "all"],
                         default="all", help="指定要创建的项目")
+    parser.add_argument("--ids", type=str, default=None,
+                        help="指定项目 id（逗号分隔，如 SOC_DV=3,FC_DV=4），"
+                             "用于恢复测试基线依赖的 id；缺省自动分配")
     args = parser.parse_args()
 
     print("=" * 60)
     print("🎯 Tracker 演示项目生成器")
     print("=" * 60)
 
+    # 安全约束：仅允许写入 shared/data/test_data，绝不触碰生产 user_data
+    user_data_dir = os.path.join(PROJECT_DIR, "shared", "data", "user_data")
+    if os.path.realpath(DATA_DIR) == os.path.realpath(user_data_dir):
+        print(f"❌ 错误: 拒绝操作生产数据目录: {DATA_DIR}")
+        sys.exit(1)
+
     # 检查数据目录
     if not os.path.exists(DATA_DIR):
         print(f"❌ 错误: 数据目录不存在: {DATA_DIR}")
         sys.exit(1)
+
+    forced_ids = parse_forced_ids(args.ids)
 
     # 清理旧项目
     if args.force:
@@ -1051,10 +1095,10 @@ def main():
 
     # 创建项目
     if args.project in ["soc_dv", "all"]:
-        create_demo_project(SOC_DV_CONFIG)
+        create_demo_project(SOC_DV_CONFIG, forced_id=forced_ids.get(SOC_DV_CONFIG["name"]))
 
     if args.project in ["fc_dv", "all"]:
-        create_demo_project(FC_DV_CONFIG)
+        create_demo_project(FC_DV_CONFIG, forced_id=forced_ids.get(FC_DV_CONFIG["name"]))
 
     print("\n" + "=" * 60)
     print("✅ 所有演示项目创建完成!")
