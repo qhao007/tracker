@@ -206,13 +206,42 @@ def test_main_skips_merge_when_pre_merge_check_fails(repo, monkeypatch):
     monkeypatch.setattr(rp, "check_git_status", lambda dry_run=False: True)
 
     argv = sys.argv
-    sys.argv = ["release_preparation.py", "--version", "0.2.0", "--skip-tests"]
+    sys.argv = ["release_preparation.py", "--version", "0.2.0"]
     try:
-        # --skip-tests 会让 api/smoke 都为 True，所以这里改用 monkeypatch 后的路径
-        sys.argv = ["release_preparation.py", "--version", "0.2.0"]
-        rp.main()
+        rp.main(repo_root=repo)
     finally:
         sys.argv = argv
 
     assert calls["merge"] == 0, "前置检查失败时不应执行 merge_and_tag"
     assert "v0.2.0" not in _git(repo, "tag", "--list")
+
+
+def test_main_accepts_injected_repo_root(repo, monkeypatch):
+    """main() 必须支持注入 repo_root —— 否则测试会操作真实仓库！
+
+    这是个真实踩过的坑：测试调用 rp.main() 时若无法注入 repo_root，
+    会直接对真实 Tracker 仓库执行 git checkout / reset 等操作。
+    """
+    monkeypatch.setattr(rp, "run_api_tests", lambda dry_run=False: True)
+    monkeypatch.setattr(rp, "run_smoke_tests", lambda dry_run=False: True)
+    monkeypatch.setattr(rp, "update_version", lambda version, dry_run=False: True)
+    monkeypatch.setattr(rp, "check_git_status", lambda dry_run=False: True)
+
+    argv = sys.argv
+    sys.argv = ["release_preparation.py", "--version", "0.2.0"]
+    try:
+        rp.main(repo_root=repo)
+    finally:
+        sys.argv = argv
+
+    # 真实仓库的当前分支不应被这个测试改动
+    assert os.path.isdir(repo / ".git")
+
+
+def test_main_repo_root_defaults_to_script_parent(monkeypatch):
+    """不注入时，repo_root 仍默认为脚本所在仓库根"""
+    import inspect
+
+    sig = inspect.signature(rp.main)
+    assert "repo_root" in sig.parameters
+    assert sig.parameters["repo_root"].default is None

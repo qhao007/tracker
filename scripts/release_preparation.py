@@ -506,8 +506,13 @@ def run_compatibility_tests(dry_run=False):
         return True  # 允许继续，不中止发布
 
 
-def main():
-    repo_root = Path(__file__).parent.parent
+def main(repo_root=None):
+    # repo_root 可注入 —— 测试必须能指向临时仓库，
+    # 否则测试会对真实 Tracker 仓库执行 git checkout / reset 等操作。
+    if repo_root is None:
+        repo_root = Path(__file__).parent.parent
+    else:
+        repo_root = Path(repo_root)
 
     parser = argparse.ArgumentParser(
         description="Tracker 发布前准备脚本",
@@ -609,7 +614,7 @@ def main():
         print("   不执行 merge，避免产生无法被 main 包含的孤儿提交")
         results["merge_tag"] = False
     else:
-        results["merge_tag"] = merge_and_tag(version, args.dry_run)
+        results["merge_tag"] = merge_and_tag(version, args.dry_run, repo_root=repo_root)
 
     # 汇总结果
     print(f"\n{BOLD}{'=' * 60}{RESET}")
