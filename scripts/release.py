@@ -23,6 +23,10 @@ import argparse
 import subprocess
 from datetime import datetime
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from release_guard import verify_tag_on_branch  # noqa: E402
+
 # 路径配置
 TRACKER_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SHARED_DATA = os.path.join(TRACKER_DIR, 'shared', 'data')
@@ -159,6 +163,19 @@ def check_release_ready(version, dry_run=False):
             print(f"   预期: {expected_commit}")
             print(f"   实际: {current_commit}")
             return False
+
+    # 5. 检查发布标签是否真的包含在 main 分支上
+    #    事故背景（2026-07-21 v0.16.1）：发布脚本回滚时执行
+    #    `git reset --hard <prev_tag>`，把 main 退回上一个版本，
+    #    而 tag 仍指向那个被孤立的 merge 提交 —— 发布代码只在 tag 上、
+    #    不在任何分支上，任何从 main 检出的部署都会退回旧版本。
+    #    这个检查必须放在发布入口，阻止带孤儿标签的版本被发布出去。
+    tag_name = f"v{version}"
+    tag_ok, tag_msg = verify_tag_on_branch(TRACKER_DIR, tag_name, branch="main")
+    if not tag_ok:
+        print(f"   ❌ 标签校验失败: {tag_msg}")
+        print(f"   提示: 标签 {tag_name} 未包含在 main 分支上，禁止发布")
+        return False
 
     print(f"   ✅ Flag 检查通过" + (" (演练模式)" if is_flag_dry_run else ""))
     return True

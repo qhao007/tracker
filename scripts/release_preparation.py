@@ -34,6 +34,10 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+
+from release_guard import delete_tag, verify_tag_on_branch  # noqa: E402
+
 # 颜色定义
 GREEN = '\033[92m'
 YELLOW = '\033[93m'
@@ -206,29 +210,50 @@ def rollback_on_failure(version, results, repo_root):
             prev_tag = tag
             break
     
-    # 2. 回滚 main 分支
-    if prev_tag:
-        print(f"1. 回滚到上一个稳定版本: {prev_tag}")
-        subprocess.run(["git", "checkout", "main"], cwd=repo_root, check=True)
-        subprocess.run(["git", "reset", "--hard", prev_tag], cwd=repo_root, check=True)
-        print(f"✅ main 分支已回滚到 {prev_tag}")
+    # repo_root 可能是 str，统一为 Path 以便后续做路径拼接
+    repo_root = Path(repo_root)
+
+    current_tag = f"v{version}"
+
+    # 2. 删除本次发布创建的 tag
+    #    关键：merge_and_tag 可能已经成功合出 merge 提交并打好 tag。
+    #    若保留该 tag，它会指向一个即将被 reset 掉的提交，
+    #    变成"只存在于 tag、不在任何分支上"的孤儿提交
+    #    （2026-07-21 v0.16.1 事故即是此因，潜伏 3 个月才被发现）。
+    if results.get("merge_tag"):
+        print(f"1. 删除本次发布创建的标签: {current_tag}")
+        ok, msg = delete_tag(repo_root, current_tag)
+        print(f"{'✅' if ok else '⚠️ '} {msg}")
     else:
-        print("⚠️ 未找到上一个稳定版本，请手动处理")
+        print("1. 跳过标签删除（本次发布未创建标签）")
+
+    # 3. 回滚 main 分支
+    #    仅当 merge 确实发生过才 reset main —— 否则会把 main 白白退回去
+    if results.get("merge_tag"):
+        if prev_tag:
+            print(f"2. 回滚到上一个稳定版本: {prev_tag}")
+            subprocess.run(["git", "checkout", "main"], cwd=repo_root, check=True)
+            subprocess.run(["git", "reset", "--hard", prev_tag], cwd=repo_root, check=True)
+            print(f"✅ main 分支已回滚到 {prev_tag}")
+        else:
+            print("⚠️ 未找到上一个稳定版本，请手动处理")
+    else:
+        print("2. 跳过 main 回滚（merge 未执行，main 无需回退）")
     
-    # 3. 切换到 develop 分支（不回滚代码）
+    # 4. 切换到 develop 分支（不回滚代码）
     # 说明：develop 分支上的代码是开发中的代码，即使 merge 失败，develop 上的代码不会丢失
     # 操作：只需要把 HEAD 切换到 develop 分支即可
     print("2. 切换到 develop 分支...")
     subprocess.run(["git", "checkout", "develop"], cwd=repo_root, check=True)
     print("✅ 已切换到 develop 分支")
     
-    # 4. 删除 flag 文件
+    # 5. 删除 flag 文件
     flag_file = repo_root / ".release_ready"
     if flag_file.exists():
         flag_file.unlink()
     print("✅ Flag 文件已删除")
     
-    # 5. 发送通知
+    # 6. 发送通知
     notify_failure(version, failed_step, prev_tag)
     
     return False
@@ -301,7 +326,7 @@ DRY_RUN={'true' if dry_run else 'false'}
     return True
 
 
-def merge_and_tag(version, dry_run=False):
+def merge_and_tag(version, dry_run=False, repo_root=None):
     """
     步骤 6: 执行 Merge 和 Tag 操作
 
@@ -317,7 +342,11 @@ def merge_and_tag(version, dry_run=False):
     """
     print_step(6, f"执行 Merge 和 Tag (v{version})")
 
-    repo_root = Path(__file__).parent.parent
+    if repo_root is None:
+        repo_root = Path(__file__).parent.parent
+    else:
+        # 统一为 Path，避免下游 `repo_root / ".release_ready"` 在传入 str 时报错
+        repo_root = Path(repo_root)
 
     if dry_run:
         print("[演练] 跳过 Git 操作，但创建测试用 flag 文件...")
@@ -356,6 +385,18 @@ def merge_and_tag(version, dry_run=False):
     success, _ = run_command(cmd, f"创建标签 {tag_name}", cwd=repo_root)
     if not success:
         return False
+
+    # 4.5 自检：tag 必须真的落在 main 分支上
+    #     发布代码若只在 tag 上而不在任何分支上，任何从 main 检出的部署
+    #     都会退回旧版本 —— 这正是 2026-07-21 v0.16.1 的事故成因。
+    #     必须在此处断言，而不是等到几个月后才发现。
+    print("\n4.5 自检: 验证标签已包含在 main 分支...")
+    ok, guard_msg = verify_tag_on_branch(repo_root, tag_name, branch="main")
+    if not ok:
+        print(f"{RED}❌ 标签自检失败: {guard_msg}{RESET}")
+        print("   发布已中止，避免产生孤儿标签")
+        return False
+    print(f"{GREEN}✅ 标签自检通过: {tag_name} 已包含在 main 分支{RESET}")
 
     # 5. 创建 .release_ready flag 并停留在 main 分支
     print("\n5. 创建 release_ready flag...")
@@ -549,7 +590,26 @@ def main():
 
     results["git_status"] = check_git_status(args.dry_run)
 
-    results["merge_tag"] = merge_and_tag(version, args.dry_run)
+    # 前置检查失败时必须短路，不得执行 merge_and_tag
+    # 事故复盘（2026-07-21 v0.16.1）：
+    #   前置检查失败后脚本仍继续执行 merge_and_tag，合出 merge 提交并打好 tag，
+    #   随后 rollback_on_failure() 执行 `git reset --hard <prev_tag>` 把 main 退回，
+    #   而 tag 仍指向那个被孤立的 merge 提交 —— 发布代码从此不在任何分支上。
+    #   reflog 铁证（同一秒内先后发生）：
+    #     a745269 main@{2026-07-21 22:33:08}: merge develop: Merge made by the 'ort' strategy.
+    #     471f2f3 main@{2026-07-21 22:33:08}: reset: moving to v0.16.0
+    pre_merge_failed = [
+        step for step, passed in results.items()
+        if step in ("api_tests", "smoke_tests", "version_update", "git_status")
+        and not passed
+    ]
+    if pre_merge_failed:
+        print(f"\n{RED}{BOLD}❌ 前置检查失败，跳过 Merge 和 Tag{RESET}")
+        print(f"   失败步骤: {', '.join(pre_merge_failed)}")
+        print("   不执行 merge，避免产生无法被 main 包含的孤儿提交")
+        results["merge_tag"] = False
+    else:
+        results["merge_tag"] = merge_and_tag(version, args.dry_run)
 
     # 汇总结果
     print(f"\n{BOLD}{'=' * 60}{RESET}")
